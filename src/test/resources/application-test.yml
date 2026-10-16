@@ -1,0 +1,65 @@
+spring:
+  application:
+    name: billit
+  config:
+    activate:
+      on-profile: test
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+    datatype:
+      enum:
+        fail-on-numbers-for-enums: true
+        read-enums-using-to-string: false
+        write-enums-using-to-string: false
+  datasource:
+    url: jdbc:postgresql://invalid:5432/invalid
+    username: invalid
+    password: invalid
+  data:
+    redis:
+      host: invalid
+      port: 6379
+      username: ""
+      password: ""
+      connect-timeout: 2s
+      timeout: 2s
+      ssl:
+        enabled: false
+      repositories:
+        enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-on-migrate: true
+    validate-migration-naming: true
+    out-of-order: false
+    baseline-on-migrate: false
+    clean-disabled: true
+
+app:
+  exchange-rate:
+    frankfurter:
+      source: ECB
+  storage:
+    enabled: false
+    s3:
+      endpoint: http://invalid:9090
+      bucket: invalid
+      region: us-east-1
+      access-key: invalid
+      secret-key: invalid
+  api-docs:
+    enabled: false
+  event-executor:
+    core-pool-size: ${EVENT_EXECUTOR_CORE_POOL_SIZE:2}
+    max-pool-size: ${EVENT_EXECUTOR_MAX_POOL_SIZE:4}
+    queue-capacity: ${EVENT_EXECUTOR_QUEUE_CAPACITY:100}
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-}]"
