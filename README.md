@@ -6,7 +6,7 @@
 - Spring Boot 4.1.1, Spring Data JPA
 - PostgreSQL 17, Redis 7.4, S3 호환 오브젝트 스토리지(Oracle Object Storage)
 - Flyway
-- OpenAPI, Swagger UI
+- OpenAPI, Scalar
 - Kotest, Testcontainers
 - Gradle Kotlin DSL
 
@@ -58,4 +58,4 @@ SPRING_PROFILES_ACTIVE=local ./gradlew bootRun \
 
 ### 5. API 확인
 
-실행 후 [Swagger UI](http://localhost:8080/swagger-ui/index.html)에서 API 확인하며 테스트 진행
+실행 후 [Scalar](http://localhost:8080/swagger-ui.html)에서 API 확인하며 테스트 진행

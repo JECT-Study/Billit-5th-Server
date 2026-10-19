@@ -10,13 +10,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 class ApiDocsConfig : WebMvcConfigurer {
     override fun addResourceHandlers(registry: ResourceHandlerRegistry) {
         registry
-            .addResourceHandler("/openapi.yml")
+            .addResourceHandler("/swagger-ui.html")
             .addResourceLocations("classpath:/api-docs/")
         registry
-            .addResourceHandler("/swagger-ui/**")
+            .addResourceHandler("/scalar/**")
             .addResourceLocations(
-                "classpath:/api-docs/swagger-ui/",
-                "classpath:/META-INF/resources/webjars/swagger-ui/5.32.2/",
+                "classpath:/api-docs/scalar/",
+                "classpath:/META-INF/resources/webjars/scalar__api-reference/1.68.0/dist/browser/",
             )
     }
 }

@@ -10,7 +10,7 @@ Kotlin, Spring Boot, Spring Data JPA와 PostgreSQL을 사용합니다. 코드 �
 | --- | --- |
 | 기능 설계와 구조 변경 | [아키텍처](docs/contributing/architecture.md) |
 | HTTP API 요청, 응답과 공통 규칙 | [API 공통 규칙](docs/contributing/api-conventions.md) |
-| API 계약과 Swagger UI 변경 | [API 문서 가이드](docs/contributing/api-documentation.md) |
+| API 계약과 Scalar 변경 | [API 문서 가이드](docs/contributing/api-documentation.md) |
 | 문서 작성과 수정 | [문서 컨벤션](docs/contributing/documentation.md) |
 | Kotlin 코드와 Gradle Kotlin DSL 작성 | [코드 스타일](docs/contributing/code-style.md) |
 | Entity, Repository, 스키마와 트랜잭션 변경 | [영속성 가이드](docs/contributing/persistence.md) |

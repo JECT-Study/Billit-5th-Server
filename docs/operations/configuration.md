@@ -114,9 +114,9 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 
 ## API 문서
 
-`app.api-docs.enabled`로 명세와 Swagger UI의 제공 여부를 제어합니다. 네 프로필에 같은 키를 명시하며 `local`, `dev`는 `true`, `test`, `prod`는 `false`로 설정합니다. 프로필을 지정하지 않으면 기본적으로 비활성화됩니다.
+`app.api-docs.enabled`로 명세와 Scalar의 제공 여부를 제어합니다. 네 프로필에 같은 키를 명시하며 `local`, `dev`는 `true`, `test`, `prod`는 `false`로 설정합니다. 프로필을 지정하지 않으면 기본적으로 비활성화됩니다.
 
-명세는 정적 리소스 자동 공개 경로 밖에 두고 [ApiDocsConfig](../../src/main/kotlin/com/ject/global/config/ApiDocsConfig.kt)에서 활성화된 경우에만 매핑합니다. 이 설정은 문서 접근 인증을 제공하지 않습니다. `dev`의 접근 범위는 배포 환경에서 제한합니다.
+명세는 정적 리소스 자동 공개 경로 밖에 두고 빌드 시 HTML에 포함합니다. 생성한 HTML은 API 문서 활성 환경에서만 제공합니다. [ApiDocsConfig](../../src/main/kotlin/com/ject/global/config/ApiDocsConfig.kt)는 Scalar 리소스를 매핑합니다. 이 설정은 문서 접근 인증을 제공하지 않습니다. `dev`의 접근 범위는 배포 환경에서 제한합니다.
 
 경로와 계약 관리 기준은 [API 문서](../contributing/api-documentation.md)를 따릅니다.
 

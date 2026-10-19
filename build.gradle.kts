@@ -24,7 +24,9 @@ repositories {
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-validation")
-    implementation("org.webjars:swagger-ui:5.32.2")
+    implementation("org.webjars.npm:scalar__api-reference:1.68.0") {
+        isTransitive = false
+    }
 
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
@@ -83,5 +85,22 @@ spotless {
         ktlint("1.8.0")
         trimTrailingWhitespace()
         endWithNewline()
+    }
+}
+
+val apiSpecification = layout.projectDirectory.file("src/main/resources/api-docs/openapi.yml")
+
+tasks.processResources {
+    filteringCharset = "UTF-8"
+    inputs.file(apiSpecification)
+    filesMatching("api-docs/swagger-ui.html") {
+        filter { line: String ->
+            line.replace(
+                "<!-- OPENAPI_SPEC -->",
+                groovy.json.JsonOutput
+                    .toJson(apiSpecification.asFile.readText(Charsets.UTF_8))
+                    .replace("<", "\\u003c"),
+            )
+        }
     }
 }
