@@ -1,17 +1,3 @@
-import io.swagger.v3.core.util.Json
-import io.swagger.v3.parser.OpenAPIResolver
-import io.swagger.v3.parser.OpenAPIV3Parser
-import io.swagger.v3.parser.core.models.ParseOptions
-
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath("io.swagger.parser.v3:swagger-parser-v3:2.1.48")
-    }
-}
-
 plugins {
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
@@ -102,68 +88,5 @@ spotless {
         ktlint("1.8.0")
         trimTrailingWhitespace()
         endWithNewline()
-    }
-}
-
-val apiSpecification = layout.projectDirectory.file("src/main/resources/api-docs/openapi.yml")
-val apiSpecificationFiles = fileTree("src/main/resources/api-docs") { include("**/*.yml", "**/*.yaml") }
-val bundledApiSpecification = layout.buildDirectory.file("generated/api-docs/openapi.json")
-
-val bundleOpenApi by tasks.registering {
-    group = "documentation"
-    description = "Resolves and validates the multi-file OpenAPI specification."
-    inputs.files(apiSpecificationFiles)
-    outputs.file(bundledApiSpecification)
-
-    doLast {
-        val result =
-            OpenAPIV3Parser().readLocation(
-                apiSpecification.asFile.absolutePath,
-                null,
-                ParseOptions().apply {
-                    isResolve = true
-                    isValidateExternalRefs = true
-                    isValidateInternalRefs = true
-                },
-            )
-        check(result.messages.isNullOrEmpty()) {
-            "OpenAPI validation failed:\n${result.messages.joinToString("\n")}"
-        }
-        val specification = checkNotNull(result.openAPI) { "Could not read the OpenAPI specification." }
-        // Resolve nested references after importing external components.
-        OpenAPIResolver(specification, null, apiSpecification.asFile.absolutePath).resolve(result)
-        check(result.messages.isNullOrEmpty()) {
-            "OpenAPI reference resolution failed:\n${result.messages.joinToString("\n")}"
-        }
-        val bundled = Json.pretty(specification)
-        val document = Json.mapper().readTree(bundled)
-        val invalidReferences =
-            document.findValues("\$ref").map { it.asText() }.filter {
-                !it.startsWith("#/") || document.at(it.removePrefix("#")).isMissingNode
-            }
-        check(invalidReferences.isEmpty()) { "Unresolved OpenAPI references: $invalidReferences" }
-        val output = bundledApiSpecification.get().asFile
-        output.parentFile.mkdirs()
-        output.writeText(bundled, Charsets.UTF_8)
-    }
-}
-
-tasks.check {
-    dependsOn(bundleOpenApi)
-}
-
-tasks.processResources {
-    dependsOn(bundleOpenApi)
-    filteringCharset = "UTF-8"
-    inputs.file(bundledApiSpecification)
-    filesMatching("api-docs/swagger-ui.html") {
-        filter { line: String ->
-            line.replace(
-                "<!-- OPENAPI_SPEC -->",
-                groovy.json.JsonOutput
-                    .toJson(bundledApiSpecification.get().asFile.readText(Charsets.UTF_8))
-                    .replace("<", "\\u003c"),
-            )
-        }
     }
 }

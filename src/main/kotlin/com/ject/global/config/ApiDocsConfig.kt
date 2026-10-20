@@ -13,6 +13,9 @@ class ApiDocsConfig : WebMvcConfigurer {
             .addResourceHandler("/swagger-ui.html")
             .addResourceLocations("classpath:/api-docs/")
         registry
+            .addResourceHandler("/api-docs/**")
+            .addResourceLocations("classpath:/api-docs/")
+        registry
             .addResourceHandler("/scalar/**")
             .addResourceLocations(
                 "classpath:/api-docs/scalar/",

@@ -1,5 +1,5 @@
 Scalar.createApiReference("#app", {
-  content: JSON.parse(document.getElementById("openapi-spec").textContent),
+  url: new URL("/api-docs/openapi.yml", window.location.href).href,
   theme: "solarized",
   agent: { disabled: true },
   showDeveloperTools: "never",
