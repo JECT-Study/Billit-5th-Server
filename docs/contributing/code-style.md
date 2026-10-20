@@ -18,14 +18,14 @@
 ```kotlin
 @Service
 class TripCloser(
-    private val tripCommandRepository: TripCommandRepository,
+    private val tripRepository: TripRepository,
     private val clock: Clock,
 ) {
     @Transactional
     fun close(tripId: Long) {
         val now = clock.instant()
 
-        tripCommandRepository.closeIfOpen(tripId, now)
+        tripRepository.closeIfOpen(tripId, now)
     }
 }
 ```
@@ -38,7 +38,7 @@ Spring 프록시 대상 클래스는 `kotlin-spring` 플러그인으로 엽니�
 
 클래스는 `UpperCamelCase`, 함수와 프로퍼티는 `lowerCamelCase`, 상수와 enum 항목은 `UPPER_SNAKE_CASE`로 작성합니다. 파일 이름은 대표 타입 이름과 맞춥니다.
 
-의존 객체의 이름은 타입 전체를 `lowerCamelCase`로 표현합니다. `SearchTripsUseCase`는 `searchTripsUseCase`, `TripCommandRepository`는 `tripCommandRepository`로 선언합니다. `useCase`, `service`, `repository`처럼 역할만 남기지 않습니다. 같은 타입을 구분할 때는 역할을 설명하는 수식어를 붙입니다.
+의존 객체의 이름은 타입 전체를 `lowerCamelCase`로 표현합니다. `SearchTripsUseCase`는 `searchTripsUseCase`, `TripRepository`는 `tripRepository`로 선언합니다. `useCase`, `service`, `repository`처럼 역할만 남기지 않습니다. 같은 타입을 구분할 때는 역할을 설명하는 수식어를 붙입니다.
 
 공개 함수와 경계에서 사용하는 함수의 반환 타입은 명시합니다. 값을 반환하지 않는 block body 함수의 `Unit`은 생략할 수 있습니다.
 
@@ -46,7 +46,7 @@ Spring 프록시 대상 클래스는 `kotlin-spring` 플러그인으로 엽니�
 
 ## 입력과 반환 계약
 
-단순 입력은 이름과 타입이 드러나는 개별 매개변수로 전달합니다. 인자 개수나 계층 간 전달 편의만으로 입력 DTO를 만들지 않습니다. 입력 조합 자체가 함께 변경되거나 재사용되는 계약이면 변경 입력은 `*Command`, 조회 입력은 `*Query`로 표현합니다.
+단순 입력은 이름과 타입이 드러나는 개별 매개변수로 전달합니다. 인자 개수나 계층 간 전달 편의만으로 입력 DTO를 만들지 않습니다. 입력 조합 자체가 함께 변경되거나 재사용되는 계약이면 입력 DTO는 `*Input`으로 표현합니다.
 
 HTTP `*Request`, `*Response`를 유스케이스의 입력이나 반환 타입으로 사용하지 않습니다. Controller가 HTTP 입력을 업무 입력으로, 업무 결과를 HTTP 응답으로 변환합니다. 이 구분만을 위해 동일한 필드의 DTO를 양쪽에 만들지는 않습니다.
 

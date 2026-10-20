@@ -45,15 +45,9 @@ module/
 
 ## 기능별 진입점
 
-애플리케이션 진입점은 사용자 의도별 `*UseCase`로 나눕니다. 각 UseCase가 해당 기능의 실행 흐름과 트랜잭션을 담당합니다. 하나의 업무 Service에 모든 기능을 모으지 않습니다.
+애플리케이션 진입점은 사용자 의도별 `*UseCase`로 나눕니다. 각 UseCase가 해당 기능의 실행 흐름과 트랜잭션을 담당합니다. 하나의 업무 Service에 모든 기능을 모으지 않습니다. 조회 기능에는 저장이나 업무 상태 변경을 넣지 않습니다.
 
 같은 업무와 다른 업무 모두에서 UseCase끼리 호출하지 않습니다. 공통 작업은 역할이 명확한 협력 객체로 추출합니다. 협력 객체도 UseCase를 호출하거나 UseCase 타입에 의존하지 않습니다. 여러 작업의 실행 순서와 전체 트랜잭션은 진입점인 UseCase가 담당합니다.
-
-### Command와 Query
-
-UseCase는 `usecase/command`와 `usecase/query`로 나눕니다. Command는 검증과 데이터 변경을, Query는 조회와 결과 구성을 담당합니다. Command는 검증과 변경에 필요한 조회를 수행할 수 있습니다. Query에는 저장이나 업무 상태 변경을 넣지 않습니다.
-
-Repository도 `*CommandRepository`와 `*QueryRepository`로 구분합니다. 데이터베이스와 Entity는 공유하며, 역할을 나누기 위해 별도 DB나 도메인 모델을 만들지 않습니다. 메서드 계약은 [영속성 가이드](persistence.md#repository-경계와-조회)를 따릅니다.
 
 ### 업무 내부 구조
 
@@ -62,18 +56,15 @@ Repository도 `*CommandRepository`와 `*QueryRepository`로 구분합니다. 데
 ```text
 module/trip/
 ├── presentation
-│   ├── TripCommandController.kt
-│   ├── TripQueryController.kt
+│   ├── TripController.kt
 │   ├── request
 │   └── response
 ├── usecase
-│   ├── command
-│   │   ├── CreateTripUseCase.kt
-│   │   ├── JoinTripUseCase.kt
-│   │   └── CloseTripUseCase.kt
-│   └── query
-│       ├── GetTripDetailUseCase.kt
-│       └── SearchTripsUseCase.kt
+│   ├── CreateTripUseCase.kt
+│   ├── JoinTripUseCase.kt
+│   ├── CloseTripUseCase.kt
+│   ├── GetTripDetailUseCase.kt
+│   └── SearchTripsUseCase.kt
 ├── implement
 │   ├── TripCreator.kt
 │   └── TripParticipantAdder.kt
@@ -84,11 +75,10 @@ module/trip/
 │       └── TripParticipationPolicy.kt
 └── infra
     └── persistence
-        ├── TripCommandRepository.kt
-        └── TripQueryRepository.kt
+        └── TripRepository.kt
 ```
 
-Controller는 업무별 하나로 제한하지 않습니다. 처음에는 하나로 시작하고, 조회와 변경의 API가 늘어나면 Command와 Query로 분리합니다. 이후에도 서로 다른 기능의 의존성과 변경이 한 클래스에 모이면 응집된 기능 단위로 나눕니다. URL 경로와 Controller 클래스의 분리 단위를 일치시킬 필요는 없습니다.
+Controller는 업무별 하나로 제한하지 않습니다. 처음에는 하나로 시작하고, 서로 다른 기능의 의존성과 변경이 한 클래스에 모이면 응집된 기능 단위로 나눕니다. URL 경로와 Controller 클래스의 분리 단위를 일치시킬 필요는 없습니다.
 
 각 Controller는 HTTP 입력과 응답을 변환하고 해당 UseCase를 호출합니다. 생성자 의존성 개수만 줄이기 위해 UseCase를 합치거나 단순 전달용 Facade를 추가하지 않습니다. API 명세의 분류 기준은 [API 문서](api-documentation.md)를 따릅니다.
 
@@ -96,9 +86,9 @@ Controller는 업무별 하나로 제한하지 않습니다. 처음에는 하나
 
 ### 업무 간 접근
 
-다른 업무의 Query와 Command Repository 호출을 허용합니다. 조회 결과는 Entity 대신 필요한 값으로 반환하고, 다른 업무의 Entity를 조회한 뒤 변경 감지로 직접 수정하지 않습니다. 변경은 데이터 소유 업무가 제공하는 의도적인 Command 메서드로 수행합니다.
+다른 업무의 Repository 호출을 허용합니다. 조회 결과는 Entity 대신 필요한 값으로 반환하고, 다른 업무의 Entity를 조회한 뒤 변경 감지로 직접 수정하지 않습니다. 변경은 데이터 소유 업무가 제공하는 변경 의도가 명확한 메서드로 수행합니다.
 
-호출한 UseCase가 선행 업무 검증과 트랜잭션을 책임집니다. 여러 곳에서 반복되는 정책은 Policy로 공유합니다. Repository 역할 분리만으로 검증이나 접근 권한이 보장된다고 판단하지 않습니다.
+호출한 UseCase가 선행 업무 검증과 트랜잭션을 책임집니다. 여러 곳에서 반복되는 정책은 Policy로 공유합니다. Repository 호출만으로 검증이나 접근 권한이 보장된다고 판단하지 않습니다.
 
 ## 확장과 운영 비용
 
@@ -145,10 +135,10 @@ UseCase는 Port를 호출하고 Adapter는 Port를 구현합니다. `external`�
 리스너는 수신 업무의 `presentation`에 Controller와 함께 둡니다. `web`, `event` 하위 패키지로 나누지 않고 `Controller`, `Listener` 접미사로 구분합니다.
 
 ```text
-발행 업무의 Command UseCase
+발행 업무의 UseCase
   → 발행 업무의 event data class
   → 수신 업무의 presentation Listener
-  → 수신 업무의 Command UseCase
+  → 수신 업무의 UseCase
 ```
 
 리스너에는 `@TransactionalEventListener(phase = AFTER_COMMIT)`과 `@Async("eventExecutor")`를 적용합니다. 발행 트랜잭션의 커밋 성공 후 별도 스레드에서 실행하며, 롤백되면 후속 처리를 실행하지 않습니다. 트랜잭션 없이 발행한 이벤트를 처리하기 위해 `fallbackExecution`을 활성화하지 않습니다.

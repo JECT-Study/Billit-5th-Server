@@ -98,7 +98,7 @@ Auditing annotation이나 Bean 등록 자체를 검사하는 별도 테스트는
 
 ## Repository 경계와 조회
 
-- Repository는 해당 업무가 소유하는 저장과 조회를 담당합니다. Command, Query 구분과 업무 간 접근은 [아키텍처](architecture.md#command와-query)를 따릅니다.
+- Repository는 해당 업무가 소유하는 저장과 조회를 담당합니다. 업무 간 접근은 [아키텍처](architecture.md#업무-간-접근)를 따릅니다.
 - 조회 입력, 업무 결과와 HTTP DTO의 구분은 [코드 스타일](code-style.md#입력과-반환-계약)을 따릅니다.
 - 영속성 구현의 쿼리 객체나 provider 전용 타입을 유스케이스와 HTTP 계층으로 전파하지 않습니다.
 - 테스트 편의만을 위한 Repository 인터페이스나 범용 Repository를 추가하지 않습니다.
