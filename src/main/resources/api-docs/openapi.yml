@@ -6,6 +6,8 @@ info:
 servers:
   - url: /
 tags:
+  - name: LearningInventory
+    description: 재고 예약 학습 예제
   - name: Auth
     description: 로그인, 인증/인가
   - name: User
@@ -16,13 +18,116 @@ tags:
     description: 지출
   - name: Settlement
     description: 정산
-paths: {}
+paths:
+  /api/v1/learning/stocks/{stockId}/reservations:
+    parameters:
+      - name: stockId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [LearningInventory]
+      operationId: reserveLearningStock
+      summary: 학습용 재고 예약
+      description: 재고를 비관적 쓰기 잠금으로 조회한 뒤 차감하고 예약합니다. 재고 차감과 예약 저장은 함께 커밋하거나 롤백합니다. 각 요청은 별도의 예약이며 멱등성을 보장하지 않습니다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              additionalProperties: false
+              properties:
+                quantity:
+                  type: integer
+                  format: int32
+                  minimum: 1
+      responses:
+        '201':
+          description: 예약 성공
+          headers:
+            Location:
+              description: 생성한 예약의 식별 URI
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/LearningReservation'
+        '400':
+          description: 수량이나 요청 형식이 올바르지 않음. COMMON_INVALID_REQUEST 또는 INVENTORY_INVALID_QUANTITY
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 재고 없음. INVENTORY_STOCK_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: 재고 부족. INVENTORY_INSUFFICIENT_STOCK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [LearningInventory]
+      operationId: getRecentLearningReservations
+      summary: 최근 예약 20건 조회
+      description: 예약 시각과 ID 내림차순으로 최대 20건을 반환합니다. 재고가 없거나 예약 이력이 없으면 빈 목록을 반환합니다.
+      security: []
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                additionalProperties: false
+                properties:
+                  data:
+                    type: array
+                    maxItems: 20
+                    items:
+                      $ref: '#/components/schemas/LearningReservation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
   schemas:
+    LearningReservation:
+      type: object
+      required: [id, stockId, quantity, reservedAt]
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        stockId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+        reservedAt:
+          type: string
+          format: date-time
     ApiResponse:
       type: object
       required: [data]
