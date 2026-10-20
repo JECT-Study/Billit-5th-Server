@@ -121,23 +121,23 @@ Repository 인터페이스는 업무에 필요한 메서드만 선언하며 Spri
 
 ## 외부 서비스 연동
 
-업무별 변환이나 실패 처리를 분리해야 하면 Port와 Adapter를 사용합니다. 모든 외부 연동에 인터페이스를 기계적으로 추가하지 않습니다.
+업무의 외부 서비스 연동은 Port와 Adapter를 거칩니다. UseCase와 협력 객체는 업무의 Port에 의존하고, `external`의 기술 클라이언트를 직접 호출하거나 해당 타입에 의존하지 않습니다. 실제 외부 연동이 필요한 업무에 Port와 Adapter를 함께 추가합니다.
 
 ```text
-UseCase
-  → 업무별 Port 인터페이스
-  → 업무별 Adapter
-  → external 기술 클라이언트
-  → 외부 서비스
+UseCase → 업무별 Port 인터페이스
+                    ↑ 구현
+          업무별 Adapter → external 기술 클라이언트 → 외부 서비스
 ```
 
 | 구성 요소 | 위치와 책임 |
 | --- | --- |
-| Port | 사용하는 업무의 `usecase/port`에 두고, 해당 업무에 필요한 최소 기능을 정의합니다. |
-| Adapter | 해당 업무의 `infra/client`에서 Port를 구현하고, 업무 입력과 결과를 외부 기술 계약으로 변환합니다. |
+| Port | 사용하는 업무의 `usecase/port`에 `*Port` 인터페이스로 두고, 해당 업무에 필요한 최소 기능을 정의합니다. |
+| Adapter | 해당 업무의 `infra/client`에 `*Adapter` 클래스로 두고 Port를 구현합니다. 업무 입력과 결과를 외부 기술 계약으로 변환합니다. |
 | 기술 클라이언트 | `external`에서 외부 API와 SDK, 인증, timeout과 프로토콜 오류를 처리합니다. 업무 판단과 실행 순서는 소유하지 않습니다. |
 
 UseCase는 Port를 호출하고 Adapter는 Port를 구현합니다. `external`은 업무의 Port를 직접 구현하거나 `module`에 의존하지 않습니다. 외부 SDK 타입, 제공자의 응답과 예외를 업무 경계 밖으로 전파하지 않습니다.
+
+DB 접근의 `domain/*Repository`도 Port 역할을 하며 `infra/persistence/*RepositoryAdapter`가 구현합니다. 외부 연동과 DB 접근 모두 업무 코드는 인터페이스에 의존하고, 기술 호출은 Adapter가 연결합니다.
 
 재시도는 작업의 멱등성과 외부 부수 효과를 확인하고 적용합니다. 업무별 실패 해석과 호출 순서는 Adapter와 UseCase에서 명시합니다. 같은 제공자를 사용하더라도 업무 의미가 다른 Port와 Adapter를 편의상 합치지 않습니다.
 
