@@ -2,7 +2,7 @@
 
 ## 기술과 책임
 
-DB는 PostgreSQL, 영속성 기술은 Spring Data JPA를 사용합니다. DB 접근과 매핑은 해당 업무의 Repository와 영속성 코드가 담당합니다. 여러 Repository 호출의 실행 순서와 트랜잭션 경계는 유스케이스가 소유합니다.
+DB는 PostgreSQL, 영속성 기술은 Spring Data JPA를 사용하며, 동적 JPQL 조회는 Kotlin JDSL로 작성합니다. DB 접근과 매핑은 해당 업무의 Repository Adapter와 영속성 코드가 담당합니다. 여러 Repository 호출의 실행 순서와 트랜잭션 경계는 유스케이스가 소유합니다.
 
 JPA의 변경 감지와 지연 로딩을 트랜잭션 경계 안에서 다룹니다. HTTP DTO에 Entity를 직접 노출하거나 응답 직렬화 과정에서 지연 로딩에 의존하지 않습니다. 조회 결과는 API 계약에 필요한 값으로 변환합니다.
 
@@ -98,11 +98,16 @@ Auditing annotation이나 Bean 등록 자체를 검사하는 별도 테스트는
 
 ## Repository 경계와 조회
 
+- Repository 인터페이스와 구현 위치는 [아키텍처](architecture.md#repository-경계)를 따릅니다.
 - Repository는 해당 업무가 소유하는 저장과 조회를 담당합니다. 업무 간 접근은 [아키텍처](architecture.md#업무-간-접근)를 따릅니다.
 - 조회 입력, 업무 결과와 HTTP DTO의 구분은 [코드 스타일](code-style.md#입력과-반환-계약)을 따릅니다.
 - 영속성 구현의 쿼리 객체나 provider 전용 타입을 유스케이스와 HTTP 계층으로 전파하지 않습니다.
 - 테스트 편의만을 위한 Repository 인터페이스나 범용 Repository를 추가하지 않습니다.
 - 단일 Repository 호출이 트랜잭션을 사용한다는 이유로 여러 호출의 원자성을 보장한다고 판단하지 않습니다.
+
+Repository Adapter는 업무 Repository 인터페이스를 구현하고 `jpa`, `jdsl`의 기술별 구현에 위임합니다. Spring Data JPA 인터페이스는 `infra/persistence/jpa`에 둡니다. Kotlin JDSL 쿼리 작성과 실행, 조회 제한과 잠금 설정은 `infra/persistence/jdsl`의 `*JdslRepository`에서 처리합니다. JDSL의 쿼리와 렌더링 타입을 업무 Repository 인터페이스나 UseCase로 전파하지 않습니다. `JpqlRenderContext`와 트랜잭션에 참여하는 공유 `EntityManager`는 [JpqlConfig](../../src/main/kotlin/com/ject/global/config/JpqlConfig.kt)에서 등록합니다.
+
+하나의 Repository Adapter에서 Spring Data JPA와 Kotlin JDSL 구현을 함께 호출할 수 있습니다. 기술별 구현은 업무 Repository 인터페이스를 직접 구현하지 않으며 Command와 Query Repository로 분리하지 않습니다. 라이브러리는 실제 쿼리의 요구에 따라 도입합니다.
 
 조회는 필요한 데이터와 연관관계의 접근 범위를 확인해 작성합니다. 연관관계를 순회하는 코드에서는 실제 SQL과 추가 조회 횟수를 확인합니다. 복잡한 조회를 ORM 관계 탐색으로 숨기지 않습니다. 별도 조회 기술을 도입할 때는 쿼리 복잡성, 매핑과 트랜잭션 참여 방식을 검토합니다.
 

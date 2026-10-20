@@ -29,6 +29,9 @@ dependencies {
     }
 
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("com.linecorp.kotlin-jdsl:jpql-dsl:3.9.0")
+    implementation("com.linecorp.kotlin-jdsl:jpql-render:3.9.0")
+    implementation("com.linecorp.kotlin-jdsl:hibernate-support:3.9.0")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")

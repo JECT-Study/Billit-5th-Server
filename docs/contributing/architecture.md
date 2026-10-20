@@ -71,11 +71,18 @@ module/trip/
 ├── domain
 │   ├── Trip.kt
 │   ├── TripStatus.kt
-│   └── policy
-│       └── TripParticipationPolicy.kt
+│   ├── TripRepository.kt
+│   ├── CreateTripCommand.kt
+│   ├── SearchTripsQuery.kt
+│   ├── TripDetailResult.kt
+│   └── TripParticipationPolicy.kt
 └── infra
     └── persistence
-        └── TripRepository.kt
+        ├── TripRepositoryAdapter.kt
+        ├── jpa
+        │   └── TripJpaRepository.kt
+        └── jdsl
+            └── TripJdslRepository.kt
 ```
 
 Controller는 업무별 하나로 제한하지 않습니다. 처음에는 하나로 시작하고, 서로 다른 기능의 의존성과 변경이 한 클래스에 모이면 응집된 기능 단위로 나눕니다. URL 경로와 Controller 클래스의 분리 단위를 일치시킬 필요는 없습니다.
@@ -83,6 +90,20 @@ Controller는 업무별 하나로 제한하지 않습니다. 처음에는 하나
 각 Controller는 HTTP 입력과 응답을 변환하고 해당 UseCase를 호출합니다. 생성자 의존성 개수만 줄이기 위해 UseCase를 합치거나 단순 전달용 Facade를 추가하지 않습니다. API 명세의 분류 기준은 [API 문서](api-documentation.md)를 따릅니다.
 
 `implement`와 Policy는 실제 역할이 필요할 때 추가합니다. 구조를 채우기 위한 클래스나 빈 패키지는 만들지 않습니다.
+
+### Repository 경계
+
+업무 Repository는 소유 업무의 `domain` 패키지 바로 아래에 인터페이스로 선언합니다. UseCase와 협력 객체는 이 인터페이스에 의존합니다. 구현 Adapter는 해당 업무의 `infra/persistence`에 두고 기술별 영속성 구현에 위임합니다. Spring Data JPA 인터페이스는 `infra/persistence/jpa`, Kotlin JDSL 쿼리 구현은 `infra/persistence/jdsl`에 둡니다. 사용하는 기술의 패키지만 만듭니다.
+
+```text
+UseCase → domain의 Repository 인터페이스
+                    ↑ 구현
+          infra의 RepositoryAdapter
+                    ↓
+          JpaRepository 등 영속성 구현
+```
+
+Repository 인터페이스는 업무에 필요한 메서드만 선언하며 Spring Data 인터페이스를 상속하지 않습니다. 입력과 반환 타입에 `Pageable`, Spring Data의 `Page`나 영속성 기술 전용 타입을 노출하지 않습니다. 메서드 계약과 구현 기술 선택은 [영속성 가이드](persistence.md#repository-경계와-조회)를 따릅니다.
 
 ### 업무 간 접근
 
@@ -163,7 +184,7 @@ UseCase는 Port를 호출하고 Adapter는 Port를 구현합니다. `external`�
 
 JPA Entity와 별도의 도메인 모델을 이중 관리하지 않습니다. Entity는 데이터와 매핑 중심으로 두고, `changeName()`, `close()` 같은 단순 상태 변경 메서드를 허용합니다. 변경 가능 여부와 업무 검증은 UseCase에서 판단하며 Entity에 넣지 않습니다.
 
-동일한 정책이나 검증이 여러 곳에서 반복되면 Policy로 추출합니다. 조건이 많거나 여러 객체를 사용한다는 이유만으로 Policy를 미리 만들지 않습니다.
+동일한 정책이나 검증이 여러 곳에서 반복되면 Policy로 추출합니다. 조건이 많거나 여러 객체를 사용한다는 이유만으로 Policy를 미리 만들지 않습니다. Policy는 소유 업무의 `domain` 패키지 바로 아래에 별도 파일로 두고, `policy` 하위 패키지는 만들지 않습니다.
 
 Policy는 판단에 필요한 객체와 값을 입력받습니다. DB 조회와 외부 호출은 UseCase나 협력 객체가 수행하고, Policy에 Repository나 외부 클라이언트를 주입하지 않습니다. 시간이 필요한 판단에는 기준 시각을 명시적으로 전달합니다.
 
