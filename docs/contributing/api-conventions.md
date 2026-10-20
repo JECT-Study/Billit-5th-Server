@@ -2,7 +2,7 @@
 
 ## 적용 범위
 
-HTTP API의 공통 규칙입니다. 계약 원본은 [openapi.yml](../../src/main/resources/api-docs/openapi.yml), 명세 관리와 구현 동기화는 [API 문서](api-documentation.md)를 따릅니다.
+HTTP API의 공통 규칙입니다. 계약 원본은 [루트 명세](../../src/main/resources/api-docs/openapi.yml)와 도메인별 YAML이며, 명세 관리와 구현 동기화는 [API 문서](api-documentation.md)를 따릅니다.
 
 ## 기본 경로와 전송 형식
 

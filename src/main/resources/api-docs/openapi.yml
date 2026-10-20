@@ -1,347 +1,77 @@
+---
 openapi: 3.0.3
 info:
   title: Billit API
   version: 0.1.0
   description: Billit BE API Spec
 servers:
-  - url: /
+- url: "/"
 tags:
-  - name: LearningInventory
-    description: 재고 예약 학습 예제
-  - name: Auth
-    description: 로그인, 인증/인가
-  - name: User
-    description: 사용자 계정과 프로필
-  - name: Trip
-    description: 여행
-  - name: Expense
-    description: 지출
-  - name: Settlement
-    description: 정산
+- name: LearningInventory
+  description: 재고 예약 학습 예제
+- name: Auth
+  description: 로그인, 인증/인가
+- name: User
+  description: 사용자 계정과 프로필
+- name: Trip
+  description: 여행
+- name: Expense
+  description: 지출
+- name: Settlement
+  description: 정산
 paths:
-  /api/v1/learning/stocks/{stockId}/reservations:
-    parameters:
-      - name: stockId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-    post:
-      tags: [LearningInventory]
-      operationId: reserveLearningStock
-      summary: 학습용 재고 예약
-      description: 재고를 비관적 쓰기 잠금으로 조회한 뒤 차감하고 예약합니다. 재고 차감과 예약 저장은 함께 커밋하거나 롤백합니다. 각 요청은 별도의 예약이며 멱등성을 보장하지 않습니다.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [quantity]
-              additionalProperties: false
-              properties:
-                quantity:
-                  type: integer
-                  format: int32
-                  minimum: 1
-      responses:
-        '201':
-          description: 예약 성공
-          headers:
-            Location:
-              description: 생성한 예약의 식별 URI
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                additionalProperties: false
-                properties:
-                  data:
-                    $ref: '#/components/schemas/LearningReservation'
-        '400':
-          description: 수량이나 요청 형식이 올바르지 않음. COMMON_INVALID_REQUEST 또는 INVENTORY_INVALID_QUANTITY
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: 재고 없음. INVENTORY_STOCK_NOT_FOUND
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '409':
-          description: 재고 부족. INVENTORY_INSUFFICIENT_STOCK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-    get:
-      tags: [LearningInventory]
-      operationId: getRecentLearningReservations
-      summary: 최근 예약 20건 조회
-      description: 예약 시각과 ID 내림차순으로 최대 20건을 반환합니다. 재고가 없거나 예약 이력이 없으면 빈 목록을 반환합니다.
-      security: []
-      responses:
-        '200':
-          description: 조회 성공
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                additionalProperties: false
-                properties:
-                  data:
-                    type: array
-                    maxItems: 20
-                    items:
-                      $ref: '#/components/schemas/LearningReservation'
-        '400':
-          $ref: '#/components/responses/BadRequest'
+  "/api/v1/learning/stocks/{stockId}/reservations":
+    "$ref": "./domains/inventory.yml#/paths/~1api~1v1~1learning~1stocks~1{stockId}~1reservations"
 components:
   securitySchemes:
     bearerAuth:
-      type: http
-      scheme: bearer
+      "$ref": "./common/components.yml#/securitySchemes/bearerAuth"
   schemas:
     LearningReservation:
-      type: object
-      required: [id, stockId, quantity, reservedAt]
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          format: uuid
-        stockId:
-          type: string
-          format: uuid
-        quantity:
-          type: integer
-          format: int32
-          minimum: 1
-        reservedAt:
-          type: string
-          format: date-time
+      "$ref": "./domains/inventory.yml#/components/schemas/LearningReservation"
     ApiResponse:
-      type: object
-      required: [data]
-      properties:
-        data:
-          nullable: true
-          description: API별 응답 데이터. 구체적인 타입과 null 허용 여부는 API별로 정의합니다.
-      additionalProperties: false
+      "$ref": "./common/components.yml#/schemas/ApiResponse"
     PageResponse:
-      type: object
-      required: [data, page]
-      properties:
-        data:
-          type: array
-          items: {}
-        page:
-          $ref: '#/components/schemas/PageInfo'
-      additionalProperties: false
+      "$ref": "./common/components.yml#/schemas/PageResponse"
     PageInfo:
-      type: object
-      required: [page, size, totalElements, hasNext]
-      properties:
-        page:
-          type: integer
-          minimum: 0
-          example: 0
-        size:
-          type: integer
-          minimum: 1
-          maximum: 100
-          example: 20
-        totalElements:
-          type: integer
-          format: int64
-          minimum: 0
-          example: 57
-        hasNext:
-          type: boolean
-          example: true
-      additionalProperties: false
+      "$ref": "./common/components.yml#/schemas/PageInfo"
     ErrorResponse:
-      type: object
-      required: [code, message, errors]
-      properties:
-        code:
-          type: string
-          pattern: '^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$'
-          example: COMMON_INVALID_REQUEST
-        message:
-          type: string
-          description: 사용자 표시용 메시지. 오류 코드와 함께 서버에서 관리합니다.
-          example: 요청이 올바르지 않습니다.
-        errors:
-          type: array
-          nullable: true
-          minItems: 1
-          description: 필드 이름순으로 정렬합니다. 필드 오류가 없거나 특정할 수 없으면 null입니다.
-          items:
-            $ref: '#/components/schemas/FieldError'
-      additionalProperties: false
+      "$ref": "./common/components.yml#/schemas/ErrorResponse"
     FieldError:
-      type: object
-      required: [field, reason]
-      properties:
-        field:
-          type: string
-          example: amount
-        reason:
-          type: string
-          example: 0보다 커야 합니다.
-      additionalProperties: false
+      "$ref": "./common/components.yml#/schemas/FieldError"
     ResourceId:
-      type: string
-      description: DB 타입과 관계없이 문자열로 전달합니다.
-      example: '123'
+      "$ref": "./common/components.yml#/schemas/ResourceId"
     DecimalString:
-      type: string
-      pattern: '^-?(0|[1-9][0-9]*)\.[0-9]{2}$'
-      description: 금액과 환율의 소수점 이하 2자리 문자열. 요청 DTO는 형식을 검증하고, 계산과 반올림은 업무 코드에서 처리합니다.
-      example: '3500.00'
+      "$ref": "./common/components.yml#/schemas/DecimalString"
   parameters:
     Page:
-      name: page
-      in: query
-      schema:
-        type: integer
-        minimum: 0
-        default: 0
+      "$ref": "./common/components.yml#/parameters/Page"
     Size:
-      name: size
-      in: query
-      schema:
-        type: integer
-        minimum: 1
-        maximum: 100
-        default: 20
+      "$ref": "./common/components.yml#/parameters/Size"
     Sort:
-      name: sort
-      in: query
-      description: 필드,방향 형식. 허용 필드와 기본 정렬은 API별로 명시하며, 동률이면 ID로 정렬합니다.
-      schema:
-        type: string
-        pattern: '^[^,]+,(asc|desc)$'
-        example: paidAt,desc
+      "$ref": "./common/components.yml#/parameters/Sort"
   responses:
     NoContent:
-      description: 처리 성공. 응답 본문 없음.
+      "$ref": "./common/components.yml#/responses/NoContent"
     BadRequest:
-      description: '400: 요청이 올바르지 않습니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_INVALID_REQUEST
-            message: 요청이 올바르지 않습니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/BadRequest"
     Unauthorized:
-      description: '401: 인증이 필요합니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_UNAUTHORIZED
-            message: 인증이 필요합니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/Unauthorized"
     Forbidden:
-      description: '403: 요청을 수행할 권한이 없습니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_FORBIDDEN
-            message: 요청을 수행할 권한이 없습니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/Forbidden"
     NotFound:
-      description: '404: 요청한 리소스를 찾을 수 없습니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_NOT_FOUND
-            message: 요청한 리소스를 찾을 수 없습니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/NotFound"
     MethodNotAllowed:
-      description: '405: 지원하지 않는 HTTP 메서드입니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_METHOD_NOT_ALLOWED
-            message: 지원하지 않는 HTTP 메서드입니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/MethodNotAllowed"
     NotAcceptable:
-      description: '406: 지원하지 않는 응답 형식입니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_NOT_ACCEPTABLE
-            message: 지원하지 않는 응답 형식입니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/NotAcceptable"
     Conflict:
-      description: '409: 현재 상태에서는 요청을 처리할 수 없습니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_CONFLICT
-            message: 현재 상태에서는 요청을 처리할 수 없습니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/Conflict"
     PayloadTooLarge:
-      description: '413: 업로드 가능한 크기를 초과했습니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_PAYLOAD_TOO_LARGE
-            message: 업로드 가능한 크기를 초과했습니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/PayloadTooLarge"
     UnsupportedMediaType:
-      description: '415: 지원하지 않는 미디어 타입입니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_UNSUPPORTED_MEDIA_TYPE
-            message: 지원하지 않는 미디어 타입입니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/UnsupportedMediaType"
     InternalServerError:
-      description: '500: 서버 오류가 발생했습니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_INTERNAL_SERVER_ERROR
-            message: 서버 오류가 발생했습니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/InternalServerError"
     ServiceUnavailable:
-      description: '503: 일시적으로 요청을 처리할 수 없습니다.'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          example:
-            code: COMMON_SERVICE_UNAVAILABLE
-            message: 일시적으로 요청을 처리할 수 없습니다.
-            errors: null
+      "$ref": "./common/components.yml#/responses/ServiceUnavailable"

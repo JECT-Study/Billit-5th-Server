@@ -1,0 +1,235 @@
+---
+securitySchemes:
+  bearerAuth:
+    type: http
+    scheme: bearer
+schemas:
+  ApiResponse:
+    type: object
+    required:
+    - data
+    properties:
+      data:
+        nullable: true
+        description: API별 응답 데이터. 구체적인 타입과 null 허용 여부는 API별로 정의합니다.
+    additionalProperties: false
+  PageResponse:
+    type: object
+    required:
+    - data
+    - page
+    properties:
+      data:
+        type: array
+        items: {}
+      page:
+        "$ref": "./components.yml#/schemas/PageInfo"
+    additionalProperties: false
+  PageInfo:
+    type: object
+    required:
+    - page
+    - size
+    - totalElements
+    - hasNext
+    properties:
+      page:
+        type: integer
+        minimum: 0
+        example: 0
+      size:
+        type: integer
+        minimum: 1
+        maximum: 100
+        example: 20
+      totalElements:
+        type: integer
+        format: int64
+        minimum: 0
+        example: 57
+      hasNext:
+        type: boolean
+        example: true
+    additionalProperties: false
+  ErrorResponse:
+    type: object
+    required:
+    - code
+    - message
+    - errors
+    properties:
+      code:
+        type: string
+        pattern: "^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$"
+        example: COMMON_INVALID_REQUEST
+      message:
+        type: string
+        description: 사용자 표시용 메시지. 오류 코드와 함께 서버에서 관리합니다.
+        example: 요청이 올바르지 않습니다.
+      errors:
+        type: array
+        nullable: true
+        minItems: 1
+        description: 필드 이름순으로 정렬합니다. 필드 오류가 없거나 특정할 수 없으면 null입니다.
+        items:
+          "$ref": "./components.yml#/schemas/FieldError"
+    additionalProperties: false
+  FieldError:
+    type: object
+    required:
+    - field
+    - reason
+    properties:
+      field:
+        type: string
+        example: amount
+      reason:
+        type: string
+        example: 0보다 커야 합니다.
+    additionalProperties: false
+  ResourceId:
+    type: string
+    description: DB 타입과 관계없이 문자열로 전달합니다.
+    example: '123'
+  DecimalString:
+    type: string
+    pattern: "^-?(0|[1-9][0-9]*)\\.[0-9]{2}$"
+    description: 금액과 환율의 소수점 이하 2자리 문자열. 요청 DTO는 형식을 검증하고, 계산과 반올림은 업무 코드에서 처리합니다.
+    example: '3500.00'
+parameters:
+  Page:
+    name: page
+    in: query
+    schema:
+      type: integer
+      minimum: 0
+      default: 0
+  Size:
+    name: size
+    in: query
+    schema:
+      type: integer
+      minimum: 1
+      maximum: 100
+      default: 20
+  Sort:
+    name: sort
+    in: query
+    description: 필드,방향 형식. 허용 필드와 기본 정렬은 API별로 명시하며, 동률이면 ID로 정렬합니다.
+    schema:
+      type: string
+      pattern: "^[^,]+,(asc|desc)$"
+      example: paidAt,desc
+responses:
+  NoContent:
+    description: 처리 성공. 응답 본문 없음.
+  BadRequest:
+    description: '400: 요청이 올바르지 않습니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_INVALID_REQUEST
+          message: 요청이 올바르지 않습니다.
+          errors:
+  Unauthorized:
+    description: '401: 인증이 필요합니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_UNAUTHORIZED
+          message: 인증이 필요합니다.
+          errors:
+  Forbidden:
+    description: '403: 요청을 수행할 권한이 없습니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_FORBIDDEN
+          message: 요청을 수행할 권한이 없습니다.
+          errors:
+  NotFound:
+    description: '404: 요청한 리소스를 찾을 수 없습니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_NOT_FOUND
+          message: 요청한 리소스를 찾을 수 없습니다.
+          errors:
+  MethodNotAllowed:
+    description: '405: 지원하지 않는 HTTP 메서드입니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_METHOD_NOT_ALLOWED
+          message: 지원하지 않는 HTTP 메서드입니다.
+          errors:
+  NotAcceptable:
+    description: '406: 지원하지 않는 응답 형식입니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_NOT_ACCEPTABLE
+          message: 지원하지 않는 응답 형식입니다.
+          errors:
+  Conflict:
+    description: '409: 현재 상태에서는 요청을 처리할 수 없습니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_CONFLICT
+          message: 현재 상태에서는 요청을 처리할 수 없습니다.
+          errors:
+  PayloadTooLarge:
+    description: '413: 업로드 가능한 크기를 초과했습니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_PAYLOAD_TOO_LARGE
+          message: 업로드 가능한 크기를 초과했습니다.
+          errors:
+  UnsupportedMediaType:
+    description: '415: 지원하지 않는 미디어 타입입니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_UNSUPPORTED_MEDIA_TYPE
+          message: 지원하지 않는 미디어 타입입니다.
+          errors:
+  InternalServerError:
+    description: '500: 서버 오류가 발생했습니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_INTERNAL_SERVER_ERROR
+          message: 서버 오류가 발생했습니다.
+          errors:
+  ServiceUnavailable:
+    description: '503: 일시적으로 요청을 처리할 수 없습니다.'
+    content:
+      application/json:
+        schema:
+          "$ref": "./components.yml#/schemas/ErrorResponse"
+        example:
+          code: COMMON_SERVICE_UNAVAILABLE
+          message: 일시적으로 요청을 처리할 수 없습니다.
+          errors:

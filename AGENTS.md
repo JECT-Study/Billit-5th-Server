@@ -23,7 +23,7 @@ Kotlin, Spring Boot, Spring Data JPA와 PostgreSQL을 사용합니다. 코드 �
 
 문서와 구현이 충돌하면 차이를 명시하고, 확정된 결정에 따라 문서와 구현을 함께 갱신합니다.
 
-HTTP API를 구현하거나 수정하기 전에 [API 공통 규칙](docs/contributing/api-conventions.md), [openapi.yml](src/main/resources/api-docs/openapi.yml)과 [명세와 구현 동기화 규칙](docs/contributing/api-documentation.md#명세와-구현-동기화)을 확인합니다.
+HTTP API를 구현하거나 수정하기 전에 [API 공통 규칙](docs/contributing/api-conventions.md), [루트 명세](src/main/resources/api-docs/openapi.yml), 해당 업무의 `src/main/resources/api-docs/domains/<업무>.yml`과 [명세와 구현 동기화 규칙](docs/contributing/api-documentation.md#명세와-구현-동기화)을 확인합니다.
 
 ## 미결정 정책
 
