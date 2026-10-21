@@ -61,5 +61,6 @@ app:
     queue-capacity: ${EVENT_EXECUTOR_QUEUE_CAPACITY:100}
 
 logging:
-  pattern:
-    level: "%5p [requestId=%X{requestId:-}]"
+  structured:
+    format:
+      console: logstash

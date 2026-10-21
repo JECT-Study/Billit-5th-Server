@@ -85,7 +85,7 @@ try {
 }
 ```
 
-Spring Boot 기본 Logback을 사용하고, 모든 프로필의 `logging.pattern.level`에 MDC `requestId`를 포함합니다. 별도 `logback-spring.xml`은 출력 대상이나 형식을 기본 설정으로 표현할 수 없을 때 추가합니다.
+Spring Boot 기본 Logback을 사용합니다. `local`, `test`는 일반 텍스트로 출력하고 `logging.pattern.level`에 MDC `requestId`를 포함합니다. `dev`, `prod`는 `logging.structured.format.console: logstash`로 콘솔 JSON을 출력합니다. JSON에는 MDC `requestId`와 구조화 필드, 예외 스택이 포함됩니다. 별도 `logback-spring.xml`은 출력 대상이나 형식을 기본 설정으로 표현할 수 없을 때 추가합니다.
 
 이벤트 비동기 작업의 요청 ID 전달과 정리는 [비동기 이벤트 처리](configuration.md#비동기-이벤트-처리)를 따릅니다.
 
