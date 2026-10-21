@@ -1,0 +1,45 @@
+name: 버그 제보
+description: 발생한 문제와 재현 정보를 등록합니다.
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 버그 설명
+      description: 발생한 문제와 영향을 작성합니다.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 재현 방법
+      description: 재현 순서를 작성합니다. 재현 조건을 모르면 확인한 발생 상황을 적습니다.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대 동작
+      description: 정상적으로 동작해야 하는 결과를 작성합니다.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 동작
+      description: 실제로 발생한 결과를 작성합니다.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 발생 환경
+      description: 실행 환경, 앱 버전, 브랜치 등 확인한 정보를 작성합니다.
+    validations:
+      required: false
+  - type: textarea
+    id: attachments
+    attributes:
+      label: 스크린샷과 로그
+      description: 문제 확인에 필요한 자료를 첨부합니다. 개인정보와 인증 정보는 제거합니다.
+    validations:
+      required: false
