@@ -103,7 +103,7 @@ feat: 정산 미리보기 화면 추가
 - 템플릿에는 특정 라벨을 고정하지 않습니다.
 - 담당자는 Assignee로 지정하고 작업 유형은 라벨로 구분합니다.
 - [일반 작업 이슈 템플릿](../../.github/ISSUE_TEMPLATE/task.yml), [버그 이슈 템플릿](../../.github/ISSUE_TEMPLATE/bug.yml), [PR 템플릿](../../.github/pull_request_template.md)을 사용합니다.
-- PR에서 프로젝트가 요구하는 검사, 테스트와 빌드 결과를 확인합니다. 백엔드의 실행 명령은 [실행과 검증](../../AGENTS.md#실행과-검증)과 [CI](../../.github/workflows/ci.yml)를 따릅니다.
+- PR에서 프로젝트가 요구하는 검사, 테스트와 빌드 결과를 확인합니다. 백엔드의 실행 명령은 [실행과 검증](../../AGENTS.md#실행과-검증)과 [Lint](../../.github/workflows/lint.yml), [Test](../../.github/workflows/test.yml)를 따릅니다.
 
 ## GitHub 저장소 설정
 
