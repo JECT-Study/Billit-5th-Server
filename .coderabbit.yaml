@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: ko-KR
+tone_instructions: "짧고 자연스러운 한국어로 작성합니다. 익숙한 기술 용어는 유지하고 대상과 동작을 구체적으로 설명합니다."
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  changed_files_summary: false
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "^main$"
+      - "^develop$"
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        PR의 변경과 관련된 문제를 검토합니다. 영향을 확인하기 위해 관련 코드도 읽습니다.
+        업무 흐름과 아키텍처 및 팀 가이드를 구분해 의견을 작성합니다.
+        업무 흐름은 PR 설명, 연결된 이슈, API 명세와 확정된 업무 규칙을 기준으로 판단합니다.
+        정상 처리, 실패 처리, 권한, 상태 변경, 트랜잭션과 중복 요청 중 변경에 해당하는 내용을 확인합니다.
+        구조와 구현 규칙은 AGENTS.md와 docs의 해당 가이드를 기준으로 판단합니다.
+        문서에 없는 업무 정책이나 일반적인 설계 취향을 팀 규칙으로 강제하지 않습니다.
+        문제를 지적할 때 발생 조건, 영향과 코드 또는 문서 근거를 설명합니다.
+        요구사항이나 판단 근거가 부족하면 필요한 정보를 명시합니다.
+        CI에서 확인하는 단순 포맷 문제나 같은 내용의 지적은 반복하지 않습니다.
+  pre_merge_checks:
+    custom_checks:
+      - name: "업무 흐름"
+        mode: warning
+        instructions: |
+          PR 설명과 연결된 이슈의 요구사항을 관련 구현, 테스트와 API 명세에 대조합니다.
+          명시된 업무 규칙의 누락이나 모순을 코드에서 확인하면 Failed로 판단하고 근거를 제시합니다.
+          관련 변경이 없으면 Passed로 판단하고 적용 대상이 아니라고 설명합니다.
+          요구사항이나 근거가 부족하면 Inconclusive로 판단하고 부족한 정보를 설명합니다.
+          코드를 실행하거나 테스트를 수행했다고 주장하지 않습니다.
+      - name: "아키텍처와 팀 가이드"
+        mode: warning
+        instructions: |
+          AGENTS.md와 docs/README.md에서 변경에 해당하는 가이드를 찾아 읽습니다.
+          변경된 코드가 가이드에 명시된 구조와 구현 규칙을 위반하면 Failed로 판단합니다.
+          위반한 문서의 규칙과 코드 위치를 제시합니다.
+          확인한 범위에서 위반이 없으면 Passed로 판단합니다.
+          관련 변경이 없으면 적용 대상이 아니라고 설명합니다.
+          규칙이 충돌하거나 근거가 부족하면 Inconclusive로 판단하고 이유를 설명합니다.
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - files: "docs/contributing/*.md"
+        applyTo: "**/*"
+      - files: "docs/operations/*.md"
+        applyTo: "src/**/*, *.gradle.kts, .github/workflows/*"
+      - files: "docs/glossary.md"
+        applyTo: "**/*"
