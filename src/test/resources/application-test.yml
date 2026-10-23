@@ -42,6 +42,11 @@ spring:
     clean-disabled: true
 
 app:
+  auth:
+    jwt:
+      secret: test-only-jwt-secret-at-least-32-bytes
+      issuer: billit
+      access-token-ttl: 1h
   exchange-rate:
     frankfurter:
       source: ECB

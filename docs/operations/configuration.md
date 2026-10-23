@@ -124,6 +124,19 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 
 모든 프로필에서 Flyway를 활성화하고 `classpath:db/migration`의 SQL을 적용합니다. 스키마 변경과 이력 관리 기준은 [영속성 가이드](../contributing/persistence.md#flyway-migration)를 따릅니다.
 
+## Access token
+
+`module.auth.infra`에서 Nimbus JOSE JWT로 access token을 발급하고 검증합니다. 서명 알고리즘은 HS256이며 `iss`는 `billit`, `sub`는 사용자 ID입니다. `iat`와 `exp`를 포함하며 만료 시각부터 토큰을 거부합니다. Refresh token은 사용하지 않습니다.
+
+| 환경변수 | 설정 |
+| --- | --- |
+| `JWT_SECRET` | local, dev, prod에서 필수입니다. UTF-8 기준 32바이트 이상의 무작위 비밀키를 주입합니다. |
+| `JWT_ACCESS_TOKEN_TTL` | local, dev, prod에서 필수입니다. `30m`, `1h` 같은 Duration 형식이며 최소 1초입니다. |
+
+`test`는 외부 환경변수를 참조하지 않는 전용 더미 키와 만료 시간을 사용합니다.
+
+`module.auth.presentation`의 `JwtAuthenticationFilter`는 `Authorization: Bearer <access token>`을 읽고 검증한 사용자 ID를 인증 principal로 설정합니다. 잘못된 Bearer 토큰은 401 응답으로 처리하고, 토큰이 없는 요청의 허용 여부는 `SecurityConfig`의 접근 규칙에 따릅니다. 사용자 조회와 권한 부여는 이 필터에서 수행하지 않습니다.
+
 ## 인증과 프론트 연동
 
 - 클라이언트가 전달한 `environment`로 서버 프로필이나 운영 자격증명을 선택하지 않습니다.
