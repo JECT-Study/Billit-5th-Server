@@ -3,7 +3,8 @@
 | 주제 | 문서 |
 | --- | --- |
 | 도메인별 용어와 코드 이름 | [용어집](glossary.md) |
-| 이슈, 브랜치, 커밋, PR과 릴리스 | [Git 작업 규칙](contributing/git-workflow.md) |
+| 작업 흐름, 브랜치, 커밋과 릴리스 | [Git 작업 규칙](contributing/git-workflow.md) |
+| 이슈와 PR 본문 작성 | [이슈와 PR 작성 지침](contributing/issue-pr-writing.md) |
 | 배포 단위, 패키지와 UseCase, 협력 객체 | [아키텍처](contributing/architecture.md) |
 | HTTP API 요청, 응답과 공통 규칙 | [API 공통 규칙](contributing/api-conventions.md) |
 | OpenAPI 계약과 Scalar | [API 문서](contributing/api-documentation.md) |

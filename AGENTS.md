@@ -37,7 +37,7 @@ HTTP API를 구현하거나 수정하기 전에 [API 공통 규칙](docs/contrib
 
 ## 작업 절차
 
-이슈, 브랜치, 커밋과 PR은 [Git 작업 규칙](docs/contributing/git-workflow.md)을 따릅니다.
+작업 흐름, 브랜치, 커밋과 병합은 [Git 작업 규칙](docs/contributing/git-workflow.md)을 따릅니다. 이슈와 PR 본문은 [이슈와 PR 작성 지침](docs/contributing/issue-pr-writing.md)을 따릅니다.
 
 1. 대상 업무 영역과 데이터 소유자를 식별하고 업무 정책을 확인합니다.
 2. 유스케이스의 입력, 출력, 조회, 변경, 트랜잭션과 외부 부수 효과를 정리합니다.
