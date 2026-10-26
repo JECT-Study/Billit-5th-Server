@@ -1,0 +1,64 @@
+# 배포. PR 검사는 lint.yml·test.yml이 맡고, 이 파일은 develop에 들어온 뒤의 빌드·배포만 한다.
+#  - develop push: 검사 → ARM64 이미지 빌드(GHCR) → 개발 서버 자동 배포 → 커밋에 dev-verified 표시
+#  - 운영: Actions 화면에서 수동 실행(workflow_dispatch). 개발에서 검증된 이미지 digest와 그 커밋을 넣는다.
+#    production Environment에 승인자를 두면 승인 뒤 배포된다. 롤백은 action=rollback.
+# 공통 워크플로는 JECT-Study/Billit-5th-Infra에 있고 커밋 SHA로 고정한다(공통 코드가 바뀌면 SHA를 올린다).
+# 필요한 설정(저장소 Settings): Environments `development`·`production`과 그 안의 비밀값·변수. 목록은 Infra 저장소 infra/github-workflows/README.md.
+# 자동 배포는 저장소 변수 CD_ENABLED가 true일 때만 돈다. 설정 전에는 develop push에서 아무 작업도 하지 않는다(수동 실행은 변수와 무관).
+name: cd
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      environment: { type: choice, options: [prod, dev], default: prod }
+      action:      { type: choice, options: [deploy, rollback], default: deploy }
+      image:       { type: string, required: false, description: "deploy: ghcr.io/ject-study/ject-be@sha256:..." }
+      commit:      { type: string, required: false, description: "prod deploy: 이미지를 만든 커밋 SHA(40자)" }
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event_name == 'push' && vars.CD_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Lint and test
+        run: ./gradlew spotlessCheck test
+
+  build:
+    if: github.event_name == 'push'
+    needs: check
+    permissions: { contents: read, packages: write }
+    uses: JECT-Study/Billit-5th-Infra/.github/workflows/build-arm64.yml@2c4523f36c3f2c0c223b7a3e1af9aa2421607abe
+    with:
+      image_name: ject-be
+
+  deploy-dev:
+    if: github.event_name == 'push'
+    needs: build
+    permissions: { contents: read, packages: read, statuses: write }
+    uses: JECT-Study/Billit-5th-Infra/.github/workflows/deploy-via-bastion.yml@2c4523f36c3f2c0c223b7a3e1af9aa2421607abe
+    with:
+      environment: dev
+      image: ${{ needs.build.outputs.image }}
+      commit: ${{ github.sha }}
+    secrets: inherit
+
+  deploy-manual:
+    if: github.event_name == 'workflow_dispatch'
+    permissions: { contents: read, packages: read, statuses: write }
+    uses: JECT-Study/Billit-5th-Infra/.github/workflows/deploy-via-bastion.yml@2c4523f36c3f2c0c223b7a3e1af9aa2421607abe
+    with:
+      environment: ${{ inputs.environment }}
+      action: ${{ inputs.action }}
+      image: ${{ inputs.image }}
+      commit: ${{ inputs.commit }}
+    secrets: inherit

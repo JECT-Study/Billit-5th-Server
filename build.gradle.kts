@@ -23,6 +23,8 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    // 배포·모니터링(인프라와 약속): /healthz·/readyz(앱 포트), 관리 포트 8081의 /actuator/prometheus
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.webjars.npm:scalar__api-reference:1.68.0") {
         isTransitive = false
@@ -36,6 +38,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
+    runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
     implementation(platform("software.amazon.awssdk:bom:2.56.0"))
     implementation("software.amazon.awssdk:s3")
