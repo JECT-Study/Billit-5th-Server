@@ -7,8 +7,6 @@ info:
 servers:
 - url: "/"
 tags:
-- name: LearningInventory
-  description: 재고 예약 학습 예제
 - name: Auth
   description: 로그인, 인증/인가
 - name: User
@@ -19,16 +17,12 @@ tags:
   description: 지출
 - name: Settlement
   description: 정산
-paths:
-  "/api/v1/learning/stocks/{stockId}/reservations":
-    "$ref": "./domains/inventory.yml#/paths/~1api~1v1~1learning~1stocks~1{stockId}~1reservations"
+paths: {}
 components:
   securitySchemes:
     bearerAuth:
       "$ref": "./common/components.yml#/securitySchemes/bearerAuth"
   schemas:
-    LearningReservation:
-      "$ref": "./domains/inventory.yml#/components/schemas/LearningReservation"
     ApiResponse:
       "$ref": "./common/components.yml#/schemas/ApiResponse"
     PageResponse:

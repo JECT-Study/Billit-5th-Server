@@ -53,19 +53,19 @@ paths:
           content:
             application/json:
               schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+                "$ref": "../../../src/main/resources/api-docs/common/components.yml#/schemas/ErrorResponse"
         '404':
           description: 재고 없음. INVENTORY_STOCK_NOT_FOUND
           content:
             application/json:
               schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+                "$ref": "../../../src/main/resources/api-docs/common/components.yml#/schemas/ErrorResponse"
         '409':
           description: 재고 부족. INVENTORY_INSUFFICIENT_STOCK
           content:
             application/json:
               schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+                "$ref": "../../../src/main/resources/api-docs/common/components.yml#/schemas/ErrorResponse"
     get:
       tags:
       - LearningInventory
@@ -90,7 +90,7 @@ paths:
                     items:
                       "$ref": "./inventory.yml#/components/schemas/LearningReservation"
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
+          "$ref": "../../../src/main/resources/api-docs/common/components.yml#/responses/BadRequest"
 components:
   schemas:
     LearningReservation:

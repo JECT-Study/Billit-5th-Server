@@ -9,10 +9,12 @@
 | 파일 | 책임 |
 | --- | --- |
 | [openapi.yml](../../src/main/resources/api-docs/openapi.yml) | OpenAPI 버전, 서버, 태그와 경로별 참조, 공통 component 참조 |
-| [domains/inventory.yml](../../src/main/resources/api-docs/domains/inventory.yml) | 도메인의 `paths`와 전용 `components` |
+| `domains/<업무>.yml` | 도메인의 `paths`와 전용 `components` |
 | [common/components.yml](../../src/main/resources/api-docs/common/components.yml) | 공통 스키마, 응답, 파라미터와 보안 정의 |
 
 새 도메인은 `domains/<업무>.yml`에 작성하고 루트의 `paths`에서 해당 Path Item을 참조합니다. 경로를 참조하는 JSON Pointer에서는 `/`를 `~1`로, `~`를 `~0`으로 이스케이프합니다. 공통 또는 다른 파일의 정의는 해당 YAML 기준 상대 경로와 JSON Pointer로 참조합니다.
+
+아래는 [재고 예제 명세](../../examples/inventory/api-docs/inventory.yml)를 실제 API에 적용할 때의 참조 예시입니다.
 
 ```yaml
 paths:
