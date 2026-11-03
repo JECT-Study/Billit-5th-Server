@@ -105,6 +105,45 @@ Auditing annotation이나 Bean 등록 자체를 검사하는 별도 테스트는
 - 테스트 편의만을 위한 Repository 인터페이스나 범용 Repository를 추가하지 않습니다.
 - 단일 Repository 호출이 트랜잭션을 사용한다는 이유로 여러 호출의 원자성을 보장한다고 판단하지 않습니다.
 
+### 구성과 분리
+
+Repository는 소유 업무 안에서 기능별 데이터 접근 책임을 기준으로 구성하고 이름을 짓습니다. Entity 하나당 Repository 하나로 제한하거나 UseCase와 Repository를 1:1로 맞추지 않습니다.
+
+| 구분 | 책임 | 이름 예시 |
+| --- | --- | --- |
+| 기본 Repository | 공통 저장, 기본 Entity 조회와 상태 변경에 필요한 잠금 조회 | `TripRepository` |
+| 업무별 Repository | 특정 기능의 조회 조건, 정렬, 조인과 결과 매핑 | `TripSearchRepository` |
+
+새 데이터 접근 메서드는 다음 순서로 배치합니다.
+
+1. 해당 기능의 Repository가 있으면 그곳에 둡니다.
+2. 공통 저장이나 기본 Entity 조회라면 기본 Repository에 둡니다.
+3. 업무 고유의 조회가 모여 독립적인 책임을 이루면 별도 Repository로 분리합니다.
+
+메서드 수, 쿼리 길이 또는 사용하는 기술만으로 분리하지 않습니다. 같은 쿼리를 여러 Repository에 복제하거나 조회와 변경을 기계적으로 나누지 않습니다.
+
+UseCase와 협력 객체는 필요한 업무 Repository를 직접 사용합니다. 업무별 Repository를 기본 Repository에 다시 상속하거나 단순 위임으로 모으지 않습니다. 기본 Repository와 업무별 Repository가 모두 필요하면 함께 사용할 수 있습니다.
+
+여행 검색을 별도 Repository로 분리한 가상 예시입니다. 실제 필요한 기술의 구현만 만듭니다.
+
+```text
+module/trip/
+├── domain/
+│   ├── TripRepository.kt
+│   └── TripSearchRepository.kt
+└── infra/persistence/
+    ├── TripRepositoryAdapter.kt
+    ├── TripSearchRepositoryAdapter.kt
+    ├── jpa/
+    │   └── TripJpaRepository.kt
+    └── jdsl/
+        └── TripSearchJdslRepository.kt
+```
+
+Repository를 분리해도 데이터 소유권과 트랜잭션 경계는 달라지지 않습니다. 여러 Repository를 사용하는 업무 흐름의 트랜잭션은 UseCase가 담당합니다.
+
+### 기술별 구현
+
 Repository Adapter는 업무 Repository 인터페이스를 구현하고 `jpa`, `jdsl`의 기술별 구현에 위임합니다. Spring Data JPA 인터페이스는 `infra/persistence/jpa`에 둡니다. Kotlin JDSL 쿼리 작성과 실행, 조회 제한과 잠금 설정은 `infra/persistence/jdsl`의 `*JdslRepository`에서 처리합니다. JDSL의 쿼리와 렌더링 타입을 업무 Repository 인터페이스나 UseCase로 전파하지 않습니다. `JpqlRenderContext`와 트랜잭션에 참여하는 공유 `EntityManager`는 [JpqlConfig](../../src/main/kotlin/com/ject/global/config/JpqlConfig.kt)에서 등록합니다.
 
 하나의 Repository Adapter에서 Spring Data JPA와 Kotlin JDSL 구현을 함께 호출할 수 있습니다. 기술별 구현은 업무 Repository 인터페이스를 직접 구현하지 않으며 Command와 Query Repository로 분리하지 않습니다. 라이브러리는 실제 쿼리의 요구에 따라 도입합니다.

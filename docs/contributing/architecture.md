@@ -85,11 +85,32 @@ module/trip/
             └── TripJdslRepository.kt
 ```
 
-Controller는 업무별 하나로 제한하지 않습니다. 처음에는 하나로 시작하고, 서로 다른 기능의 의존성과 변경이 한 클래스에 모이면 응집된 기능 단위로 나눕니다. URL 경로와 Controller 클래스의 분리 단위를 일치시킬 필요는 없습니다.
-
-각 Controller는 HTTP 입력과 응답을 변환하고 해당 UseCase를 호출합니다. 생성자 의존성 개수만 줄이기 위해 UseCase를 합치거나 단순 전달용 Facade를 추가하지 않습니다. API 명세의 분류 기준은 [API 문서](api-documentation.md)를 따릅니다.
-
 `implement`와 Policy는 실제 역할이 필요할 때 추가합니다. 구조를 채우기 위한 클래스나 빈 패키지는 만들지 않습니다.
+
+### Controller 구성과 분리
+
+Controller는 업무 자원과 API 기능을 기준으로 묶습니다. 처음에는 `[대상]Controller` 하나로 시작하고, 같은 기능의 조회와 변경은 함께 둡니다. 분리할 API 묶음이 다음 두 조건을 모두 만족하면 `[기능명]Controller`로 나눕니다.
+
+1. 독립적인 호출 목적과 기능 이름을 가집니다.
+2. 기능별 의존성과 요청, 응답 타입이 갈리거나, 서로 다른 기능의 계약 변경이 한 클래스에 반복적으로 집중되거나, 독립적인 권한과 호출 절차를 함께 관리하기 어렵습니다.
+
+줄 수, 엔드포인트 수, HTTP 메서드나 생성자 의존성 개수만으로 분리하지 않습니다. UseCase마다 Controller를 만들거나 조회와 변경을 기계적으로 나누지 않습니다.
+
+각 Controller는 HTTP 입력과 응답을 변환하고 해당 UseCase를 호출합니다. 하나의 Controller가 여러 UseCase를 호출할 수 있지만, 여러 상태 변경을 하나의 업무 흐름으로 실행하는 순서와 트랜잭션은 해당 UseCase가 담당합니다. 의존성 개수만 줄이기 위해 UseCase를 합치거나 단순 전달용 Facade를 추가하지 않습니다.
+
+여행 참여 API가 분리 조건을 만족할 때의 가상 예시입니다. 필수 구성이나 현재 구현을 나타내지 않습니다.
+
+```text
+module/trip/presentation/
+├── TripController.kt               # 여행 생성, 상세, 검색과 종료
+├── TripParticipationController.kt  # 여행 참여와 참여자 관리
+├── request/
+└── response/
+```
+
+URL 경로와 Controller 클래스의 분리 단위를 일치시킬 필요는 없습니다. 여러 Controller가 같은 자원 경로 아래의 API를 담당할 수 있습니다. Controller 이름에 맞춰 OpenAPI 태그를 나누지 않으며, API 분류는 [API 문서](api-documentation.md)를 따릅니다.
+
+기존 API를 이동할 때는 경로 충돌과 클래스 수준 애너테이션의 적용 범위를 확인하고, HTTP 메서드, 경로, 인증과 권한, 입력 검증, 응답과 오류 계약을 유지합니다.
 
 ### Repository 경계
 
@@ -103,7 +124,7 @@ UseCase → domain의 Repository 인터페이스
           JpaRepository 등 영속성 구현
 ```
 
-Repository 인터페이스는 업무에 필요한 메서드만 선언하며 Spring Data 인터페이스를 상속하지 않습니다. 입력과 반환 타입에 `Pageable`, Spring Data의 `Page`나 영속성 기술 전용 타입을 노출하지 않습니다. 메서드 계약과 구현 기술 선택은 [영속성 가이드](persistence.md#repository-경계와-조회)를 따릅니다.
+Repository 인터페이스는 업무에 필요한 메서드만 선언하며 Spring Data 인터페이스를 상속하지 않습니다. 입력과 반환 타입에 `Pageable`, Spring Data의 `Page`나 영속성 기술 전용 타입을 노출하지 않습니다. Repository 구성과 분리, 메서드 계약과 구현 기술 선택은 [영속성 가이드](persistence.md#repository-경계와-조회)를 따릅니다.
 
 ### 업무 간 접근
 
