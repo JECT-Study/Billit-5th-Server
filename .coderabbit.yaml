@@ -29,6 +29,8 @@ reviews:
         요구사항이나 판단 근거가 부족하면 필요한 정보를 명시합니다.
         CI에서 확인하는 단순 포맷 문제나 같은 내용의 지적은 반복하지 않습니다.
   pre_merge_checks:
+    docstrings:
+      mode: "off"
     custom_checks:
       - name: "업무 흐름"
         mode: warning
