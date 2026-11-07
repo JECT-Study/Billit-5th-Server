@@ -66,21 +66,20 @@ Flyway 이력이 없는 기존 DB에 적용할 때는 스키마, 보존 데이�
 
 ## Base Entity
 
-생성, 수정, 삭제 시각을 공통으로 관리하는 Entity는 `@MappedSuperclass`로 선언한 추상 `BaseEntity`를 상속합니다. BaseEntity는 공통 필드와 생성, 수정 시각의 자동 기록을 담당합니다. 생성, 수정, 삭제의 업무 규칙과 상태 변경은 개별 Entity와 유스케이스에서 명시합니다. 공통 필드 전체가 필요하지 않은 Entity에 상속을 강제하지 않습니다.
+생성과 수정 시각을 공통으로 관리하는 Entity는 `@MappedSuperclass`로 선언한 추상 `BaseEntity`를 상속합니다. BaseEntity는 생성과 수정 시각의 자동 기록을 담당합니다. 삭제 시각과 삭제 여부 확인, 삭제의 업무 규칙과 상태 변경은 해당 업무의 Entity와 유스케이스에서 관리합니다. 공통 필드 전체가 필요하지 않은 Entity에 상속을 강제하지 않습니다.
 
 | 프로퍼티 | 컬럼 | 기준 |
 | --- | --- | --- |
 | `createdAt` | `created_at` | 최초 저장 시 기록하고 이후 변경하지 않습니다. |
 | `updatedAt` | `updated_at` | 최초 저장 시 생성 시각과 같은 값으로 기록하고 Entity 수정 시 갱신합니다. |
-| `deletedAt` | `deleted_at` | 기본값은 `null`이며 업무에서 삭제할 때 삭제 시각을 명시적으로 기록합니다. |
 
-세 시각은 `Instant`로 선언합니다. 타입과 DB 저장 형식은 [시간 처리](../operations/time.md)를 따릅니다. 외부 코드가 시각을 임의로 변경하지 못하도록 setter를 제한합니다. 저장 전 미설정 상태를 표현하려면 nullable 타입을 사용하고 임의의 과거 시각을 기본값으로 넣지 않습니다. 상속 Entity의 테이블에는 Flyway migration으로 공통 컬럼을 정의하며, `deleted_at`은 nullable `TIMESTAMPTZ`로 정의합니다.
+두 시각은 `Instant`로 선언합니다. 타입과 DB 저장 형식은 [시간 처리](../operations/time.md)를 따릅니다. 외부 코드가 시각을 임의로 변경하지 못하도록 setter를 제한합니다. 저장 전 미설정 상태를 표현하려면 nullable 타입을 사용하고 임의의 과거 시각을 기본값으로 넣지 않습니다. 상속 Entity의 테이블에는 Flyway migration으로 생성과 수정 시각 컬럼을 정의합니다. 논리 삭제를 사용하는 업무의 Entity에만 `deletedAt`을 선언하고, 해당 테이블의 `deleted_at`은 nullable `TIMESTAMPTZ`로 정의합니다.
 
 식별자와 생성 전략은 개별 Entity에서 정의합니다. 별도의 삭제 여부 플래그, 업무 상태와 `@Version`은 해당 업무의 요구사항에 따라 선언하고 Base Entity에 일괄 추가하지 않습니다. `equals`, `hashCode`와 `toString`도 공통 필드만으로 일괄 구현하지 않습니다.
 
 ### 삭제와 조회
 
-Entity의 삭제 여부는 `BaseEntity.isDeleted()`로 확인합니다. `deletedAt`이 `null`이 아니면 `true`를 반환합니다. 공통 필드에서 계산하는 상태 확인 메서드는 BaseEntity에 두고, 상태 변경이나 업무별 판단은 포함하지 않습니다.
+논리 삭제를 사용하는 Entity는 `isDeleted()`로 삭제 여부를 확인합니다. 해당 Entity의 `deletedAt`이 `null`이 아니면 `true`를 반환합니다.
 
 논리 삭제는 개별 Entity의 `delete(deletedAt: Instant)`처럼 의도를 드러내는 업무 메서드에서 `deletedAt`을 설정합니다. 유스케이스는 주입받은 `Clock`에서 시각을 구해 전달합니다. 삭제 가능 조건, 중복 삭제와 복구 정책은 해당 업무에서 정의하며 BaseEntity에 공통 삭제 동작을 넣지 않습니다.
 

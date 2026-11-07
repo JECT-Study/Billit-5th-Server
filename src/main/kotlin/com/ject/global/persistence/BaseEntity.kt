@@ -20,10 +20,4 @@ abstract class BaseEntity {
     @field:Column(name = "updated_at")
     var updatedAt: Instant? = null
         protected set
-
-    @field:Column(name = "deleted_at")
-    var deletedAt: Instant? = null
-        protected set
-
-    fun isDeleted(): Boolean = deletedAt != null
 }
