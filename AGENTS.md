@@ -13,6 +13,7 @@ Kotlin, Spring Boot, Spring Data JPA와 PostgreSQL을 사용합니다. 코드 �
 | API 계약과 Scalar 변경 | [API 문서 가이드](docs/contributing/api-documentation.md) |
 | 문서 작성과 수정 | [문서 컨벤션](docs/contributing/documentation.md) |
 | Kotlin 코드와 Gradle Kotlin DSL 작성 | [코드 스타일](docs/contributing/code-style.md) |
+| DB 테이블, 컬럼, enum과 제약 이름 결정 | [DB 네이밍 가이드](docs/contributing/database-naming.md) |
 | Entity, Repository, 스키마와 트랜잭션 변경 | [영속성 가이드](docs/contributing/persistence.md) |
 | 테스트 작성과 수정 | [테스트 가이드](docs/contributing/testing.md) |
 | 기동, 설정 클래스와 환경별 설정 변경 | [환경 설정](docs/operations/configuration.md) |

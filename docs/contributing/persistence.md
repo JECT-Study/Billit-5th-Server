@@ -8,6 +8,8 @@ JPA의 변경 감지와 지연 로딩을 트랜잭션 경계 안에서 다룹니
 
 ## 스키마와 Entity 매핑
 
+테이블, 컬럼, enum, 제약과 인덱스 이름은 [DB 네이밍 가이드](database-naming.md)를 따릅니다.
+
 JPA의 자동 스키마 생성과 변경은 사용하지 않습니다. 모든 프로필과 DB 통합 테스트에서 `spring.jpa.hibernate.ddl-auto: validate`를 유지합니다. 스키마 정의의 기준은 `src/main/resources/db/migration`의 Flyway SQL입니다. Entity 매핑은 해당 스키마와 일치시킵니다.
 
 Entity annotation은 ORM 매핑과 실행에 필요한 설정을 표현합니다. DDL 생성만을 위한 속성으로 DB 스키마를 중복 정의하지 않습니다.

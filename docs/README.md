@@ -10,6 +10,7 @@
 | OpenAPI 계약과 Scalar | [API 문서](contributing/api-documentation.md) |
 | 문서 구성과 표현 | [문서 컨벤션](contributing/documentation.md) |
 | Kotlin 표현, 타입 계약과 포맷 | [코드 스타일](contributing/code-style.md) |
+| DB 테이블, 컬럼, enum과 제약 이름 | [DB 네이밍 가이드](contributing/database-naming.md) |
 | Entity, Repository, 스키마와 트랜잭션 | [영속성 가이드](contributing/persistence.md) |
 | 테스트 범위, 이름, fixture와 통합 테스트 지원 | [테스트 가이드](contributing/testing.md) |
 | local, test, dev, prod 설정과 설정 클래스의 책임 | [환경 설정](operations/configuration.md) |
