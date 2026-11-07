@@ -42,6 +42,27 @@ spring:
     clean-disabled: true
 
 app:
+  auth:
+    jwt:
+      secret: ${JWT_SECRET}
+      issuer: billit
+      access-token-ttl: ${JWT_ACCESS_TOKEN_TTL}
+  oauth:
+    google:
+      enabled: ${OAUTH_GOOGLE_ENABLED:false}
+      client-id: ${OAUTH_GOOGLE_CLIENT_ID:}
+      client-secret: ${OAUTH_GOOGLE_CLIENT_SECRET:}
+      redirect-uri: ${OAUTH_GOOGLE_REDIRECT_URI:}
+    apple:
+      enabled: ${OAUTH_APPLE_ENABLED:false}
+      client-id: ${OAUTH_APPLE_CLIENT_ID:}
+      client-secret: ${OAUTH_APPLE_CLIENT_SECRET:}
+      redirect-uri: ${OAUTH_APPLE_REDIRECT_URI:}
+    kakao:
+      enabled: ${OAUTH_KAKAO_ENABLED:false}
+      client-id: ${OAUTH_KAKAO_CLIENT_ID:}
+      client-secret: ${OAUTH_KAKAO_CLIENT_SECRET:}
+      redirect-uri: ${OAUTH_KAKAO_REDIRECT_URI:}
   exchange-rate:
     frankfurter:
       source: ${EXCHANGE_RATE_SOURCE:ECB}
