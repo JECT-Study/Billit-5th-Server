@@ -9,8 +9,8 @@ servers:
 tags:
 - name: Auth
   description: 로그인, 인증/인가
-- name: User
-  description: 사용자 계정과 프로필
+- name: Member
+  description: 회원 계정과 프로필
 - name: Trip
   description: 여행
 - name: Expense
