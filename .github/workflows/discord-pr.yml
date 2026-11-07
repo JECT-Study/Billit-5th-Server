@@ -1,0 +1,45 @@
+name: discord-pr
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions: {}
+
+jobs:
+  notify:
+    name: notify discord
+    # draft PR은 opened 때 건너뛰고, ready_for_review 때 알림
+    if: github.event.action == 'ready_for_review' || !github.event.pull_request.draft
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Send message
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "DISCORD_WEBHOOK_URL secret이 없어 알림을 건너뜁니다."
+            exit 0
+          fi
+          # 메시지 형식:
+          #   <타입 뺀 제목> 완료되어 PR 요청드립니다.
+          #   (빈 줄)
+          #   <PR 제목 전체> (작성자)
+          #   <PR 링크>
+          payload=$(jq -n \
+            --arg title "$PR_TITLE" \
+            --arg author "$PR_AUTHOR" \
+            --arg url "$PR_URL" \
+            '($title | sub("^[A-Za-z]+(\\([^)]*\\))?!?:\\s*"; "") | gsub("^\\s+|\\s+$"; "")) as $summary
+            | {
+                content: "\($summary) 완료되어 PR 요청드립니다.\n\n\($title) (\($author))\n\($url)",
+                allowed_mentions: {parse: []}
+              }')
+          curl -sS --fail-with-body -X POST \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$WEBHOOK_URL"
