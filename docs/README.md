@@ -16,5 +16,6 @@
 | local, test, dev, prod 설정과 설정 클래스의 책임 | [환경 설정](operations/configuration.md) |
 | Redis 연결, 인증 데이터, 캐시와 잠금 | [Redis](operations/redis.md) |
 | 오브젝트 스토리지, 임시 접근 URL과 S3 인증 | [오브젝트 스토리지](operations/storage.md) |
+| OAuth 제공자 코드 교환과 신원 확인 | [OAuth](operations/oauth.md) |
 | 시간 표현, 저장, 전송과 경계 테스트 | [시간 처리](operations/time.md) |
 | 로그 레벨, 민감정보와 요청 추적 | [로깅](operations/logging.md) |
