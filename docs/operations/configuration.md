@@ -195,6 +195,15 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - 관리 포트는 `dev`, `prod`에서 `8081`, `local`에서 `${MANAGEMENT_PORT:8081}`, `test`에서 `0`입니다.
 - 인증을 적용해도 `/healthz`, `/readyz`와 관리 포트의 actuator는 인증 없이 응답해야 합니다.
 
+## 배포
+
+[cd 워크플로](../../.github/workflows/cd.yml)가 Billit-5th-Infra의 공통 워크플로로 이미지를 빌드하고 배포합니다.
+
+- `develop`에 PR이 병합되면 해당 PR의 `lint`, `test` 성공을 확인한 뒤 ARM64 이미지를 `ghcr.io/ject-study/ject-be`에 게시하고 개발 서버에 배포합니다. `docs`와 Markdown만 바뀐 병합은 배포하지 않습니다.
+- 운영 배포와 롤백은 Actions에서 수동으로 실행합니다. 운영에는 개발 배포에 성공한 같은 이미지 digest와 그 커밋만 배포합니다.
+- 상태 확인에 실패하면 배포 스크립트가 이전 이미지로 복구합니다. DB 스키마는 복구하지 않으므로 마이그레이션은 [영속성 가이드](../contributing/persistence.md#flyway-migration)를 따릅니다.
+- 자동 배포는 저장소 변수 `CD_ENABLED`가 `true`일 때만 동작합니다. 환경별 비밀값과 변수는 저장소 Environments `development`, `production`에 둡니다.
+
 ## 변경 후 검증
 
 - 네 프로필 파일의 키, 계층과 순서가 일치하는지 확인합니다.

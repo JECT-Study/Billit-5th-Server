@@ -1,0 +1,80 @@
+# 배포. 검사는 Lint, Test 워크플로가 PR에서 실행하고, 이 워크플로는 그 결과를 확인한 뒤 빌드와 배포만 실행한다.
+#  - develop push: PR의 lint, test 성공 확인 → ARM64 이미지 빌드(GHCR ject-be) → 개발 서버 자동 배포 → 커밋에 ject/dev-verified 기록
+#  - 운영과 롤백: workflow_dispatch로 수동 실행한다. 운영 배포는 개발 배포에 성공한 같은 digest와 그 커밋만 허용한다.
+#  - 자동 배포는 저장소 변수 CD_ENABLED가 true일 때만 동작한다.
+# 공통 워크플로는 JECT-Study/Billit-5th-Infra의 커밋 SHA로 고정한다. 공통 워크플로를 바꾸면 세 참조를 함께 올린다.
+name: cd
+
+on:
+  push:
+    branches: [develop]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      environment: { type: choice, options: [prod, dev], default: prod }
+      action: { type: choice, options: [deploy, rollback], default: deploy }
+      image:
+        type: string
+        required: false
+        description: 'deploy: ghcr.io/ject-study/ject-be@sha256:...'
+      commit:
+        type: string
+        required: false
+        description: 'deploy: 이미지를 만든 커밋 SHA(40자)'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: github.event_name == 'push' && vars.CD_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, pull-requests: read, checks: read }
+    steps:
+      - name: Require passed PR checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          head=$(gh api "repos/$REPO/commits/$SHA/pulls" \
+            --jq "[.[] | select(.merged_at != null and .base.ref == \"develop\" and .merge_commit_sha == \"$SHA\")][0].head.sha // empty")
+          [ -n "$head" ] || { echo "develop에 병합된 PR을 찾지 못했습니다"; exit 1; }
+          for name in lint test; do
+            conclusion=$(gh api "repos/$REPO/commits/$head/check-runs?check_name=$name&filter=latest" \
+              --jq '[.check_runs[] | select(.app.slug == "github-actions")][0].conclusion // empty')
+            [ "$conclusion" = success ] || { echo "PR 검사 $name 결과: ${conclusion:-없음}"; exit 1; }
+          done
+
+  build:
+    needs: check
+    permissions: { contents: read, packages: write }
+    uses: JECT-Study/Billit-5th-Infra/.github/workflows/build-arm64.yml@adadd3d133a915675ec7e7d1f9e8e7e9e57194eb
+    with:
+      image_name: ject-be
+
+  deploy-dev:
+    needs: build
+    permissions: { contents: read, packages: read, statuses: write }
+    uses: JECT-Study/Billit-5th-Infra/.github/workflows/deploy-via-bastion.yml@adadd3d133a915675ec7e7d1f9e8e7e9e57194eb
+    with:
+      environment: dev
+      service: be
+      image: ${{ needs.build.outputs.image }}
+      commit: ${{ github.sha }}
+    secrets: inherit
+
+  deploy-manual:
+    if: github.event_name == 'workflow_dispatch'
+    permissions: { contents: read, packages: read, statuses: write }
+    uses: JECT-Study/Billit-5th-Infra/.github/workflows/deploy-via-bastion.yml@adadd3d133a915675ec7e7d1f9e8e7e9e57194eb
+    with:
+      environment: ${{ inputs.environment }}
+      service: be
+      action: ${{ inputs.action }}
+      image: ${{ inputs.image }}
+      commit: ${{ inputs.commit }}
+    secrets: inherit
