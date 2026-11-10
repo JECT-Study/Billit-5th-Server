@@ -36,12 +36,7 @@ paths:
                   name: null
                   age: null
         '401':
-          description: |-
-            - `COMMON_UNAUTHORIZED`: 소셜 로그인을 마친 가입 미완료 사용자인지 확인할 수 없음
-          content:
-            application/json:
-              schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+          "$ref": "#/components/responses/RegistrationUnauthorized"
         '403':
           "$ref": "../common/components.yml#/responses/Forbidden"
       security:
@@ -72,6 +67,25 @@ paths:
                 data:
                   accessToken: example-access-token
                   refreshToken: example-refresh-token
+        '400':
+          description: |-
+            - `COMMON_INVALID_REQUEST`: 요청 형식이나 필드가 올바르지 않음
+            - `USER_REQUIRED_AGREEMENT_MISSING`: 필수 약관의 동의가 누락되거나 동의하지 않음
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors: null
+                USER_REQUIRED_AGREEMENT_MISSING:
+                  value:
+                    code: USER_REQUIRED_AGREEMENT_MISSING
+                    message: 필수 약관에 동의해주세요.
+                    errors: null
         '401':
           description: |-
             - `COMMON_UNAUTHORIZED`: 가입 전용 토큰으로 최초 가입 또는 동일 가입 요청의 복구 권한을 확인할 수 없음
@@ -79,6 +93,10 @@ paths:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              example:
+                code: COMMON_UNAUTHORIZED
+                message: 인증이 필요합니다.
+                errors: null
         '403':
           "$ref": "../common/components.yml#/responses/Forbidden"
         '409':
@@ -88,14 +106,10 @@ paths:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
-        '400':
-          description: |-
-            - `COMMON_INVALID_REQUEST`: 요청 형식이나 필드가 올바르지 않음
-            - `USER_REQUIRED_AGREEMENT_MISSING`: 필수 약관의 동의가 누락되거나 동의하지 않음
-          content:
-            application/json:
-              schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              example:
+                code: USER_NICKNAME_ALREADY_USED
+                message: 이미 사용 중인 닉네임입니다.
+                errors: null
       security:
       - registrationBearerAuth: []
       requestBody:
@@ -168,17 +182,12 @@ paths:
                 additionalProperties: false
               example:
                 data:
-                  nickname: 민지
+                  nickname: 김빌릿
                   isAvailable: true
         '400':
           "$ref": "../common/components.yml#/responses/BadRequest"
         '401':
-          description: |-
-            - `COMMON_UNAUTHORIZED`: 소셜 로그인을 마친 가입 미완료 사용자인지 확인할 수 없음
-          content:
-            application/json:
-              schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+          "$ref": "#/components/responses/RegistrationUnauthorized"
       security:
       - registrationBearerAuth: []
       parameters:
@@ -251,6 +260,10 @@ paths:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              example:
+                code: USER_PROFILE_IMAGE_TOO_LARGE
+                message: 프로필 이미지가 허용 용량을 초과했습니다.
+                errors: null
         '415':
           description: |-
             - `USER_PROFILE_IMAGE_UNSUPPORTED`: 지원하지 않는 실제 이미지 형식
@@ -258,6 +271,10 @@ paths:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              example:
+                code: USER_PROFILE_IMAGE_UNSUPPORTED
+                message: 지원하지 않는 프로필 이미지 형식입니다.
+                errors: null
       security:
       - bearerAuth: []
       requestBody:
@@ -329,6 +346,18 @@ paths:
       security:
       - bearerAuth: []
 components:
+  responses:
+    RegistrationUnauthorized:
+      description: |-
+        - `COMMON_UNAUTHORIZED`: 소셜 로그인을 마친 가입 미완료 사용자인지 확인할 수 없음
+      content:
+        application/json:
+          schema:
+            "$ref": "../common/components.yml#/schemas/ErrorResponse"
+          example:
+            code: COMMON_UNAUTHORIZED
+            message: 인증이 필요합니다.
+            errors: null
   schemas:
     ImageResult:
       type: object
