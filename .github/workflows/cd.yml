@@ -1,0 +1,101 @@
+# develop에 합쳐지면 개발 서버에 자동 배포하고, 운영 배포와 롤백은 수동으로 실행한다.
+#  - develop push: lint, test → ARM64 이미지 빌드(ghcr.io/ject-study/ject-be) → 최신 develop 커밋이면 개발 서버 배포 → ject/dev-verified 기록
+#  - develop push 실행은 하나씩 돌고, 대기 중인 실행은 가장 최근 것만 남는다.
+#  - 운영 배포는 개발 배포에 성공한 digest와 그 커밋만 받는다.
+#  - 자동 배포는 저장소 변수 CD_ENABLED가 true일 때만 돈다.
+# 빌드·배포는 Billit-5th-Infra 공통 워크플로를 커밋 SHA로 고정해 쓴다. 공통 워크플로를 바꾸면 세 군데를 같이 올린다.
+name: cd
+
+on:
+  push:
+    branches: [develop]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      environment: { type: choice, options: [prod, dev], default: prod }
+      action: { type: choice, options: [deploy, rollback], default: deploy }
+      image:
+        type: string
+        required: false
+        description: 'deploy: ghcr.io/ject-study/ject-be@sha256:...'
+      commit:
+        type: string
+        required: false
+        description: 'deploy: 이미지를 만든 커밋 SHA(40자)'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'push' && 'cd-develop' || format('cd-manual-{0}', github.run_id) }}
+  cancel-in-progress: false
+
+jobs:
+  lint:
+    if: github.event_name == 'push' && vars.CD_ENABLED == 'true'
+    uses: ./.github/workflows/lint.yml
+
+  test:
+    if: github.event_name == 'push' && vars.CD_ENABLED == 'true'
+    uses: ./.github/workflows/test.yml
+
+  build:
+    needs: [lint, test]
+    permissions: { contents: read, packages: write }
+    uses: JECT-Study/Billit-5th-Infra/.github/workflows/build-arm64.yml@adadd3d133a915675ec7e7d1f9e8e7e9e57194eb
+    with:
+      image_name: ject-be
+
+  latest:
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      current: ${{ steps.head.outputs.current }}
+    steps:
+      - name: Check latest develop
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          head=$(gh api "repos/$REPO/commits/develop" --jq .sha)
+          current=true
+          if [ "$head" != "$SHA" ]; then
+            # 뒤에 합쳐진 커밋이 문서만 바꿨으면 그 커밋은 배포가 돌지 않으므로 이 커밋을 계속 최신으로 본다.
+            compare=$(gh api "repos/$REPO/compare/$SHA...$head" \
+              --jq '[.status, ([.files[].filename | select((startswith("docs/") or endswith(".md")) | not)] | length)] | @tsv')
+            read -r state changed <<< "$compare"
+            if [ "$state" != ahead ] || [ "$changed" != 0 ]; then
+              current=false
+              echo "develop이 $head 로 바뀌어서 이 커밋은 배포하지 않습니다"
+            fi
+          fi
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+
+  deploy-dev:
+    needs: [build, latest]
+    if: needs.latest.outputs.current == 'true'
+    permissions: { contents: read, packages: read, statuses: write }
+    uses: JECT-Study/Billit-5th-Infra/.github/workflows/deploy-via-bastion.yml@adadd3d133a915675ec7e7d1f9e8e7e9e57194eb
+    with:
+      environment: dev
+      service: be
+      image: ${{ needs.build.outputs.image }}
+      commit: ${{ github.sha }}
+    secrets: inherit
+
+  deploy-manual:
+    if: github.event_name == 'workflow_dispatch'
+    permissions: { contents: read, packages: read, statuses: write }
+    uses: JECT-Study/Billit-5th-Infra/.github/workflows/deploy-via-bastion.yml@adadd3d133a915675ec7e7d1f9e8e7e9e57194eb
+    with:
+      environment: ${{ inputs.environment }}
+      service: be
+      action: ${{ inputs.action }}
+      image: ${{ inputs.image }}
+      commit: ${{ inputs.commit }}
+    secrets: inherit
