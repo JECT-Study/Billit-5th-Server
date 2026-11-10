@@ -199,7 +199,9 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 
 [cd 워크플로](../../.github/workflows/cd.yml)가 Billit-5th-Infra의 공통 워크플로로 이미지를 빌드하고 배포합니다.
 
-- `develop`에 PR이 병합되면 해당 PR의 `lint`, `test` 성공을 확인한 뒤 ARM64 이미지를 `ghcr.io/ject-study/ject-be`에 게시하고 개발 서버에 배포합니다. `docs`와 Markdown만 바뀐 병합은 배포하지 않습니다.
+- `develop`에 PR이 병합되면 병합된 코드로 `lint`, `test`를 다시 실행하고, 통과하면 ARM64 이미지를 `ghcr.io/ject-study/ject-be`에 게시합니다. `docs`와 Markdown만 바뀐 병합은 배포하지 않습니다.
+- 개발 서버에는 최신 `develop` 커밋으로 만든 이미지만 배포합니다. 빌드 중 코드가 바뀐 커밋이 병합되면 이전 커밋의 배포는 건너뜁니다.
+- `develop` 배포 실행은 한 번에 하나씩 순서대로 진행하고, 대기 중인 실행은 가장 최근 것만 남깁니다.
 - 운영 배포와 롤백은 Actions에서 수동으로 실행합니다. 운영에는 개발 배포에 성공한 같은 이미지 digest와 그 커밋만 배포합니다.
 - 상태 확인에 실패하면 배포 스크립트가 이전 이미지로 복구를 시도합니다. 이전 이미지가 없거나 복구에도 실패하면 배포 작업이 실패로 끝나며 서버 상태를 직접 확인해야 합니다. DB 스키마는 복구하지 않으므로 마이그레이션은 [영속성 가이드](../contributing/persistence.md#flyway-migration)를 따릅니다.
 - 자동 배포는 저장소 변수 `CD_ENABLED`가 `true`일 때만 동작합니다. 환경별 비밀값과 변수는 저장소 Environments `development`, `production`에 둡니다.
