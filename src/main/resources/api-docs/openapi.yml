@@ -11,15 +11,29 @@ tags:
   description: 로그인, 인증/인가
 - name: Member
   description: 회원 계정과 프로필
-- name: Trip
-  description: 여행
-- name: Expense
-  description: 지출
-- name: Settlement
-  description: 정산
-paths: {}
+paths:
+  /api/v1/auth/social-logins:
+    $ref: './domains/auth.yml#/paths/~1api~1v1~1auth~1social-logins'
+  /api/v1/auth/token-refreshes:
+    $ref: './domains/auth.yml#/paths/~1api~1v1~1auth~1token-refreshes'
+  /api/v1/auth/logout:
+    $ref: './domains/auth.yml#/paths/~1api~1v1~1auth~1logout'
+  /api/v1/me/registration:
+    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1registration'
+  /api/v1/nickname-availability:
+    $ref: './domains/member.yml#/paths/~1api~1v1~1nickname-availability'
+  /api/v1/me:
+    $ref: './domains/member.yml#/paths/~1api~1v1~1me'
+  /api/v1/me/profile-image:
+    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1profile-image'
+  /api/v1/me/withdrawal-preview:
+    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1withdrawal-preview'
+  /api/v1/me/withdrawal:
+    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1withdrawal'
 components:
   securitySchemes:
+    registrationBearerAuth:
+      "$ref": "./common/components.yml#/securitySchemes/registrationBearerAuth"
     bearerAuth:
       "$ref": "./common/components.yml#/securitySchemes/bearerAuth"
   schemas:

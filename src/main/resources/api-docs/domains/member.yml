@@ -1,0 +1,480 @@
+---
+paths:
+  "/api/v1/me/registration":
+    get:
+      tags:
+      - Member
+      summary: USER-01 가입 정보 조회
+      operationId: getRegistration
+      description: |-
+        소셜에서 제공한 정보와 가입 진행에 필요한 본인 정보를 조회합니다.
+
+        ### 인증
+
+        소셜 로그인은 완료했지만 Billit 가입을 완료하지 않은 사용자만 요청할 수 있습니다. `Authorization: Bearer {가입 전용 토큰}` 헤더로 본인을 확인합니다.
+
+        ### 처리 규칙
+
+        가입 전용 토큰의 본인 정보만 조회합니다. 소셜 이름은 가입 화면의 닉네임 초기값으로 사용합니다.
+        Google ID 토큰의 name, Kakao ID 토큰의 nickname 또는 Apple 요청의 fullName을 사용합니다.
+      responses:
+        '200':
+          description: 처리 성공.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    allOf:
+                    - "$ref": "#/components/schemas/RegistrationInfo"
+                additionalProperties: false
+              example:
+                data:
+                  status: SIGNING_UP
+                  socialDisplayName: 김빌릿
+                  terms:
+                  - termsId: example-privacy-terms-id
+                    title: 개인정보 수집 및 이용 동의
+                    isRequired: true
+                    contentUrl: https://example.com/terms/privacy/v1
+                  name: null
+                  age: null
+        '401':
+          description: |-
+            - `COMMON_UNAUTHORIZED`: 소셜 로그인을 마친 가입 미완료 사용자인지 확인할 수 없음
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+        '403':
+          "$ref": "../common/components.yml#/responses/Forbidden"
+      security:
+      - registrationBearerAuth: []
+    post:
+      tags:
+      - Member
+      summary: USER-03 가입 완료
+      operationId: completeRegistration
+      description: |-
+        필수 가입 정보를 제출하고 일반 회원으로 가입을 완료합니다.
+
+        ### 인증
+
+        최초 요청은 소셜 로그인을 마친 가입 미완료 사용자에게 허용합니다. 가입 완료 응답을 받지 못한 경우에는 같은 가입 요청의 토큰 수령 재시도를 허용합니다. `Authorization: Bearer {가입 전용 토큰}` 헤더로 본인을 확인합니다.
+
+        ### 요청
+
+        닉네임과 약관 버전별 동의를 전달합니다. 설문을 제출할 경우 응답한 항목만 보냅니다.
+
+        ### 처리 규칙
+
+        응답 유실 시 같은 가입 요청을 재시도해 회원용 토큰을 받습니다. 회원과 동의 기록은 중복 생성하지 않습니다. 복구 기간과 토큰 발급 세부는 논의 필요합니다.
+      responses:
+        '200':
+          description: 가입 완료. 회원용 Access Token과 Refresh Token을 반환합니다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    "$ref": "./auth.yml#/components/schemas/TokenRefreshResult"
+                additionalProperties: false
+              example:
+                data:
+                  accessToken: example-access-token
+                  refreshToken: example-refresh-token
+        '401':
+          description: |-
+            - `COMMON_UNAUTHORIZED`: 가입 전용 토큰으로 최초 가입 또는 동일 가입 요청의 복구 권한을 확인할 수 없음
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+        '403':
+          "$ref": "../common/components.yml#/responses/Forbidden"
+        '409':
+          description: |-
+            - `USER_NICKNAME_ALREADY_USED`: 가입 완료 시점에 닉네임이 이미 사용 중임
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+        '400':
+          description: |-
+            - `COMMON_INVALID_REQUEST`: 요청 형식이나 필드가 올바르지 않음
+            - `USER_REQUIRED_AGREEMENT_MISSING`: 필수 약관의 동의가 누락되거나 동의하지 않음
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+      security:
+      - registrationBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nickname, agreements]
+              additionalProperties: false
+              properties:
+                nickname:
+                  type: string
+                  minLength: 1
+                  maxLength: 10
+                agreements:
+                  type: array
+                  items:
+                    type: object
+                    required: [termsId, agreed]
+                    additionalProperties: false
+                    properties:
+                      termsId:
+                        type: string
+                        description: 가입 정보 조회에서 받은 약관 버전 식별자입니다.
+                      agreed:
+                        type: boolean
+                survey:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    gender:
+                      type: string
+                      description: 성별 선택값입니다. 허용 코드는 논의 중입니다.
+                    isTripOrganizer:
+                      type: boolean
+                    settlementPainPoints:
+                      type: array
+                      maxItems: 2
+                      uniqueItems: true
+                      items:
+                        type: string
+                      description: 정산 시 번거로운 점을 최대 2개 선택합니다. 전체 선택지 코드는 논의 중입니다.
+                    otherSettlementPainPoint:
+                      type: string
+                      description: settlementPainPoints에 OTHER가 있을 때만 보낼 수 있습니다.
+  "/api/v1/nickname-availability":
+    get:
+      tags:
+      - Member
+      summary: USER-02 닉네임 중복 확인
+      operationId: checkNicknameAvailability
+      description: |-
+        입력한 닉네임의 현재 사용 가능 여부를 조회합니다.
+
+        ### 인증
+
+        유효한 가입 전용 토큰으로 확인한 가입 미완료 사용자만 요청할 수 있습니다. 인증 없이 공개하지 않으며, 일반 회원용 Access Token으로는 호출할 수 없습니다. 가입 전용 토큰은 `Authorization: Bearer {가입 전용 토큰}` 헤더로 전달합니다.
+
+        ### 처리 규칙
+
+        가입 전용 토큰을 가진 사용자만 호출합니다. 닉네임 예약은 아닙니다. 글자 수 산정과 탈퇴 닉네임 재사용은 논의 필요합니다.
+      responses:
+        '200':
+          description: 처리 성공.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    allOf:
+                    - "$ref": "#/components/schemas/NicknameAvailability"
+                additionalProperties: false
+              example:
+                data:
+                  nickname: 민지
+                  isAvailable: true
+        '400':
+          "$ref": "../common/components.yml#/responses/BadRequest"
+        '401':
+          description: |-
+            - `COMMON_UNAUTHORIZED`: 소셜 로그인을 마친 가입 미완료 사용자인지 확인할 수 없음
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+      security:
+      - registrationBearerAuth: []
+      parameters:
+      - name: nickname
+        in: query
+        required: true
+        description: 최대 10자, 한글과 영문 및 숫자만 허용. 공백과 특수문자 금지. 글자 수 산정 기준은 논의 필요.
+        schema:
+          type: string
+          maxLength: 10
+  "/api/v1/me":
+    get:
+      tags:
+      - Member
+      summary: USER-04 내 프로필 조회
+      operationId: getMyProfile
+      description: |-
+        설정과 프로필 화면에 표시할 본인 계정 정보를 조회합니다.
+
+        ### 인증
+
+        가입을 완료한 회원만 요청할 수 있습니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: 조회 성공.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "#/components/schemas/MemberProfile"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+  "/api/v1/me/profile-image":
+    put:
+      tags:
+      - Member
+      summary: USER-05 프로필 이미지 변경
+      operationId: updateProfileImage
+      description: |-
+        새 이미지로 본인의 프로필 이미지를 변경합니다.
+
+        ### 인증
+
+        가입을 완료한 회원만 요청할 수 있습니다.
+
+        ### 요청
+
+        Part 이름과 허용 형식 및 최대 용량은 검토 제안입니다.
+
+        ### 처리 규칙
+
+        multipart로 서버에 직접 업로드합니다. 실패 시 기존 프로필을 유지합니다. 파일 형식과 용량은 논의 필요합니다.
+      responses:
+        '200':
+          description: 처리 성공.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    allOf:
+                    - "$ref": "#/components/schemas/ImageResult"
+                additionalProperties: false
+              example:
+                data:
+                  profileImageUrl: https://cdn.example.com/profile/example.png
+        '400':
+          "$ref": "../common/components.yml#/responses/BadRequest"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '413':
+          description: |-
+            - `USER_PROFILE_IMAGE_TOO_LARGE`: 허용 용량을 초과한 이미지
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+        '415':
+          description: |-
+            - `USER_PROFILE_IMAGE_UNSUPPORTED`: 지원하지 않는 실제 이미지 형식
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        description: 검토용 Part 이름입니다. 형식과 용량 제한은 미정입니다.
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: 이미지 1개. 허용 형식과 용량 상한은 미정입니다.
+              additionalProperties: false
+            encoding:
+              image:
+                contentType: image/*
+  "/api/v1/me/withdrawal-preview":
+    get:
+      tags:
+      - Member
+      summary: USER-06 탈퇴 영향 조회
+      operationId: getWithdrawalPreview
+      description: |-
+        탈퇴 전 미완료 정산 건수와 생성한 여행에 미치는 영향을 조회합니다.
+
+        ### 인증
+
+        가입을 완료한 회원만 요청할 수 있습니다.
+
+        ### 처리 규칙
+
+        미완료 정산 집계와 탈퇴 영향의 표시 범위는 PM 확인이 필요하다.
+      responses:
+        '200':
+          description: 처리 성공.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                properties:
+                  data:
+                    allOf:
+                    - "$ref": "#/components/schemas/WithdrawalPreview"
+                additionalProperties: false
+              example:
+                data:
+                  incompleteSettlementCount: 1
+                  affectedCreatedTripIds:
+                  - trip-example-a
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+      security:
+      - bearerAuth: []
+  "/api/v1/me/withdrawal":
+    post:
+      tags:
+      - Member
+      summary: USER-07 회원 탈퇴
+      operationId: withdraw
+      description: |-
+        최종 확인한 회원의 탈퇴를 처리하고 해당 계정의 접근을 차단합니다.
+
+        ### 인증
+
+        가입을 완료한 회원만 요청할 수 있습니다.
+
+        ### 처리 규칙
+
+        탈퇴 후 접근을 차단합니다. 개인정보 삭제와 공동 기록 보존 범위는 PM 확인이 필요하다.
+      responses:
+        '204':
+          "$ref": "../common/components.yml#/responses/NoContent"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+      security:
+      - bearerAuth: []
+components:
+  schemas:
+    ImageResult:
+      type: object
+      properties:
+        profileImageUrl:
+          type: string
+          description: 최종 반영된 이미지 접근 URL.
+      additionalProperties: false
+      required:
+      - profileImageUrl
+    NicknameAvailability:
+      type: object
+      properties:
+        nickname:
+          type: string
+          description: 조회한 닉네임.
+        isAvailable:
+          type: boolean
+          description: 현재 시점의 사용 가능 여부. 예약을 의미하지 않는다.
+      additionalProperties: false
+      required:
+      - nickname
+      - isAvailable
+    RegistrationInfo:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - SIGNING_UP
+          description: 가입 미완료 상태인 `SIGNING_UP`을 반환한다.
+        socialDisplayName:
+          type: string
+          nullable: true
+          description: 가입 화면의 닉네임 초기값입니다.
+        terms:
+          type: array
+          items:
+            "$ref": "#/components/schemas/RegistrationTerms"
+        name:
+          type: string
+          description: 소셜 제공값이 없으면 null.
+          nullable: true
+        age:
+          type: integer
+          description: 소셜 제공값이 없으면 null. 직접 입력의 필수 여부는 논의 필요.
+          nullable: true
+      additionalProperties: false
+      required:
+      - status
+      - socialDisplayName
+      - terms
+      - name
+      - age
+    RegistrationTerms:
+      type: object
+      required: [termsId, title, isRequired, contentUrl]
+      additionalProperties: false
+      properties:
+        termsId:
+          type: string
+        title:
+          type: string
+        isRequired:
+          type: boolean
+        contentUrl:
+          type: string
+          format: uri
+    MemberProfile:
+      type: object
+      required: [memberId, nickname, profileImageUrl, socialProvider]
+      additionalProperties: false
+      properties:
+        memberId:
+          type: string
+        nickname:
+          type: string
+        profileImageUrl:
+          type: string
+          format: uri
+          nullable: true
+        socialProvider:
+          type: string
+          enum: [GOOGLE, APPLE, KAKAO]
+    WithdrawalPreview:
+      type: object
+      properties:
+        incompleteSettlementCount:
+          type: integer
+          minimum: 0
+          description: 미완료 정산 건수, 0 이상. 집계 대상의 구체적인 상태는 논의 필요.
+        affectedCreatedTripIds:
+          type: array
+          items:
+            type: string
+          description: 생성자 탈퇴로 다른 참여자의 접근도 차단되는 여행 식별자 목록.
+      additionalProperties: false
+      required:
+      - incompleteSettlementCount
+      - affectedCreatedTripIds
