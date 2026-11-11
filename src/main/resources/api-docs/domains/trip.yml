@@ -47,6 +47,7 @@ paths:
               "$ref": "./trip.yml#/components/schemas/TripCreate"
             example:
               name: 도쿄 여행
+              countryCode: JP
               baseCurrency: JPY
               startDate: '2026-11-05'
               endDate: '2026-11-07'
