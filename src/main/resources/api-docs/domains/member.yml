@@ -125,6 +125,7 @@ paths:
                   type: string
                   minLength: 1
                   maxLength: 10
+                  pattern: '^[가-힣A-Za-z0-9]+(?![\s\S])'
                 agreements:
                   type: array
                   items:
@@ -194,11 +195,12 @@ paths:
       - name: nickname
         in: query
         required: true
-        description: 최대 10자, 한글과 영문 및 숫자만 허용. 공백과 특수문자 금지. 글자 수 산정 기준은 논의 필요.
+        description: 1~10자, 한글 완성형과 영문 및 숫자만 허용. 한글 자모, 공백과 특수문자 금지. 글자 수 산정 기준은 논의 필요.
         schema:
           type: string
           minLength: 1
           maxLength: 10
+          pattern: '^[가-힣A-Za-z0-9]+(?![\s\S])'
   "/api/v1/me":
     get:
       tags:
