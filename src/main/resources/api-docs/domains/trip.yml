@@ -8,7 +8,7 @@ paths:
       summary: 여행 목록 조회
       description: 요청자가 참여 중인 여행을 페이지 구분 없이 모두 조회합니다. 가입을 완료한 회원만 요청할 수 있습니다. 서버는 필터와 정렬을 적용하지
         않습니다. FE가 membersLockedAt과 startDate, endDate로 참여자 초대중, 여행 예정, 진행 중, 여행 종료를 구분하고 startDate 기준으로
-        정렬합니다.
+        정렬합니다. 오늘 날짜는 사용자 기기의 현지 날짜를 기준으로 판단합니다.
       security:
       - bearerAuth: []
       responses:
@@ -350,7 +350,8 @@ paths:
         '404':
           "$ref": "../common/components.yml#/responses/NotFound"
         '409':
-          description: 확정 후 비로그인 참여자를 추가하려 함(TRIP_ALREADY_CONFIRMED) 또는 등록할 빈자리가 없음(TRIP_CAPACITY_FULL)
+          description: 확정 후 비로그인 참여자를 추가하려 함(TRIP_ALREADY_CONFIRMED), 등록할 빈자리가 없음(TRIP_CAPACITY_FULL) 또는 같은 여행 안에
+            이미 같은 이름이 있음(TRIP_GUEST_NAME_DUPLICATED)
           content:
             application/json:
               schema:
@@ -639,7 +640,9 @@ components:
           description: 생성자를 포함한 총 정원
     TripUpdate:
       type: object
-      description: 보낸 필드만 수정하고 생략한 필드는 유지합니다. 각 필드의 규칙은 TripCreate와 같습니다.
+      description: 보낸 필드만 수정하고 생략한 필드는 유지합니다. 각 필드의 규칙은 TripCreate와 같습니다. 필드를 하나도 보내지 않으면 400으로
+        거절합니다.
+      minProperties: 1
       additionalProperties: false
       properties:
         name:
