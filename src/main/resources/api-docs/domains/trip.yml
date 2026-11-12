@@ -35,10 +35,20 @@ paths:
       - Trip
       operationId: createTrip
       summary: 여행 생성
-      description: 여행 기본 정보와 정원을 입력해 새 여행을 생성합니다. 가입을 완료한 회원만 요청할 수 있으며 생성자가 관리자가 됩니다. 고유키로 중복 생성을 막고
-        같은 생성 요청의 재시도에는 기존 여행을 반환합니다. 고유키의 전달 위치와 보존 기간, 재응답 상태는 미정입니다.
+      description: 여행 기본 정보와 정원을 입력해 새 여행을 생성합니다. 가입을 완료한 회원만 요청할 수 있으며 생성자가 관리자가 됩니다. 앱은 생성 요청마다
+        Idempotency-Key 헤더에 고유키를 보내고, 응답을 받지 못해 같은 요청을 다시 보낼 때는 같은 키를 사용합니다. 서버는 같은 키의 재요청에 새
+        여행을 만들지 않고 처음 만든 여행을 반환합니다.
       security:
       - bearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: 여행 생성 요청의 고유키. 앱이 요청마다 UUID로 만들고, 같은 요청을 다시 보낼 때는 같은 값을 사용합니다.
+        schema:
+          type: string
+          format: uuid
+          example: 3f1c2b8e-6a4d-4e2f-9b7a-1c5d8e0f2a6b
       requestBody:
         required: true
         content:
@@ -228,10 +238,10 @@ paths:
       - name: code
         in: query
         required: true
-        description: 공유받은 초대 코드
+        description: 공유받은 초대 코드. 서버는 앞뒤 공백을 지우고 대소문자를 구분하지 않고 비교합니다.
         schema:
           type: string
-          example: EXAMPLEA
+          example: A7K2PQ
       responses:
         '200':
           description: 조회 성공
@@ -272,7 +282,7 @@ paths:
             schema:
               "$ref": "./trip.yml#/components/schemas/InviteCodeInput"
             example:
-              inviteCode: EXAMPLEA
+              inviteCode: A7K2PQ
       responses:
         '200':
           description: 이미 참여 중인 본인의 재요청. 기존 참여 정보를 반환합니다.
@@ -602,6 +612,8 @@ components:
           "$ref": "./trip.yml#/components/schemas/TripRole"
         participants:
           type: array
+          description: 참여자 목록. 관리자가 맨 앞이고, 그다음은 자리에 배정된 순서이며, 빈자리는 맨 뒤에 둡니다. 빈자리는 isVacant가 true이고
+            memberId와 displayName이 null입니다.
           items:
             "$ref": "./trip.yml#/components/schemas/Participant"
     TripCreate:
@@ -699,12 +711,14 @@ components:
       properties:
         inviteCode:
           type: string
-          example: EXAMPLEA
+          pattern: "^[A-Z0-9]{6}$"
+          description: 초대 코드. 영문 대문자와 숫자로 된 6자입니다. 1차 MVP에서는 만료와 재발급이 없습니다.
+          example: A7K2PQ
         inviteUrl:
           type: string
           format: uri
           description: 초대 링크. 열기만 해서는 참여하지 않습니다.
-          example: https://example.com/invitations/EXAMPLEA
+          example: https://example.com/invitations/A7K2PQ
     InvitationSearch:
       type: object
       required:
@@ -750,7 +764,8 @@ components:
       properties:
         inviteCode:
           type: string
-          description: 공유받은 초대 코드
+          description: 공유받은 초대 코드. 영문 대문자와 숫자로 된 6자이며, 서버는 앞뒤 공백을 지우고 대소문자를 구분하지 않고 비교합니다.
+          example: A7K2PQ
     Membership:
       type: object
       required:
