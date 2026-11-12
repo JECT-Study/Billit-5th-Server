@@ -30,6 +30,8 @@ paths:
     "$ref": "./domains/trip.yml#/paths/~1api~1v1~1trip-memberships"
   "/api/v1/trips/{tripId}/guests":
     "$ref": "./domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1guests"
+  "/api/v1/trips/{tripId}/guests/{tripMemberId}":
+    "$ref": "./domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1guests~1{tripMemberId}"
   "/api/v1/trips/{tripId}/leave":
     "$ref": "./domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1leave"
   "/api/v1/trips/{tripId}/confirm":

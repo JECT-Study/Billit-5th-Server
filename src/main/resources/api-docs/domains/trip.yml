@@ -26,8 +26,6 @@ paths:
                     type: array
                     items:
                       "$ref": "./trip.yml#/components/schemas/TripListItem"
-        '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
     post:
@@ -35,16 +33,18 @@ paths:
       - Trip
       operationId: createTrip
       summary: 여행 생성
-      description: 여행 기본 정보와 정원을 입력해 새 여행을 생성합니다. 가입을 완료한 회원만 요청할 수 있으며 생성자가 관리자가 됩니다. 앱은 생성 요청마다
-        Idempotency-Key 헤더에 고유키를 보내고, 응답을 받지 못해 같은 요청을 다시 보낼 때는 같은 키를 사용합니다. 서버는 같은 키의 재요청에 새
-        여행을 만들지 않고 처음 만든 여행을 반환합니다.
+      description: 여행 기본 정보와 정원을 입력해 새 여행을 생성합니다. 가입을 완료한 회원만 요청할 수 있으며 생성자가 관리자가 됩니다. 앱은 생성 시도마다
+        Idempotency-Key 헤더에 새 고유키를 보내고, 응답을 받지 못해 같은 요청을 다시 보낼 때는 같은 키를 사용합니다. 같은 회원이 같은 키로 다시
+        보내면 서버는 새 여행을 만들지 않고 처음 만든 여행의 현재 정보를 처음과 같이 201과 Location으로 반환합니다. 요청 본문은 비교하지 않으므로
+        내용이 달라도 처음 만든 여행을 반환합니다. 같은 키의 요청이 동시에 와도 여행은 하나만 만듭니다.
       security:
       - bearerAuth: []
       parameters:
       - name: Idempotency-Key
         in: header
         required: true
-        description: 여행 생성 요청의 고유키. 앱이 요청마다 UUID로 만들고, 같은 요청을 다시 보낼 때는 같은 값을 사용합니다.
+        description: 여행 생성 요청의 고유키. 앱이 생성 시도마다 UUID로 만들고, 같은 요청을 다시 보낼 때만 같은 값을 사용합니다. 키는 여행 생성에만
+          쓰며 서버 전체에서 한 번만 사용할 수 있습니다. 만료되지 않고 만든 여행과 함께 보관합니다. 없거나 UUID 형식이 아니면 400입니다.
         schema:
           type: string
           format: uuid
@@ -64,7 +64,7 @@ paths:
               memberCapacity: 3
       responses:
         '201':
-          description: 생성 성공
+          description: 생성 성공. 같은 키의 재요청도 처음 만든 여행을 201로 반환합니다.
           headers:
             Location:
               description: 생성한 여행의 URI
@@ -84,6 +84,12 @@ paths:
           "$ref": "../common/components.yml#/responses/BadRequest"
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
+        '409':
+          description: 다른 회원이 이미 사용한 키이거나 그 키로 만든 여행이 삭제됨. TRIP_IDEMPOTENCY_KEY_REUSED
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
   "/api/v1/trips/{tripId}":
     parameters:
     - "$ref": "./trip.yml#/components/parameters/TripId"
@@ -156,7 +162,8 @@ paths:
         '404':
           "$ref": "../common/components.yml#/responses/NotFound"
         '409':
-          description: 확정 후 정원을 변경하거나 등록 인원보다 정원을 줄이려 함. TRIP_CAPACITY_CHANGE_NOT_ALLOWED
+          description: 정원을 바꿀 수 없음. 여행을 시작(확정)한 뒤 정원을 바꾸려 하거나, 등록 인원(회원과 비로그인 참여자)보다 정원을 줄이려 함.
+            TRIP_CAPACITY_CHANGE_NOT_ALLOWED
           content:
             application/json:
               schema:
@@ -166,7 +173,8 @@ paths:
       - Trip
       operationId: deleteTrip
       summary: 여행 삭제
-      description: 지출과 정산 기록이 없는 여행을 삭제하고 모든 참여자의 접근을 차단합니다. 해당 여행의 관리자만 요청할 수 있습니다.
+      description: 지출과 정산 기록이 없는 여행을 삭제하고 모든 참여자의 접근을 차단합니다. 해당 여행의 관리자만 요청할 수 있습니다. 이미 삭제한 여행을
+        다시 삭제하면 404를 반환합니다.
       security:
       - bearerAuth: []
       responses:
@@ -179,7 +187,11 @@ paths:
         '403':
           "$ref": "../common/components.yml#/responses/Forbidden"
         '404':
-          "$ref": "../common/components.yml#/responses/NotFound"
+          description: 여행이 없거나 이미 삭제됨. 이미 삭제한 여행을 다시 삭제해도 404입니다. COMMON_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
         '409':
           description: 삭제를 막는 지출 또는 정산 기록이 존재함. TRIP_RECORDS_EXIST
           content:
@@ -272,7 +284,8 @@ paths:
       operationId: joinTripByInviteCode
       summary: 여행 참여
       description: 초대 코드로 여행에 참여하고 본인의 참여 식별자를 반환합니다. 가입을 완료한 회원만 요청할 수 있습니다. 최초 참여는 201, 이미 참여 중인
-        본인의 재요청은 기존 참여 정보와 200을 반환합니다.
+        본인의 재요청은 기존 참여 정보와 200을 반환합니다. 여행 안에 요청자의 닉네임과 같은 이름의 비로그인 참여자가 있으면 참여할 수 없으며, 관리자가
+        그 비로그인 참여자를 삭제한 뒤 참여할 수 있습니다.
       security:
       - bearerAuth: []
       requestBody:
@@ -312,8 +325,15 @@ paths:
           "$ref": "../common/components.yml#/responses/BadRequest"
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
+        '404':
+          description: 해당 코드로 찾을 수 있는 여행이 없음. TRIP_INVITATION_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
         '409':
-          description: 신규 참여자가 확정된 여행에 참여하려 함(TRIP_ALREADY_CONFIRMED) 또는 빈자리가 없음(TRIP_CAPACITY_FULL)
+          description: 신규 참여자가 확정된 여행에 참여하려 함(TRIP_ALREADY_CONFIRMED), 빈자리가 없음(TRIP_CAPACITY_FULL) 또는 요청자의
+            닉네임과 같은 이름의 비로그인 참여자가 있음(TRIP_NICKNAME_DUPLICATED)
           content:
             application/json:
               schema:
@@ -341,6 +361,11 @@ paths:
       responses:
         '201':
           description: 등록 성공
+          headers:
+            Location:
+              description: 등록한 비로그인 참여자의 URI
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -362,6 +387,42 @@ paths:
         '409':
           description: 확정 후 비로그인 참여자를 추가하려 함(TRIP_ALREADY_CONFIRMED), 등록할 빈자리가 없음(TRIP_CAPACITY_FULL) 또는 같은 여행 안에
             이미 같은 이름이 있음(TRIP_GUEST_NAME_DUPLICATED)
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+  "/api/v1/trips/{tripId}/guests/{tripMemberId}":
+    parameters:
+    - "$ref": "./trip.yml#/components/parameters/TripId"
+    - "$ref": "./trip.yml#/components/parameters/TripMemberId"
+    delete:
+      tags:
+      - Trip
+      operationId: deleteTripGuest
+      summary: 비로그인 참여자 삭제
+      description: 비로그인 참여자를 삭제하고 그 자리를 빈자리로 되돌립니다. 참여하려는 회원의 닉네임과 같은 이름의 비로그인 참여자가 있을 때 이 API로
+        삭제한 뒤 회원이 참여하게 합니다. 여행 확정 전, 해당 여행의 관리자만 요청할 수 있습니다. 지정한 자리가 비로그인 참여자가 아니면(회원 참여자,
+        빈자리 또는 이미 삭제한 자리) 404를 반환합니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          "$ref": "../common/components.yml#/responses/NoContent"
+        '400':
+          "$ref": "../common/components.yml#/responses/BadRequest"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          "$ref": "../common/components.yml#/responses/Forbidden"
+        '404':
+          description: 여행이 없거나 지정한 자리가 비로그인 참여자가 아님(회원 참여자, 빈자리 또는 이미 삭제한 자리). 이미 삭제한 비로그인 참여자를 다시
+            삭제해도 404입니다. COMMON_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+        '409':
+          description: 확정 후 비로그인 참여자를 삭제하려 함. TRIP_ALREADY_CONFIRMED
           content:
             application/json:
               schema:
@@ -437,6 +498,13 @@ components:
       description: 여행 ID
       schema:
         "$ref": "../common/components.yml#/schemas/ResourceId"
+    TripMemberId:
+      name: tripMemberId
+      in: path
+      required: true
+      description: 여행별 참여자 ID
+      schema:
+        "$ref": "../common/components.yml#/schemas/ResourceId"
   schemas:
     Currency:
       type: string
@@ -451,14 +519,14 @@ components:
       type: string
       pattern: "^[A-Z]{2}$"
       description: 대표 국가. ISO 3166-1 alpha-2 국가 코드(영문 대문자 2자리)입니다. 한국 KR, 일본 JP, 미국 US, 중국 CN이며 유럽은 ISO 3166-1의
-        예외적 예약 코드(exceptionally reserved)인 EU를 사용합니다. 기타는 사용자가 고른 해당 국가의 코드를 사용합니다(베트남이면 VN).
+        예외적 예약 코드(exceptionally reserved)인 EU를 사용합니다. 기타는 사용자가 직접 입력한 국가를 FE가 국가 코드로 바꿔 보냅니다(베트남이면 VN).
       example: JP
     TripRole:
       type: string
       enum:
-      - ADMIN
+      - OWNER
       - MEMBER
-      description: ADMIN은 이 여행의 관리자, MEMBER는 일반 참여자입니다.
+      description: OWNER는 이 여행의 관리자, MEMBER는 일반 참여자입니다.
     TripSummary:
       type: object
       required:
@@ -511,20 +579,19 @@ components:
           "$ref": "./trip.yml#/components/schemas/TripRole"
     TripListItem:
       type: object
-      description: 여행 목록 항목. 기본 필드의 정의는 TripSummary와 같고, 여행 카드에 표시할 사용 금액(totalKrwAmount)을 추가합니다. 사용 금액은
-        서버가 해당 여행 지출의 원화 환산액(expense.krw_amount)을 합해 계산한 원화 금액입니다.
+      description: 여행 목록 항목. 여행 카드에 필요한 필드만 담습니다. 기본 필드의 정의는 TripSummary와 같고, 여행 카드에 표시할 사용
+        금액(totalAmountKrw)을 추가합니다.
       required:
       - tripId
       - name
       - startDate
       - endDate
       - countryCode
-      - baseCurrency
       - memberCapacity
       - registeredMemberCount
       - membersLockedAt
       - myRole
-      - totalKrwAmount
+      - totalAmountKrw
       additionalProperties: false
       properties:
         tripId:
@@ -542,8 +609,6 @@ components:
           example: '2026-11-07'
         countryCode:
           "$ref": "./trip.yml#/components/schemas/CountryCode"
-        baseCurrency:
-          "$ref": "./trip.yml#/components/schemas/Currency"
         memberCapacity:
           type: integer
           minimum: 1
@@ -559,8 +624,11 @@ components:
           nullable: true
         myRole:
           "$ref": "./trip.yml#/components/schemas/TripRole"
-        totalKrwAmount:
-          "$ref": "../common/components.yml#/schemas/DecimalString"
+        totalAmountKrw:
+          allOf:
+          - "$ref": "../common/components.yml#/schemas/DecimalString"
+          description: 환전 후 총금액. 이 여행에서 삭제되지 않은 지출을 원화로 바꿔 합한 금액입니다.
+          example: '125000.00'
     TripDetail:
       type: object
       description: 여행 기본 정보와 참여자 목록. 기본 필드의 정의는 TripSummary와 같습니다.
@@ -652,8 +720,8 @@ components:
           description: 생성자를 포함한 총 정원
     TripUpdate:
       type: object
-      description: 보낸 필드만 수정하고 생략한 필드는 유지합니다. 각 필드의 규칙은 TripCreate와 같습니다. 필드를 하나도 보내지 않으면 400으로
-        거절합니다.
+      description: 보낸 필드만 수정하고 생략한 필드는 유지합니다. 각 필드의 규칙은 TripCreate와 같습니다. 모든 필드는 null을 허용하지 않으며
+        null을 보내면 400으로 거절합니다. 필드를 하나도 보내지 않아도 400으로 거절합니다.
       minProperties: 1
       additionalProperties: false
       properties:
