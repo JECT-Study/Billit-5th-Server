@@ -22,7 +22,9 @@ import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import java.net.ServerSocket
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.Date
 
@@ -36,6 +38,7 @@ class SocialIdTokenAdapterTest :
         fun adapter(
             googleJwkSetUri: String,
             kakaoJwkSetUri: String,
+            clock: Clock = Clock.systemUTC(),
         ) = SocialIdTokenAdapter(
             SocialLoginProperties(
                 google = SocialLoginProperties.Google(clientId = GOOGLE_CLIENT_ID, jwkSetUri = googleJwkSetUri),
@@ -337,7 +340,98 @@ class SocialIdTokenAdapterTest :
                 subjects shouldBe listOf("user-1", "user-2", "user-3", "user-4")
             }
         }
+
+        test("모르는 kid의 토큰이 재조회 한도를 채워도 캐시 만료 전후로 받아 둔 키의 토큰은 통과하고 JWKS 요청은 30초에 두 번으로 제한된다") {
+            // given
+            val clock = MutableClock(now)
+            val clockedAdapter = adapter(fixture.googleJwkSetUri, fixture.kakaoJwkSetUri, clock)
+            val unknownKey = RSAKeyGenerator(2048).keyID("attacker-key").generate()
+            val expiresAt = now.plus(Duration.ofHours(1))
+            clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-0", expiresAt))
+
+            // when
+            val results =
+                listOf(Duration.ZERO, Duration.ofMinutes(10).plusSeconds(1)).map { elapsed ->
+                    clock.advance(elapsed)
+                    val requestCountBefore = fixture.jwksRequestCount.get()
+                    val unknownKeyErrorCodes =
+                        (1..5).map {
+                            shouldThrow<BusinessException> {
+                                clockedAdapter.verify(
+                                    AuthProvider.GOOGLE,
+                                    fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "u", expiresAt, unknownKey),
+                                )
+                            }.errorCode
+                        }
+                    val subject =
+                        clockedAdapter
+                            .verify(
+                                AuthProvider.GOOGLE,
+                                fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-1", expiresAt),
+                            ).subject
+                    Triple(unknownKeyErrorCodes, subject, fixture.jwksRequestCount.get() - requestCountBefore)
+                }
+
+            // then
+            assertSoftly {
+                results.map { it.first } shouldBe List(2) { List(5) { AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED } }
+                results.map { it.second } shouldBe List(2) { "user-1" }
+                // 첫 구간은 처음 키를 받은 요청과 같은 30초 안이라 한 번, 캐시 만료 뒤에는 새 30초 구간이라 두 번까지만 가져온다.
+                results.map { it.third } shouldBe listOf(1, 2)
+            }
+        }
+
+        test("제공자 JWKS 장애가 끝나고 재조회 간격이 지나면 받은 키의 토큰은 통과하고 모르는 kid의 토큰은 다시 401로 실패한다") {
+            // given
+            val clock = MutableClock(now)
+            val clockedAdapter = adapter(fixture.googleJwkSetUri, fixture.kakaoJwkSetUri, clock)
+            val expiresAt = now.plus(Duration.ofHours(1))
+            val unknownKey = RSAKeyGenerator(2048).keyID("unknown-key").generate()
+            fixture.jwksUnavailable.set(true)
+            val outageErrorCodes =
+                (1..3).map {
+                    shouldThrow<BusinessException> {
+                        clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-$it", expiresAt))
+                    }.errorCode
+                }
+            fixture.jwksUnavailable.set(false)
+            clock.advance(Duration.ofSeconds(31))
+
+            // when
+            val subject =
+                clockedAdapter
+                    .verify(
+                        AuthProvider.GOOGLE,
+                        fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-4", expiresAt),
+                    ).subject
+            val unknownKeyFailure =
+                shouldThrow<BusinessException> {
+                    clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "u", expiresAt, unknownKey))
+                }
+
+            // then
+            assertSoftly {
+                outageErrorCodes shouldBe List(3) { AuthErrorCode.SOCIAL_PROVIDER_UNAVAILABLE }
+                subject shouldBe "user-4"
+                unknownKeyFailure.errorCode shouldBe AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED
+            }
+        }
     }) {
+    /** 캐시 만료와 재조회 간격을 시험하려고 테스트에서 앞으로 돌리는 시계입니다. */
+    private class MutableClock(
+        private var instant: Instant,
+    ) : Clock() {
+        fun advance(duration: Duration) {
+            instant = instant.plus(duration)
+        }
+
+        override fun instant(): Instant = instant
+
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+
+        override fun withZone(zone: ZoneId): Clock = this
+    }
+
     companion object {
         private fun hs256IdToken(
             issuer: String,
