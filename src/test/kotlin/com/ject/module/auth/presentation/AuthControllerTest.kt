@@ -1,11 +1,13 @@
 package com.ject.module.auth.presentation
 
+import com.ject.module.auth.implement.AuthTokenCreator
 import com.ject.support.IntegrationTestSupport
 import com.ject.support.SocialIdTokenFixture
 import com.ject.support.SocialIdTokenFixture.Companion.GOOGLE_ISSUER
 import com.nimbusds.jwt.SignedJWT
 import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -28,6 +30,9 @@ class AuthControllerTest : IntegrationTestSupport() {
 
     @Autowired
     private lateinit var jsonMapper: JsonMapper
+
+    @Autowired
+    private lateinit var authTokenCreator: AuthTokenCreator
 
     private val httpClient = HttpClient.newHttpClient()
     private val providerUserIds = mutableListOf<String>()
@@ -155,9 +160,72 @@ class AuthControllerTest : IntegrationTestSupport() {
                 }
             }
         }
+        context("POST /api/v1/auth/token-refreshes") {
+            test("유효한 Refresh Token이면 200과 새 Access Token, Refresh Token만 반환한다") {
+                // given
+                val issued = authTokenCreator.createMemberTokens(createActiveMember())
+
+                // when
+                val response = post(TOKEN_REFRESH_PATH, """{"refreshToken":"${issued.refreshToken}"}""")
+
+                // then
+                val data = body(response)["data"] as Map<*, *>
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    data.keys shouldBe setOf("accessToken", "refreshToken")
+                    data["refreshToken"] shouldNotBe issued.refreshToken
+                }
+            }
+
+            test("유효하지 않은 Refresh Token이면 401 AUTH_REFRESH_TOKEN_INVALID를 반환한다") {
+                // given
+                val requestBody = """{"refreshToken":"invalid-token"}"""
+
+                // when
+                val response = post(TOKEN_REFRESH_PATH, requestBody)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 401
+                    body(response) shouldBe
+                        mapOf("code" to "AUTH_REFRESH_TOKEN_INVALID", "message" to "Refresh Token이 유효하지 않습니다.", "errors" to null)
+                }
+            }
+
+            val invalidBodies =
+                mapOf(
+                    "refreshToken 누락" to "{}",
+                    "refreshToken이 빈 문자열" to """{"refreshToken":""}""",
+                    "refreshToken이 null" to """{"refreshToken":null}""",
+                    "정의하지 않은 필드" to """{"refreshToken":"token","deviceId":"d"}""",
+                )
+            for ((case, requestBody) in invalidBodies) {
+                test("요청 형식 오류($case)는 400 COMMON_INVALID_REQUEST를 반환한다") {
+                    // given
+                    val path = TOKEN_REFRESH_PATH
+
+                    // when
+                    val response = post(path, requestBody)
+
+                    // then
+                    response.statusCode() shouldBe 400
+                    body(response)["code"] shouldBe "COMMON_INVALID_REQUEST"
+                }
+            }
+        }
     }
 
     private fun newProviderUserId(): String = "test-${UUID.randomUUID()}".also { providerUserIds.add(it) }
+
+    private fun createActiveMember(): Long =
+        checkNotNull(
+            jdbc.queryForObject(
+                "INSERT INTO member (social_provider, social_provider_user_id, status, created_at, updated_at) " +
+                    "VALUES ('GOOGLE', ?, 'ACTIVE', now(), now()) RETURNING id",
+                Long::class.java,
+                newProviderUserId(),
+            ),
+        )
 
     private fun countMembers(providerUserId: String): Int =
         checkNotNull(jdbc.queryForObject("SELECT count(*) FROM member WHERE social_provider_user_id = ?", Int::class.java, providerUserId))
@@ -185,6 +253,7 @@ class AuthControllerTest : IntegrationTestSupport() {
 
     companion object {
         private const val SOCIAL_LOGIN_PATH = "/api/v1/auth/social-logins"
+        private const val TOKEN_REFRESH_PATH = "/api/v1/auth/token-refreshes"
         private const val GOOGLE_CLIENT_ID = "test-google-client-id"
         private const val KAKAO_APP_KEY = "test-kakao-native-app-key"
         private const val KAKAO_ISSUER = SocialIdTokenFixture.KAKAO_ISSUER

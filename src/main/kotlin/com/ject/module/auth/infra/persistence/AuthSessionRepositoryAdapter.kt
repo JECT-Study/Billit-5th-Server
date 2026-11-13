@@ -5,6 +5,7 @@ import com.ject.module.auth.domain.AuthSessionRepository
 import com.ject.module.auth.infra.persistence.jpa.AuthSessionJpaRepository
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Repository
+import java.time.Instant
 import java.util.UUID
 
 @Repository
@@ -14,4 +15,24 @@ class AuthSessionRepositoryAdapter(
     override fun save(authSession: AuthSession): AuthSession = authSessionJpaRepository.save(authSession)
 
     override fun findById(id: UUID): AuthSession? = authSessionJpaRepository.findByIdOrNull(id)
+
+    override fun rotateRefreshToken(
+        id: UUID,
+        expectedVersion: Long,
+        newRefreshTokenHash: String,
+        newRefreshTokenExpiresAt: Instant,
+        rotatedAt: Instant,
+    ): Boolean =
+        authSessionJpaRepository.rotateRefreshToken(
+            id = id,
+            expectedVersion = expectedVersion,
+            newRefreshTokenHash = newRefreshTokenHash,
+            newRefreshTokenExpiresAt = newRefreshTokenExpiresAt,
+            rotatedAt = rotatedAt,
+        ) == 1
+
+    override fun revokeIfActive(
+        id: UUID,
+        revokedAt: Instant,
+    ): Boolean = authSessionJpaRepository.revokeIfActive(id, revokedAt) == 1
 }

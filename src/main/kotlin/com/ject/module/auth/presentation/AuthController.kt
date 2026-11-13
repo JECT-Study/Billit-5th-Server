@@ -5,10 +5,13 @@ import com.ject.global.error.CommonErrorCode
 import com.ject.global.response.ApiResponse
 import com.ject.module.auth.domain.SocialLoginResult
 import com.ject.module.auth.presentation.request.SocialLoginRequest
+import com.ject.module.auth.presentation.request.TokenRefreshRequest
 import com.ject.module.auth.presentation.response.AuthenticatedSocialLoginResponse
 import com.ject.module.auth.presentation.response.RegistrationRequiredSocialLoginResponse
 import com.ject.module.auth.presentation.response.SocialLoginResponse
 import com.ject.module.auth.presentation.response.SocialLoginStatus
+import com.ject.module.auth.presentation.response.TokenRefreshResponse
+import com.ject.module.auth.usecase.RefreshTokensUseCase
 import com.ject.module.auth.usecase.SocialLoginUseCase
 import com.ject.module.member.domain.AuthProvider
 import jakarta.validation.Valid
@@ -21,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/api/v1/auth")
 class AuthController(
     private val socialLoginUseCase: SocialLoginUseCase,
+    private val refreshTokensUseCase: RefreshTokensUseCase,
 ) {
     @PostMapping("/social-logins")
     fun socialLogin(
@@ -51,5 +55,14 @@ class AuthController(
                 }
             }
         return ApiResponse(response)
+    }
+
+    @PostMapping("/token-refreshes")
+    fun refreshTokens(
+        @Valid @RequestBody request: TokenRefreshRequest,
+    ): ApiResponse<TokenRefreshResponse> {
+        val tokens = refreshTokensUseCase.refresh(request.refreshToken)
+
+        return ApiResponse(TokenRefreshResponse(accessToken = tokens.accessToken, refreshToken = tokens.refreshToken))
     }
 }

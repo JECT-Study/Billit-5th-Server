@@ -135,6 +135,7 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - 값은 64바이트 이상의 임의 값을 base64로 인코딩해 넣습니다. 예: `openssl rand -base64 64 | tr -d '\n'`
 - 값이 없거나 base64가 아니거나 64바이트보다 짧으면 기동이 실패합니다.
 - 세션과 Refresh Token 해시는 PostgreSQL `auth_session`에 저장하며 Redis에 두지 않습니다.
+- `app.auth.refresh-token.retry-grace-period`는 네 프로필 모두 `30s`입니다. 회전 후 이 시간 안에 직전 Refresh Token이 다시 오면 응답을 받지 못한 재시도로 보고 한 번만 새 토큰을 발급합니다. 그 밖의 이미 회전한 토큰은 재사용으로 보고 해당 세션을 종료합니다.
 
 ## 소셜 로그인
 

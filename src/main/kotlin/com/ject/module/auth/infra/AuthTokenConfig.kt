@@ -21,7 +21,7 @@ import java.time.Clock
 import java.time.Duration
 
 @Configuration
-@EnableConfigurationProperties(AuthTokenProperties::class, SocialLoginProperties::class)
+@EnableConfigurationProperties(AuthTokenProperties::class, RefreshTokenProperties::class, SocialLoginProperties::class)
 class AuthTokenConfig {
     @Bean
     fun jwtEncoder(properties: AuthTokenProperties): JwtEncoder =
@@ -45,6 +45,14 @@ class AuthTokenConfig {
         clock: Clock,
         accessTokenSessionValidator: AccessTokenSessionValidator,
     ): JwtDecoder = jwtDecoder(properties, clock, accessTokenSessionValidator, setOf(TokenType.ACCESS, TokenType.REGISTRATION))
+
+    /** Refresh Token 갱신과 로그아웃에서 본문으로 받은 Refresh Token만 허용합니다. 세션은 호출하는 UseCase가 확인합니다. */
+    @Bean
+    fun refreshJwtDecoder(
+        properties: AuthTokenProperties,
+        clock: Clock,
+        accessTokenSessionValidator: AccessTokenSessionValidator,
+    ): JwtDecoder = jwtDecoder(properties, clock, accessTokenSessionValidator, setOf(TokenType.REFRESH))
 
     private fun jwtDecoder(
         properties: AuthTokenProperties,

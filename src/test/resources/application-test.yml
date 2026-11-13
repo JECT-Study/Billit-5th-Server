@@ -66,6 +66,8 @@ app:
   auth:
     jwt:
       secret: YmlsbGl0LXRlc3Qtb25seS1qd3Qtc2lnbmluZy1rZXktZG8tbm90LXVzZS1vbi1hbnktc2VydmVyLTAwMDAwMA==
+    refresh-token:
+      retry-grace-period: 30s
     social:
       google:
         client-id: test-google-client-id
