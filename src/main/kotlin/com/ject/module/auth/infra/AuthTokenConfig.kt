@@ -1,6 +1,7 @@
 package com.ject.module.auth.infra
 
 import com.ject.module.auth.domain.AuthTokenClaims
+import com.ject.module.auth.domain.RefreshTokenRetryPolicy
 import com.ject.module.auth.domain.TokenType
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
@@ -29,6 +30,10 @@ class AuthTokenConfig {
             .withSecretKey(properties.signingKey)
             .algorithm(MacAlgorithm.HS512)
             .build()
+
+    @Bean
+    fun refreshTokenRetryPolicy(properties: RefreshTokenProperties): RefreshTokenRetryPolicy =
+        RefreshTokenRetryPolicy(properties.retryGracePeriod)
 
     /** 회원용 Access Token만 허용합니다. */
     @Bean
