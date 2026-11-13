@@ -158,6 +158,7 @@ Path와 operation 양쪽에 같은 파라미터를 중복 정의하지 않습니
 | 생략 가능하고 null 불가 | `required`에서 제외하고 `nullable`은 생략합니다. |
 | 생략 가능하고 null 가능 | `required`에서 제외하고 필드에 `nullable: true`를 작성합니다. |
 
+- `enum` 필드가 null을 허용하면 `nullable: true`와 함께 `enum` 값 목록에도 `null`을 포함합니다. `nullable: true`만으로는 `null`이 `enum` 제약에 걸려 거절됩니다.
 - 객체는 [미정의 JSON 필드 거절 규칙](api-conventions.md#입력-검증)에 맞춰 `additionalProperties: false`를 작성합니다. 임의 키를 받는 계약이라면 허용할 값의 스키마를 별도로 정의합니다.
 - 문자열은 확정된 `minLength`, `maxLength`, `pattern`, 수치는 `minimum`, `maximum`과 경계 포함 여부를 작성합니다.
 - 배열은 `items`를 작성하고, 확정된 개수 제한이 있으면 `minItems`, `maxItems`를 작성합니다. 중복 거절이 계약인 경우에만 `uniqueItems: true`를 사용합니다.
