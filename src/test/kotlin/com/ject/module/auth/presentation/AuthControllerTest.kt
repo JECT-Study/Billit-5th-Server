@@ -249,6 +249,26 @@ class AuthControllerTest : IntegrationTestSupport() {
                 }
             }
 
+            test("헤더의 Access Token과 본문의 Refresh Token이 함께 오면 헤더의 세션만 종료한다") {
+                // given
+                val memberId = createActiveMember()
+                val headerSession = authTokenCreator.createMemberTokens(memberId)
+                val bodySession = authTokenCreator.createMemberTokens(memberId)
+
+                // when
+                val response =
+                    post(LOGOUT_PATH, """{"refreshToken":"${bodySession.refreshToken}"}""", accessToken = headerSession.accessToken)
+
+                // then
+                val headerRefresh = post(TOKEN_REFRESH_PATH, """{"refreshToken":"${headerSession.refreshToken}"}""")
+                val bodyRefresh = post(TOKEN_REFRESH_PATH, """{"refreshToken":"${bodySession.refreshToken}"}""")
+                assertSoftly {
+                    response.statusCode() shouldBe 204
+                    headerRefresh.statusCode() shouldBe 401
+                    bodyRefresh.statusCode() shouldBe 200
+                }
+            }
+
             test("로그아웃해도 같은 회원의 다른 세션은 유지한다") {
                 // given
                 val memberId = createActiveMember()

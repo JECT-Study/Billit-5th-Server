@@ -62,16 +62,40 @@ class SocialIdTokenFixture(
         subject: String?,
         expiresAt: Instant?,
         key: RSAKey = signingKey,
-    ): String {
-        val claims =
+        extraClaims: Map<String, Any> = emptyMap(),
+    ): String = sign(claims(issuer, audience?.let(::listOf), subject, expiresAt, extraClaims), key)
+
+    /** `aud`를 배열로 담은 ID 토큰을 만듭니다. */
+    fun idTokenWithAudiences(
+        issuer: String,
+        audiences: List<String>,
+        subject: String,
+        expiresAt: Instant,
+    ): String = sign(claims(issuer, audiences, subject, expiresAt, emptyMap()), signingKey)
+
+    private fun claims(
+        issuer: String?,
+        audiences: List<String>?,
+        subject: String?,
+        expiresAt: Instant?,
+        extraClaims: Map<String, Any>,
+    ): JWTClaimsSet {
+        val builder =
             JWTClaimsSet
                 .Builder()
                 .issuer(issuer)
-                .audience(audience)
+                .audience(audiences)
                 .subject(subject)
                 .issueTime(Date.from(clock.instant().minusSeconds(10)))
                 .expirationTime(expiresAt?.let(Date::from))
-                .build()
+        extraClaims.forEach { (name, value) -> builder.claim(name, value) }
+        return builder.build()
+    }
+
+    private fun sign(
+        claims: JWTClaimsSet,
+        key: RSAKey,
+    ): String {
         val header =
             JWSHeader
                 .Builder(JWSAlgorithm.RS256)

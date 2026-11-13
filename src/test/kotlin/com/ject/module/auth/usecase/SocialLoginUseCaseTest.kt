@@ -2,6 +2,7 @@ package com.ject.module.auth.usecase
 
 import com.ject.global.error.BusinessException
 import com.ject.module.auth.domain.AuthErrorCode
+import com.ject.module.auth.domain.SocialIdentity
 import com.ject.module.auth.domain.SocialLoginResult
 import com.ject.module.auth.usecase.port.SocialIdTokenPort
 import com.ject.module.member.domain.AuthProvider
@@ -81,6 +82,41 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
                 claims(registrationRequired.registrationToken)["sub"] shouldBe memberId.toString()
                 countSessions(memberId) shouldBe 0
             }
+        }
+
+        test("처음 로그인할 때 받은 표시 이름을 가입 중 회원에 저장한다") {
+            // given
+            val providerUserId = givenVerifiedIdToken(AuthProvider.GOOGLE, "google-id-token", displayName = "홍길동")
+
+            // when
+            socialLoginUseCase.login(AuthProvider.GOOGLE, "google-id-token")
+
+            // then
+            findMembers(AuthProvider.GOOGLE, providerUserId).map { it["social_display_name"] } shouldBe listOf("홍길동")
+        }
+
+        test("표시 이름이 없는 가입 중 회원이 다시 로그인하며 표시 이름을 받으면 채운다") {
+            // given
+            val providerUserId = givenVerifiedIdToken(AuthProvider.KAKAO, "kakao-id-token", displayName = "길동")
+            insertMember(AuthProvider.KAKAO, providerUserId, "PENDING")
+
+            // when
+            socialLoginUseCase.login(AuthProvider.KAKAO, "kakao-id-token")
+
+            // then
+            findMembers(AuthProvider.KAKAO, providerUserId).map { it["social_display_name"] } shouldBe listOf("길동")
+        }
+
+        test("가입 중 회원에게 저장된 표시 이름은 다시 로그인해 다른 값을 받아도 덮어쓰지 않는다") {
+            // given
+            val providerUserId = givenVerifiedIdToken(AuthProvider.GOOGLE, "google-id-token", displayName = "새 이름")
+            insertMember(AuthProvider.GOOGLE, providerUserId, "PENDING", socialDisplayName = "처음 이름")
+
+            // when
+            socialLoginUseCase.login(AuthProvider.GOOGLE, "google-id-token")
+
+            // then
+            findMembers(AuthProvider.GOOGLE, providerUserId).map { it["social_display_name"] } shouldBe listOf("처음 이름")
         }
 
         test("가입을 마친 회원은 새 세션을 만들고 회원용 Access Token과 Refresh Token을 반환한다") {
@@ -180,10 +216,11 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
     private fun givenVerifiedIdToken(
         provider: AuthProvider,
         idToken: String,
+        displayName: String? = null,
     ): String {
         val providerUserId = "test-${UUID.randomUUID()}"
         providerUserIds.add(providerUserId)
-        `when`(socialIdTokenPort.verify(provider, idToken)).thenReturn(providerUserId)
+        `when`(socialIdTokenPort.verify(provider, idToken)).thenReturn(SocialIdentity(subject = providerUserId, displayName = displayName))
         return providerUserId
     }
 
@@ -191,15 +228,17 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
         provider: AuthProvider,
         providerUserId: String,
         status: String,
+        socialDisplayName: String? = null,
     ): Long =
         checkNotNull(
             jdbc.queryForObject(
-                "INSERT INTO member (social_provider, social_provider_user_id, status, created_at, updated_at) " +
-                    "VALUES (?::auth_provider, ?, ?::member_status, now(), now()) RETURNING id",
+                "INSERT INTO member (social_provider, social_provider_user_id, status, social_display_name, created_at, updated_at) " +
+                    "VALUES (?::auth_provider, ?, ?::member_status, ?, now(), now()) RETURNING id",
                 Long::class.java,
                 provider.name,
                 providerUserId,
                 status,
+                socialDisplayName,
             ),
         )
 
@@ -208,7 +247,7 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
         providerUserId: String,
     ): List<Map<String, Any?>> =
         jdbc.queryForList(
-            "SELECT id, status::text AS status FROM member WHERE social_provider = ?::auth_provider AND social_provider_user_id = ?",
+            "SELECT id, status::text AS status, social_display_name FROM member WHERE social_provider = ?::auth_provider AND social_provider_user_id = ?",
             provider.name,
             providerUserId,
         )
