@@ -11,7 +11,6 @@ import com.ject.module.auth.implement.RefreshTokenReader
 import com.ject.module.auth.infra.RefreshTokenProperties
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
-import java.security.MessageDigest
 import java.time.Clock
 import java.time.Instant
 
@@ -44,7 +43,7 @@ class RefreshTokensUseCase(
 
         val now = clock.instant()
         val tokenHash = refreshTokenHasher.hash(refreshToken)
-        val isCurrentToken = hashEquals(tokenHash, session.refreshTokenHash)
+        val isCurrentToken = refreshTokenHasher.matches(tokenHash, session.refreshTokenHash)
         if (isCurrentToken && !now.isBefore(session.refreshTokenExpiresAt)) {
             throw invalidRefreshToken()
         }
@@ -80,13 +79,8 @@ class RefreshTokensUseCase(
         if (previousHash == null || rotatedAt == null) {
             return false
         }
-        return hashEquals(tokenHash, previousHash) && now.isBefore(rotatedAt.plus(refreshTokenProperties.retryGracePeriod))
+        return refreshTokenHasher.matches(tokenHash, previousHash) && now.isBefore(rotatedAt.plus(refreshTokenProperties.retryGracePeriod))
     }
-
-    private fun hashEquals(
-        left: String,
-        right: String,
-    ): Boolean = MessageDigest.isEqual(left.toByteArray(), right.toByteArray())
 
     private fun invalidRefreshToken() = BusinessException(AuthErrorCode.REFRESH_TOKEN_INVALID)
 
