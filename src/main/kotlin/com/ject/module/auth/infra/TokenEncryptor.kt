@@ -29,7 +29,10 @@ class TokenEncryptor(
         return Base64.getEncoder().encodeToString(nonce + cipher.doFinal(plaintext.toByteArray()))
     }
 
-    /** 키나 [associatedData]가 다르거나 암호문이 변조됐으면 `javax.crypto.AEADBadTagException`으로 실패합니다. */
+    /**
+     * 키나 [associatedData]가 다르거나 암호문이 변조됐으면 `javax.crypto.AEADBadTagException`으로 실패합니다.
+     * 암호문이 base64가 아니거나 nonce보다 짧으면 [IllegalArgumentException]으로 실패합니다.
+     */
     fun decrypt(
         ciphertext: String,
         associatedData: String,

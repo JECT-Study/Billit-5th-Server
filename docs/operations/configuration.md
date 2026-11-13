@@ -136,7 +136,7 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - 값이 없거나 base64가 아니거나 64바이트보다 짧으면 기동이 실패합니다.
 - 세션과 Refresh Token 해시는 PostgreSQL `auth_session`에 저장하며 Redis에 두지 않습니다.
 - `app.auth.token-encryption.key`(`AUTH_TOKEN_ENCRYPTION_KEY`)는 외부 제공자 토큰(애플 Refresh Token)을 저장할 때 쓰는 AES-256-GCM 키입니다. 32바이트 임의 값을 base64로 인코딩해 넣습니다. 예: `openssl rand -base64 32`. local은 개발용 기본값, test는 설정 파일의 테스트 전용 값, dev와 prod는 기본값 없이 필수이며 환경별로 다른 값을 씁니다. 값이 없거나 32바이트가 아니면 기동이 실패합니다.
-- 토큰 암호화 키를 바꾸면 이전 키로 저장한 애플 Refresh Token을 복호화할 수 없습니다. 키를 교체하는 절차는 아직 없으므로 한 번 넣은 값을 유지합니다.
+- 토큰 암호화 키를 바꾸면 이전 키로 저장한 애플 Refresh Token을 복호화할 수 없습니다. 키를 교체하는 절차는 아직 없으므로 한 번 넣은 값을 유지합니다. 복호화하지 못한 토큰은 `apple_refresh_token_undecryptable` ERROR 로그(저장값과 키 제외)를 남기고, 애플 연결 해제는 애플을 호출하지 않고 행을 지우지 않은 채 "복호화 불가" 결과를 돌려줍니다.
 - `app.auth.refresh-token.retry-grace-period`는 네 프로필 모두 `30s`입니다. 회전 후 이 시간 안에 직전 Refresh Token이 다시 오면 응답을 받지 못한 재시도로 보고 한 번만 새 토큰을 발급합니다. 그 밖의 이미 회전한 토큰은 재사용으로 보고 해당 세션을 종료합니다. 30초와 1회는 정책서에 반영됐지만 횟수와 시간은 팀 논의가 남아 있어(Docs `policy/authentication.md`의 `논의 필요`) 설정값으로 둡니다.
 
 ## 소셜 로그인

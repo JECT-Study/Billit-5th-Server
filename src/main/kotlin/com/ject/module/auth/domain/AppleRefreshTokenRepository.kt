@@ -12,9 +12,20 @@ interface AppleRefreshTokenRepository {
         refreshToken: String,
     )
 
-    /** [memberId] 회원의 애플 Refresh Token 원문을 반환합니다. 저장된 토큰이 없으면 `null`입니다. */
-    fun findRefreshToken(memberId: Long): String?
+    /**
+     * [memberId] 회원의 저장된 애플 Refresh Token을 읽습니다. 저장된 토큰이 없으면 `null`입니다.
+     *
+     * 복호화하지 못하면 예외 대신 [StoredAppleRefreshToken.Undecryptable]을 반환하고 ERROR 로그를 남깁니다.
+     */
+    fun find(memberId: Long): StoredAppleRefreshToken?
 
-    /** [memberId] 회원의 애플 Refresh Token을 삭제합니다. 삭제했으면 `true`입니다. 자체 트랜잭션에서 커밋합니다. */
-    fun deleteByMemberId(memberId: Long): Boolean
+    /**
+     * [memberId] 회원의 행이 [encryptedRefreshToken]과 같을 때만 삭제합니다. 삭제했으면 `true`입니다. 자체 트랜잭션에서 커밋합니다.
+     *
+     * 읽은 뒤 다시 로그인해 새 토큰으로 교체됐으면 지우지 않고 `false`를 반환합니다.
+     */
+    fun deleteIfUnchanged(
+        memberId: Long,
+        encryptedRefreshToken: String,
+    ): Boolean
 }

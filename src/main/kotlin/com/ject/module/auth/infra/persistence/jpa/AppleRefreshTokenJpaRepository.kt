@@ -31,8 +31,9 @@ interface AppleRefreshTokenJpaRepository : JpaRepository<AppleRefreshToken, Long
 
     @Transactional
     @Modifying
-    @Query("DELETE FROM AppleRefreshToken t WHERE t.memberId = :memberId")
-    fun deleteByMemberIdIfExists(
+    @Query("DELETE FROM AppleRefreshToken t WHERE t.memberId = :memberId AND t.encryptedRefreshToken = :encryptedRefreshToken")
+    fun deleteByMemberIdAndEncryptedRefreshToken(
         @Param("memberId") memberId: Long,
+        @Param("encryptedRefreshToken") encryptedRefreshToken: String,
     ): Int
 }
