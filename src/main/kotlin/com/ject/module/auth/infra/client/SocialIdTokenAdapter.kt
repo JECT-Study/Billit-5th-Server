@@ -35,7 +35,7 @@ import java.time.Clock
 import java.time.Duration
 
 /**
- * 구글과 카카오 ID 토큰을 제공자 JWKS로 검증합니다.
+ * 구글, 카카오와 애플 ID 토큰을 제공자 JWKS로 검증합니다.
  *
  * - JWKS는 제공자별로 10분간 캐시합니다. 캐시에 없는 키(`kid`)의 토큰이 오면 다시 가져오되, 30초에 두 번까지만 가져와 요청마다 제공자를 호출하지 않습니다.
  * - 제공자 장애로 JWKS를 가져오지 못하면 마지막으로 받은 키 목록을 [OUTAGE_TOLERANCE] 동안 계속 사용합니다.
@@ -61,6 +61,13 @@ class SocialIdTokenAdapter(
             audience = properties.kakao.nativeAppKey,
             clock = clock,
         )
+    private val appleDecoder =
+        idTokenDecoder(
+            jwkSetUri = properties.apple.jwkSetUri,
+            issuers = APPLE_ISSUERS,
+            audience = properties.apple.clientId,
+            clock = clock,
+        )
 
     override fun verify(
         provider: AuthProvider,
@@ -69,8 +76,11 @@ class SocialIdTokenAdapter(
         val (decoder, displayNameClaim) =
             when (provider) {
                 AuthProvider.GOOGLE -> googleDecoder to GOOGLE_DISPLAY_NAME_CLAIM
+
                 AuthProvider.KAKAO -> kakaoDecoder to KAKAO_DISPLAY_NAME_CLAIM
-                AuthProvider.APPLE -> throw IllegalArgumentException("Apple 로그인은 ID 토큰만으로 처리하지 않습니다.")
+
+                // 애플은 ID 토큰에 이름을 담지 않습니다. 이름은 최초 권한 부여 때 앱이 요청 본문으로 보냅니다.
+                AuthProvider.APPLE -> appleDecoder to null
             }
         val jwt =
             try {
@@ -84,7 +94,7 @@ class SocialIdTokenAdapter(
             }
         return SocialIdentity(
             subject = checkNotNull(jwt.subject),
-            displayName = jwt.getClaimAsString(displayNameClaim)?.takeIf { it.isNotBlank() },
+            displayName = displayNameClaim?.let { jwt.getClaimAsString(it) }?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -185,6 +195,7 @@ class SocialIdTokenAdapter(
 
         private val GOOGLE_ISSUERS = setOf("https://accounts.google.com", "accounts.google.com")
         private val KAKAO_ISSUERS = setOf("https://kauth.kakao.com")
+        private val APPLE_ISSUERS = setOf("https://appleid.apple.com")
         private const val GOOGLE_DISPLAY_NAME_CLAIM = "name"
         private const val KAKAO_DISPLAY_NAME_CLAIM = "nickname"
 

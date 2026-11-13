@@ -135,6 +135,8 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - 값은 64바이트 이상의 임의 값을 base64로 인코딩해 넣습니다. 예: `openssl rand -base64 64 | tr -d '\n'`
 - 값이 없거나 base64가 아니거나 64바이트보다 짧으면 기동이 실패합니다.
 - 세션과 Refresh Token 해시는 PostgreSQL `auth_session`에 저장하며 Redis에 두지 않습니다.
+- `app.auth.token-encryption.key`(`AUTH_TOKEN_ENCRYPTION_KEY`)는 외부 제공자 토큰(애플 Refresh Token)을 저장할 때 쓰는 AES-256-GCM 키입니다. 32바이트 임의 값을 base64로 인코딩해 넣습니다. 예: `openssl rand -base64 32`. local은 개발용 기본값, test는 설정 파일의 테스트 전용 값, dev와 prod는 기본값 없이 필수이며 환경별로 다른 값을 씁니다. 값이 없거나 32바이트가 아니면 기동이 실패합니다.
+- 토큰 암호화 키를 바꾸면 이전 키로 저장한 애플 Refresh Token을 복호화할 수 없습니다. 키를 교체하는 절차는 아직 없으므로 한 번 넣은 값을 유지합니다.
 - `app.auth.refresh-token.retry-grace-period`는 네 프로필 모두 `30s`입니다. 회전 후 이 시간 안에 직전 Refresh Token이 다시 오면 응답을 받지 못한 재시도로 보고 한 번만 새 토큰을 발급합니다. 그 밖의 이미 회전한 토큰은 재사용으로 보고 해당 세션을 종료합니다. 30초와 1회는 정책서에 반영됐지만 횟수와 시간은 팀 논의가 남아 있어(Docs `policy/authentication.md`의 `논의 필요`) 설정값으로 둡니다.
 
 ## 소셜 로그인
@@ -152,6 +154,24 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - JWKS 조회는 연결 2초, 응답 3초로 제한하고 결과를 10분간 캐시합니다. 캐시에 없는 키의 토큰이 오면 다시 가져오되 30초에 두 번까지만 가져옵니다. 제공자 장애로 가져오지 못하면 마지막으로 받은 키 목록을 1시간 동안 계속 사용합니다. 이 값들은 코드에 고정합니다.
 - 토큰이 유효하지 않으면 401 `AUTH_SOCIAL_AUTHENTICATION_FAILED`로 응답합니다. 마지막 조회가 성공한 키 목록에 없는 키의 토큰은 재조회 제한에 걸려도 401입니다.
 - 키를 받은 적이 없거나 마지막 조회가 실패한 상태에서 토큰의 키를 확인하지 못하면 재조회 제한 여부와 관계없이 503 `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`로 응답합니다.
+
+## 애플 로그인
+
+네 프로필의 `app.auth.social.apple`에서 애플 ID 토큰 검증과 인가 코드 교환 값을 설정합니다.
+
+| 설정 | 환경변수 | local | test | dev, prod |
+| --- | --- | --- | --- | --- |
+| `client-id` | `APPLE_CLIENT_ID` | 가짜 기본값 | 테스트 전용 값 | 필수, 앱 번들 ID. ID 토큰의 `aud`이자 client secret의 `sub` |
+| `team-id` | `APPLE_TEAM_ID` | 가짜 기본값 | 테스트 전용 값 | 필수, client secret의 `iss` |
+| `key-id` | `APPLE_KEY_ID` | 가짜 기본값 | 테스트 전용 값 | 필수, client secret 헤더의 `kid` |
+| `private-key-base64` | `APPLE_PRIVATE_KEY_BASE64` | 빈 값 | 빈 값 | 필수. `.p8` 파일 전체를 base64로 한 줄로 만든 값. 예: `base64 -i AuthKey.p8 \| tr -d '\n'` |
+
+- `client-id`, `team-id`, `key-id`가 비어 있거나 개인키가 EC P-256 PKCS#8 PEM이 아니면 기동이 실패합니다. 개인키가 빈 값이면 기동은 되지만 인가 코드를 교환할 수 없어 애플 로그인이 500으로 실패합니다. local에서 애플 로그인을 시험하려면 실제 값을 넣습니다.
+- `jwk-set-uri`는 `https://appleid.apple.com/auth/keys`, `token-uri`는 `https://appleid.apple.com/auth/token`, `revoke-uri`는 `https://appleid.apple.com/auth/revoke`입니다. `test`는 접속할 수 없는 주소를 두고 테스트에서 로컬 대역 서버 주소로 덮어씁니다.
+- ID 토큰은 구글, 카카오와 같은 JWKS 캐시와 장애 처리로 검증하고, 허용 `iss`는 `https://appleid.apple.com`입니다.
+- client secret은 요청마다 ES256으로 서명하고 5분 뒤 만료됩니다. 토큰 API 호출은 연결 2초, 응답 3초로 제한하며 재시도하지 않습니다.
+- 애플이 인가 코드를 거절하면(만료, 재사용, `invalid_grant` 등) 401 `AUTH_SOCIAL_AUTHENTICATION_FAILED`, 애플 장애·타임아웃이면 503 `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`로 응답합니다. `invalid_client`처럼 서버 설정 문제일 수 있는 거절은 ERROR 로그로 남깁니다.
+- 교환으로 받은 애플 Refresh Token은 탈퇴 시 연결 해제용으로 `apple_refresh_token`에 암호화해 회원당 하나만 저장합니다.
 
 ## 인증과 프론트 연동
 

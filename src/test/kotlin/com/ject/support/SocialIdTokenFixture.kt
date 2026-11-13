@@ -18,11 +18,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * 구글과 카카오 대신 자체 서명 키로 ID 토큰을 만들고 JWKS를 제공합니다. 실제 제공자를 호출하지 않습니다.
+ * 구글, 카카오와 애플 대신 자체 서명 키로 ID 토큰을 만들고 JWKS를 제공합니다. 실제 제공자를 호출하지 않습니다.
  *
  * 발급 시각(iat)은 [clock] 기준 10초 전입니다.
  *
- * JWKS 주소는 [googleJwkSetUri], [kakaoJwkSetUri]이며 사용 후 [close]로 서버를 닫습니다.
+ * JWKS 주소는 [googleJwkSetUri], [kakaoJwkSetUri], [appleJwkSetUri]이며 사용 후 [close]로 서버를 닫습니다.
  */
 class SocialIdTokenFixture(
     private val clock: Clock = Clock.systemUTC(),
@@ -55,6 +55,7 @@ class SocialIdTokenFixture(
 
     val googleJwkSetUri: String = "http://127.0.0.1:${server.address.port}/google/jwks"
     val kakaoJwkSetUri: String = "http://127.0.0.1:${server.address.port}/kakao/jwks"
+    val appleJwkSetUri: String = "http://127.0.0.1:${server.address.port}/apple/jwks"
 
     fun idToken(
         issuer: String?,
@@ -114,5 +115,6 @@ class SocialIdTokenFixture(
     companion object {
         const val GOOGLE_ISSUER = "https://accounts.google.com"
         const val KAKAO_ISSUER = "https://kauth.kakao.com"
+        const val APPLE_ISSUER = "https://appleid.apple.com"
     }
 }

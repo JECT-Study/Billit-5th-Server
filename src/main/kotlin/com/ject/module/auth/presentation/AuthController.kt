@@ -38,12 +38,17 @@ class AuthController(
     fun socialLogin(
         @Valid @RequestBody request: SocialLoginRequest,
     ): ApiResponse<SocialLoginResponse> {
-        // Apple은 인가 코드가 필수인 별도 요청 형식이라 ID 토큰만으로는 받지 않습니다.
-        if (request.provider == AuthProvider.APPLE) {
-            throw BusinessException(CommonErrorCode.INVALID_REQUEST)
-        }
-
-        val result = socialLoginUseCase.login(request.provider, request.idToken)
+        val result =
+            if (request.provider == AuthProvider.APPLE) {
+                val authorizationCode = request.authorizationCode ?: throw BusinessException(CommonErrorCode.INVALID_REQUEST)
+                socialLoginUseCase.loginWithApple(request.idToken, authorizationCode, request.fullName)
+            } else {
+                // 구글과 카카오 요청 형식에는 애플 전용 필드가 없습니다.
+                if (request.authorizationCode != null || request.fullName != null) {
+                    throw BusinessException(CommonErrorCode.INVALID_REQUEST)
+                }
+                socialLoginUseCase.login(request.provider, request.idToken)
+            }
 
         val response =
             when (result) {

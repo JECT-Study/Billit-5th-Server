@@ -75,6 +75,16 @@ app:
       kakao:
         native-app-key: test-kakao-native-app-key
         jwk-set-uri: http://invalid/kakao/jwks
+      apple:
+        client-id: test-apple-client-id
+        team-id: test-apple-team-id
+        key-id: test-apple-key-id
+        private-key-base64: ""
+        jwk-set-uri: http://invalid/apple/jwks
+        token-uri: http://invalid/apple/token
+        revoke-uri: http://invalid/apple/revoke
+    token-encryption:
+      key: YmlsbGl0LXRlc3Qtb25seS10b2tlbi1lbmMta2V5ISE=
 
 logging:
   pattern:

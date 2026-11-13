@@ -6,6 +6,7 @@ import com.ject.module.auth.domain.SocialIdentity
 import com.ject.module.auth.infra.SocialLoginProperties
 import com.ject.module.member.domain.AuthProvider
 import com.ject.support.SocialIdTokenFixture
+import com.ject.support.SocialIdTokenFixture.Companion.APPLE_ISSUER
 import com.ject.support.SocialIdTokenFixture.Companion.GOOGLE_ISSUER
 import com.ject.support.SocialIdTokenFixture.Companion.KAKAO_ISSUER
 import com.nimbusds.jose.JWSAlgorithm
@@ -39,6 +40,16 @@ class SocialIdTokenAdapterTest :
             SocialLoginProperties(
                 google = SocialLoginProperties.Google(clientId = GOOGLE_CLIENT_ID, jwkSetUri = googleJwkSetUri),
                 kakao = SocialLoginProperties.Kakao(nativeAppKey = KAKAO_APP_KEY, jwkSetUri = kakaoJwkSetUri),
+                apple =
+                    SocialLoginProperties.Apple(
+                        clientId = APPLE_CLIENT_ID,
+                        teamId = "test-apple-team-id",
+                        keyId = "test-apple-key-id",
+                        privateKeyBase64 = "",
+                        jwkSetUri = fixture.appleJwkSetUri,
+                        tokenUri = "http://127.0.0.1/apple/token",
+                        revokeUri = "http://127.0.0.1/apple/revoke",
+                    ),
             ),
             clock,
         )
@@ -137,6 +148,40 @@ class SocialIdTokenAdapterTest :
 
             // then
             identity shouldBe SocialIdentity(subject = "1234567890", displayName = null)
+        }
+
+        test("애플 ID 토큰의 서명, iss, aud, exp가 유효하면 표시 이름 없이 외부 사용자 ID를 반환한다") {
+            // given
+            val idToken =
+                fixture.idToken(
+                    APPLE_ISSUER,
+                    APPLE_CLIENT_ID,
+                    "001234.apple.user",
+                    now.plusSeconds(600),
+                    extraClaims =
+                        mapOf("name" to "무시할 이름"),
+                )
+
+            // when
+            val identity = adapter.verify(AuthProvider.APPLE, idToken)
+
+            // then
+            identity shouldBe SocialIdentity(subject = "001234.apple.user", displayName = null)
+        }
+
+        test("애플 ID 토큰의 aud가 앱 번들 ID가 아니거나 다른 제공자의 토큰이면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED로 실패한다") {
+            // given
+            val idTokens =
+                listOf(
+                    fixture.idToken(APPLE_ISSUER, "other.bundle.id", "u", now.plusSeconds(600)),
+                    fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "u", now.plusSeconds(600)),
+                )
+
+            // when
+            val errorCodes = idTokens.map { shouldThrow<BusinessException> { adapter.verify(AuthProvider.APPLE, it) }.errorCode }
+
+            // then
+            errorCodes shouldBe List(2) { AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED }
         }
 
         context("ID 토큰이 유효하지 않으면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED로 실패한다") {
@@ -327,5 +372,6 @@ class SocialIdTokenAdapterTest :
 
         private const val GOOGLE_CLIENT_ID = "test-google-client-id"
         private const val KAKAO_APP_KEY = "test-kakao-native-app-key"
+        private const val APPLE_CLIENT_ID = "app.billit.mobile.test"
     }
 }
