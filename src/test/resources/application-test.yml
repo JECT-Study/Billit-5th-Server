@@ -66,6 +66,13 @@ app:
   auth:
     jwt:
       secret: YmlsbGl0LXRlc3Qtb25seS1qd3Qtc2lnbmluZy1rZXktZG8tbm90LXVzZS1vbi1hbnktc2VydmVyLTAwMDAwMA==
+    social:
+      google:
+        client-id: test-google-client-id
+        jwk-set-uri: http://invalid/google/jwks
+      kakao:
+        native-app-key: test-kakao-native-app-key
+        jwk-set-uri: http://invalid/kakao/jwks
 
 logging:
   pattern:

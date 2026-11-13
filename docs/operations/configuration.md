@@ -136,6 +136,21 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - 값이 없거나 base64가 아니거나 64바이트보다 짧으면 기동이 실패합니다.
 - 세션과 Refresh Token 해시는 PostgreSQL `auth_session`에 저장하며 Redis에 두지 않습니다.
 
+## 소셜 로그인
+
+네 프로필의 `app.auth.social`에서 구글과 카카오 ID 토큰 검증 값을 설정합니다. ID 토큰의 `aud`가 아래 값과 같아야 로그인할 수 있습니다.
+
+| 설정 | 환경변수 | local | test | dev, prod |
+| --- | --- | --- | --- | --- |
+| `google.client-id` | `GOOGLE_CLIENT_ID` | 가짜 기본값 | 테스트 전용 값 | 필수. dev는 개발용, prod는 출시용 웹 클라이언트 ID |
+| `kakao.native-app-key` | `KAKAO_NATIVE_APP_KEY` | 가짜 기본값 | 테스트 전용 값 | 필수, 카카오 네이티브 앱 키 |
+
+- 값이 비어 있으면 기동이 실패합니다. 환경마다 클라이언트 ID를 하나만 받습니다.
+- `google.jwk-set-uri`는 `https://www.googleapis.com/oauth2/v3/certs`, `kakao.jwk-set-uri`는 `https://kauth.kakao.com/.well-known/jwks.json`입니다. `test`는 접속할 수 없는 주소를 두고, 테스트에서 자체 서명 키를 제공하는 주소로 덮어씁니다.
+- ID 토큰은 RS256 서명, `iss`, `aud`, `exp`를 확인합니다. 허용 `iss`는 구글 `https://accounts.google.com`, `accounts.google.com`, 카카오 `https://kauth.kakao.com`이며 시계 차이는 60초까지 허용합니다.
+- JWKS 조회는 연결 2초, 응답 3초로 제한하고 결과를 10분간 캐시합니다. 캐시에 없는 키의 토큰이 오면 다시 가져오되 30초에 두 번까지만 가져옵니다. 제한에 걸린 토큰은 최근 키 목록에 없는 토큰으로 보고 401로 응답합니다. 이 값들은 코드에 고정합니다.
+- JWKS를 가져오지 못하면 503 `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`, 토큰이 유효하지 않으면 401 `AUTH_SOCIAL_AUTHENTICATION_FAILED`로 응답합니다.
+
 ## 인증과 프론트 연동
 
 - 클라이언트가 전달한 `environment`로 서버 프로필이나 운영 자격증명을 선택하지 않습니다.
