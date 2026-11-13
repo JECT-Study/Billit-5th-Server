@@ -80,9 +80,11 @@ app:
         team-id: test-apple-team-id
         key-id: test-apple-key-id
         private-key-base64: ""
+        private-key-required: false
         jwk-set-uri: http://invalid/apple/jwks
         token-uri: http://invalid/apple/token
         revoke-uri: http://invalid/apple/revoke
+        apple-endpoint-required: false
     token-encryption:
       key: YmlsbGl0LXRlc3Qtb25seS10b2tlbi1lbmMta2V5ISE=
 

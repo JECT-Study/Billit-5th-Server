@@ -212,6 +212,8 @@ class AuthControllerTest : IntegrationTestSupport() {
                     "APPLE인데 authorizationCode가 null" to """{"provider":"APPLE","idToken":"token","authorizationCode":null}""",
                     "APPLE의 authorizationCode가 공백" to """{"provider":"APPLE","idToken":"token","authorizationCode":" "}""",
                     "APPLE의 fullName이 공백" to """{"provider":"APPLE","idToken":"token","authorizationCode":"code","fullName":" "}""",
+                    "APPLE의 fullName이 100자 초과" to
+                        """{"provider":"APPLE","idToken":"token","authorizationCode":"code","fullName":"${"가".repeat(101)}"}""",
                     "GOOGLE에 authorizationCode" to """{"provider":"GOOGLE","idToken":"token","authorizationCode":"code"}""",
                     "KAKAO에 fullName" to """{"provider":"KAKAO","idToken":"token","fullName":"name"}""",
                     "정의하지 않은 필드" to """{"provider":"GOOGLE","idToken":"token","nonce":"n"}""",

@@ -33,6 +33,7 @@ import java.util.Date
  * - client secret은 요청마다 ES256 JWT로 만듭니다. 헤더 `kid`는 키 ID, `iss`는 팀 ID, `sub`는 클라이언트 ID, `aud`는 `https://appleid.apple.com`이며 [CLIENT_SECRET_TTL] 뒤 만료됩니다.
  * - 연결 2초, 응답 3초로 제한합니다. 재시도하지 않습니다. 인가 코드는 한 번만 교환할 수 있어 같은 코드로 다시 보내면 애플이 거절합니다.
  * - 인가 코드, 토큰과 client secret은 로그에 남기지 않습니다. 애플의 오류 코드(`error`)와 HTTP 상태만 남깁니다.
+ * - 개인키가 설정되지 않았으면(local, test에서만 허용) 기동 시 WARN 로그를 한 번 남기고, 애플 호출 없이 제공자 장애(503)로 실패합니다.
  */
 @Component
 class AppleAuthorizationAdapter(
@@ -49,6 +50,12 @@ class AppleAuthorizationAdapter(
                 },
             ).build()
 
+    init {
+        if (apple.privateKey == null) {
+            log.warn { "event=apple_private_key_missing impact=apple_login_unavailable" }
+        }
+    }
+
     override fun exchangeAuthorizationCode(authorizationCode: String): AppleAuthorizationResult {
         val form =
             LinkedMultiValueMap<String, String>().apply {
@@ -61,12 +68,17 @@ class AppleAuthorizationAdapter(
             try {
                 post(apple.tokenUri, form).body(AppleTokenResponse::class.java)
             } catch (exception: HttpClientErrorException) {
+                val status = exception.statusCode.value()
                 val error = errorCode(exception)
                 if (error == INVALID_GRANT) {
-                    log.info { "event=apple_authorization_code_rejected status=${exception.statusCode.value()} error=$error" }
-                } else {
-                    // invalid_client 같은 오류는 서버 설정 문제일 수 있어 운영자가 확인하도록 남깁니다.
-                    log.error { "event=apple_authorization_code_rejected status=${exception.statusCode.value()} error=$error" }
+                    log.info { "event=apple_authorization_code_rejected status=$status error=$error" }
+                    throw BusinessException(AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED)
+                }
+                // invalid_grant 외의 거절은 서버 설정 문제일 수 있어 운영자가 확인하도록 남깁니다.
+                log.error { "event=apple_authorization_code_rejected status=$status error=$error" }
+                // 요청 한도 초과와 클라이언트 설정 오류는 앱이 소셜 인증을 다시 해도 해결되지 않는 서버 쪽 문제입니다.
+                if (status == TOO_MANY_REQUESTS || error in SERVER_CONFIGURATION_ERRORS) {
+                    throw BusinessException(AuthErrorCode.SOCIAL_PROVIDER_UNAVAILABLE)
                 }
                 throw BusinessException(AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED)
             } catch (exception: RestClientException) {
@@ -75,7 +87,7 @@ class AppleAuthorizationAdapter(
             } ?: throw unavailableResponse("token")
 
         return AppleAuthorizationResult(
-            subject = response.idToken?.let(::subjectOf),
+            subject = subjectOf(response.idToken),
             refreshToken = response.refreshToken?.takeIf { it.isNotEmpty() },
         )
     }
@@ -112,7 +124,8 @@ class AppleAuthorizationAdapter(
             .retrieve()
 
     private fun createClientSecret(): String {
-        val privateKey = checkNotNull(apple.privateKey) { "APPLE_PRIVATE_KEY_BASE64가 설정되지 않아 애플 client secret을 만들 수 없습니다." }
+        // 기동 시 WARN 로그를 남겼으므로 요청마다 다시 남기지 않습니다.
+        val privateKey = apple.privateKey ?: throw BusinessException(AuthErrorCode.SOCIAL_PROVIDER_UNAVAILABLE)
         val now = clock.instant()
         val claims =
             JWTClaimsSet
@@ -129,16 +142,16 @@ class AppleAuthorizationAdapter(
     }
 
     /**
-     * 교환 응답의 ID 토큰에서 `sub`만 읽습니다.
+     * 교환 응답의 ID 토큰에서 `sub`만 읽습니다. ID 토큰이 없거나 `sub`를 읽을 수 없으면 같은 사용자인지 확인할 수 없어 제공자 장애(503)로 실패합니다.
      *
      * 이 응답은 서버가 TLS로 애플에 직접 받은 것이라 서명은 다시 확인하지 않습니다. 사용자 확인은 요청으로 받은 ID 토큰을 JWKS로 검증해 끝냈고, 여기서는 같은 사용자인지만 비교합니다.
      */
-    private fun subjectOf(idToken: String): String =
+    private fun subjectOf(idToken: String?): String =
         try {
-            JWTParser.parse(idToken).jwtClaimsSet.subject
+            idToken?.let { JWTParser.parse(it).jwtClaimsSet.subject }
         } catch (_: ParseException) {
             null
-        } ?: throw unavailableResponse("token")
+        }?.takeIf { it.isNotBlank() } ?: throw unavailableResponse("token")
 
     private fun errorCode(exception: HttpClientErrorException): String? =
         try {
@@ -167,6 +180,10 @@ class AppleAuthorizationAdapter(
         private val log = KotlinLogging.logger {}
 
         private const val INVALID_GRANT = "invalid_grant"
+        private const val TOO_MANY_REQUESTS = 429
+
+        /** RFC 6749 5.2의 오류 중 인가 코드가 아니라 서버의 클라이언트 설정이 원인인 것입니다. */
+        private val SERVER_CONFIGURATION_ERRORS = setOf("invalid_client", "unauthorized_client", "unsupported_grant_type")
         private const val CLIENT_SECRET_AUDIENCE = "https://appleid.apple.com"
         private val CLIENT_SECRET_TTL: Duration = Duration.ofMinutes(5)
         private val CONNECT_TIMEOUT: Duration = Duration.ofSeconds(2)

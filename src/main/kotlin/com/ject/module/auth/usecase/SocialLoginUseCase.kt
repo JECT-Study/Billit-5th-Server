@@ -60,7 +60,7 @@ class SocialLoginUseCase(
     ): SocialLoginResult {
         val identity = socialIdTokenPort.verify(AuthProvider.APPLE, idToken)
         val authorization = appleAuthorizationPort.exchangeAuthorizationCode(authorizationCode)
-        if (authorization.subject != null && authorization.subject != identity.subject) {
+        if (authorization.subject != identity.subject) {
             log.warn { "event=apple_authorization_subject_mismatch" }
             throw BusinessException(AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED)
         }

@@ -165,12 +165,18 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 | `team-id` | `APPLE_TEAM_ID` | 가짜 기본값 | 테스트 전용 값 | 필수, client secret의 `iss` |
 | `key-id` | `APPLE_KEY_ID` | 가짜 기본값 | 테스트 전용 값 | 필수, client secret 헤더의 `kid` |
 | `private-key-base64` | `APPLE_PRIVATE_KEY_BASE64` | 빈 값 | 빈 값 | 필수. `.p8` 파일 전체를 base64로 한 줄로 만든 값. 예: `base64 -i AuthKey.p8 \| tr -d '\n'` |
+| `private-key-required` | 없음 | `false` | `false` | `true` |
+| `apple-endpoint-required` | 없음 | `true` | `false` | `true` |
 
-- `client-id`, `team-id`, `key-id`가 비어 있거나 개인키가 EC P-256 PKCS#8 PEM이 아니면 기동이 실패합니다. 개인키가 빈 값이면 기동은 되지만 인가 코드를 교환할 수 없어 애플 로그인이 500으로 실패합니다. local에서 애플 로그인을 시험하려면 실제 값을 넣습니다.
-- `jwk-set-uri`는 `https://appleid.apple.com/auth/keys`, `token-uri`는 `https://appleid.apple.com/auth/token`, `revoke-uri`는 `https://appleid.apple.com/auth/revoke`입니다. `test`는 접속할 수 없는 주소를 두고 테스트에서 로컬 대역 서버 주소로 덮어씁니다.
+- `client-id`, `team-id`, `key-id`가 비어 있거나 개인키가 EC P-256 PKCS#8 PEM이 아니면 모든 프로필에서 기동이 실패합니다.
+- `private-key-required`가 `true`인 dev, prod는 개인키가 빈 값이어도 기동이 실패합니다. `false`인 local, test는 빈 값을 허용하며, 이때 기동 시 `apple_private_key_missing` WARN 로그를 한 번 남기고 애플 로그인과 연결 해제는 애플을 호출하지 않고 503 `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`로 실패합니다. local에서 애플 로그인을 시험하려면 실제 값을 넣습니다.
+- `jwk-set-uri`는 `https://appleid.apple.com/auth/keys`, `token-uri`는 `https://appleid.apple.com/auth/token`, `revoke-uri`는 `https://appleid.apple.com/auth/revoke`입니다.
+- 토큰과 폐기 주소에는 인가 코드와 client secret을 보내므로 `apple-endpoint-required`가 `true`이면 두 주소가 `https://appleid.apple.com/`으로 시작하지 않을 때 기동이 실패합니다. 로컬 대역 서버를 쓰는 `test`만 `false`로 두고, 접속할 수 없는 주소를 둔 뒤 테스트에서 대역 서버 주소로 덮어씁니다.
 - ID 토큰은 구글, 카카오와 같은 JWKS 캐시와 장애 처리로 검증하고, 허용 `iss`는 `https://appleid.apple.com`입니다.
 - client secret은 요청마다 ES256으로 서명하고 5분 뒤 만료됩니다. 토큰 API 호출은 연결 2초, 응답 3초로 제한하며 재시도하지 않습니다.
-- 애플이 인가 코드를 거절하면(만료, 재사용, `invalid_grant` 등) 401 `AUTH_SOCIAL_AUTHENTICATION_FAILED`, 애플 장애·타임아웃이면 503 `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`로 응답합니다. `invalid_client`처럼 서버 설정 문제일 수 있는 거절은 ERROR 로그로 남깁니다.
+- 애플이 인가 코드를 거절하면(만료, 재사용, `invalid_grant`, `invalid_request` 등) 401 `AUTH_SOCIAL_AUTHENTICATION_FAILED`로 응답합니다.
+- 애플 장애·타임아웃, 요청 한도 초과(429), 서버의 클라이언트 설정 오류(`invalid_client`, `unauthorized_client`, `unsupported_grant_type`)이면 503 `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`로 응답합니다. `invalid_grant` 외의 거절은 ERROR 로그로 남깁니다.
+- 교환 응답에 ID 토큰이 없거나 `sub`를 읽을 수 없으면 요청의 ID 토큰과 같은 사용자인지 확인할 수 없어 503 `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`로 응답합니다.
 - 교환으로 받은 애플 Refresh Token은 탈퇴 시 연결 해제용으로 `apple_refresh_token`에 암호화해 회원당 하나만 저장합니다.
 
 ## 인증과 프론트 연동

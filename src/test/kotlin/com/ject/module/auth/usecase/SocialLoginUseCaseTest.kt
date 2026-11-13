@@ -255,7 +255,7 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
                 val memberId = insertMember(AuthProvider.APPLE, providerUserId, "ACTIVE")
                 givenExchangedAuthorizationCode("first-code", subject = providerUserId, refreshToken = "apple-refresh-token-old")
                 socialLoginUseCase.loginWithApple("apple-id-token", "first-code", fullName = null)
-                givenExchangedAuthorizationCode("second-code", subject = null, refreshToken = "apple-refresh-token-new")
+                givenExchangedAuthorizationCode("second-code", subject = providerUserId, refreshToken = "apple-refresh-token-new")
 
                 // when
                 val result = socialLoginUseCase.loginWithApple("apple-id-token", "second-code", fullName = null)
@@ -332,7 +332,7 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
 
     private fun givenExchangedAuthorizationCode(
         authorizationCode: String,
-        subject: String?,
+        subject: String,
         refreshToken: String,
     ) {
         `when`(appleAuthorizationPort.exchangeAuthorizationCode(authorizationCode))

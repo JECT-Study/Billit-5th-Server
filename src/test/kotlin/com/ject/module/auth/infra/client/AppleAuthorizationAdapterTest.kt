@@ -29,6 +29,7 @@ class AppleAuthorizationAdapterTest :
         fun adapter(
             tokenUri: String,
             revokeUri: String,
+            privateKeyBase64: String = server.privateKeyBase64,
         ) = AppleAuthorizationAdapter(
             SocialLoginProperties(
                 google = SocialLoginProperties.Google(clientId = "google", jwkSetUri = "http://127.0.0.1/google"),
@@ -38,10 +39,12 @@ class AppleAuthorizationAdapterTest :
                         clientId = CLIENT_ID,
                         teamId = TEAM_ID,
                         keyId = KEY_ID,
-                        privateKeyBase64 = server.privateKeyBase64,
+                        privateKeyBase64 = privateKeyBase64,
+                        privateKeyRequired = false,
                         jwkSetUri = "http://127.0.0.1/apple",
                         tokenUri = tokenUri,
                         revokeUri = revokeUri,
+                        appleEndpointRequired = false,
                     ),
             ),
             Clock.fixed(now, ZoneOffset.UTC),
@@ -76,7 +79,7 @@ class AppleAuthorizationAdapterTest :
 
         test("client secret은 키 ID를 헤더에 담고 팀 ID, 클라이언트 ID, 애플 aud, 5분 만료로 ES256 서명한 JWT다") {
             // given
-            server.respond(200, server.tokenResponse(refreshToken = "apple-refresh-token", idToken = null))
+            server.respond(200, server.tokenResponse(refreshToken = "apple-refresh-token", idToken = idToken(subject = "apple-user-1")))
 
             // when
             adapter.exchangeAuthorizationCode("authorization-code")
@@ -96,22 +99,40 @@ class AppleAuthorizationAdapterTest :
             }
         }
 
-        test("교환 응답에 ID 토큰이 없으면 sub 없이 Refresh Token만 반환한다") {
+        test("교환 응답에 Refresh Token이 없으면 sub만 반환한다") {
             // given
-            server.respond(200, server.tokenResponse(refreshToken = "apple-refresh-token", idToken = null))
+            server.respond(200, """{"access_token":"a","token_type":"Bearer","id_token":"${idToken(subject = "apple-user-1")}"}""")
 
             // when
             val result = adapter.exchangeAuthorizationCode("authorization-code")
 
             // then
-            result shouldBe AppleAuthorizationResult(subject = null, refreshToken = "apple-refresh-token")
+            result shouldBe AppleAuthorizationResult(subject = "apple-user-1", refreshToken = null)
+        }
+
+        test("개인키가 설정되지 않았으면 애플을 호출하지 않고 503 AUTH_SOCIAL_PROVIDER_UNAVAILABLE로 실패한다") {
+            // given
+            val keylessAdapter = adapter(server.tokenUri, server.revokeUri, privateKeyBase64 = "")
+
+            // when
+            val failures =
+                listOf(
+                    shouldThrow<BusinessException> { keylessAdapter.exchangeAuthorizationCode("authorization-code") },
+                    shouldThrow<BusinessException> { keylessAdapter.revokeRefreshToken("apple-refresh-token") },
+                )
+
+            // then
+            assertSoftly {
+                failures.map { it.errorCode } shouldBe List(2) { AuthErrorCode.SOCIAL_PROVIDER_UNAVAILABLE }
+                server.requests.size shouldBe 0
+            }
         }
 
         context("애플이 인가 코드를 거절하면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED로 실패한다") {
             val rejections =
                 mapOf(
                     "만료되거나 이미 사용한 코드(invalid_grant)" to (400 to """{"error":"invalid_grant"}"""),
-                    "클라이언트 인증 실패(invalid_client)" to (401 to """{"error":"invalid_client"}"""),
+                    "잘못된 요청(invalid_request)" to (400 to """{"error":"invalid_request"}"""),
                     "오류 본문이 JSON이 아님" to (400 to "bad request"),
                 )
             for ((case, rejection) in rejections) {
@@ -135,6 +156,13 @@ class AppleAuthorizationAdapterTest :
                     "503 응답" to (503 to ""),
                     "성공 응답의 본문이 JSON이 아님" to (200 to "not-json"),
                     "성공 응답의 ID 토큰이 JWT가 아님" to (200 to """{"refresh_token":"r","id_token":"not-a-jwt"}"""),
+                    "성공 응답에 ID 토큰이 없음" to (200 to """{"refresh_token":"r"}"""),
+                    "성공 응답의 ID 토큰에 sub가 없음" to
+                        (200 to """{"refresh_token":"r","id_token":"${PlainJWT(JWTClaimsSet.Builder().build()).serialize()}"}"""),
+                    "요청 한도 초과(429)" to (429 to """{"error":"too_many_requests"}"""),
+                    "클라이언트 인증 실패(invalid_client)" to (400 to """{"error":"invalid_client"}"""),
+                    "클라이언트 인증 실패를 401로 응답(invalid_client)" to (401 to """{"error":"invalid_client"}"""),
+                    "허용되지 않은 클라이언트(unauthorized_client)" to (400 to """{"error":"unauthorized_client"}"""),
                 )
             for ((case, failure) in failures) {
                 test(case) {
@@ -152,7 +180,11 @@ class AppleAuthorizationAdapterTest :
 
         test("토큰 API가 응답 제한 시간 3초 안에 응답하지 않으면 503 AUTH_SOCIAL_PROVIDER_UNAVAILABLE로 실패한다") {
             // given
-            server.respond(200, server.tokenResponse(refreshToken = "r", idToken = null), delay = Duration.ofSeconds(5))
+            server.respond(
+                200,
+                server.tokenResponse(refreshToken = "r", idToken = idToken(subject = "apple-user-1")),
+                delay = Duration.ofSeconds(5),
+            )
 
             // when
             val failure = shouldThrow<BusinessException> { adapter.exchangeAuthorizationCode("authorization-code") }

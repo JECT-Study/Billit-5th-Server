@@ -7,7 +7,9 @@ interface AppleAuthorizationPort {
     /**
      * 모바일 SDK에서 받은 인가 코드를 애플 토큰 API에서 교환합니다. 인가 코드는 한 번만 교환할 수 있습니다.
      *
-     * 애플이 코드를 거절하면(만료, 재사용, `invalid_grant` 등) `AUTH_SOCIAL_AUTHENTICATION_FAILED`, 애플 장애·타임아웃이나 해석할 수 없는 응답이면 `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`로 실패합니다.
+     * 애플이 코드를 거절하면(만료, 재사용, `invalid_grant` 등) `AUTH_SOCIAL_AUTHENTICATION_FAILED`로 실패합니다.
+     * 애플 장애·타임아웃, 요청 한도 초과(429), 서버의 클라이언트 설정 오류(`invalid_client` 등), 개인키 미설정이나 응답에 `sub`를 읽을 수 있는 ID 토큰이 없으면
+     * `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`로 실패합니다.
      */
     fun exchangeAuthorizationCode(authorizationCode: String): AppleAuthorizationResult
 

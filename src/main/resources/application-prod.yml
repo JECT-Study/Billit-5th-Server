@@ -80,9 +80,11 @@ app:
         team-id: ${APPLE_TEAM_ID}
         key-id: ${APPLE_KEY_ID}
         private-key-base64: ${APPLE_PRIVATE_KEY_BASE64}
+        private-key-required: true
         jwk-set-uri: https://appleid.apple.com/auth/keys
         token-uri: https://appleid.apple.com/auth/token
         revoke-uri: https://appleid.apple.com/auth/revoke
+        apple-endpoint-required: true
     token-encryption:
       key: ${AUTH_TOKEN_ENCRYPTION_KEY}
 
