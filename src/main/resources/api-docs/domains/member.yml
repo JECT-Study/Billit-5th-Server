@@ -1,115 +1,65 @@
----
 paths:
-  "/api/v1/me/registration":
+  '/api/v1/me/registration':
     get:
       tags:
       - Member
-      summary: USER-01 가입 정보 조회
-      operationId: getRegistration
-      description: |-
+      operationId: 'getRegistration'
+      summary: 가입 정보 조회
+      description: |
         가입 화면에 표시할 본인 정보와 약관을 조회합니다.
 
+        ### 처리 조건
         닉네임 초기값은 Google ID 토큰의 `name`, Kakao ID 토큰의 `nickname`, Apple 요청의 `fullName`에서 가져옵니다.
+      security:
+      - registrationBearerAuth: []
       responses:
         '200':
-          description: 처리 성공.
+          description: 가입 정보 조회 성공
           content:
             application/json:
               schema:
                 type: object
                 required:
                 - data
+                additionalProperties: false
                 properties:
                   data:
                     allOf:
-                    - "$ref": "#/components/schemas/RegistrationInfo"
-                additionalProperties: false
-              example:
-                data:
-                  status: SIGNING_UP
-                  socialDisplayName: 김빌릿
-                  terms:
-                  - termsId: example-privacy-terms-id
-                    title: 개인정보 수집 및 이용 동의
-                    isRequired: true
-                    contentUrl: https://example.com/terms/privacy/v1
-                  name: null
-                  age: null
+                    - $ref: '#/components/schemas/RegistrationInfo'
+              examples:
+                success:
+                  summary: 가입 정보 조회 성공
+                  value:
+                    data:
+                      status: SIGNING_UP
+                      socialDisplayName: 김빌릿
+                      terms:
+                      - termsId: 'example-privacy-terms-id'
+                        title: 개인정보 수집 및 이용 동의
+                        isRequired: true
+                        contentUrl: https://example.com/terms/privacy/v1
+                      name: null
+                      age: null
         '401':
-          "$ref": "#/components/responses/RegistrationUnauthorized"
+          $ref: '#/components/responses/RegistrationUnauthorized'
         '403':
-          "$ref": "../common/components.yml#/responses/Forbidden"
-      security:
-      - registrationBearerAuth: []
+          $ref: '../common/components.yml#/responses/Forbidden'
     post:
       tags:
       - Member
-      summary: USER-03 가입 완료
-      operationId: completeRegistration
-      description: |-
+      operationId: 'completeRegistration'
+      summary: 가입 완료
+      description: |
         닉네임과 약관 동의를 제출해 회원 가입을 완료합니다.
 
-        설문은 응답한 항목만 보냅니다. 응답을 받지 못하면 같은 가입 전용 토큰과 가입 내용으로 재시도해 회원용 토큰을 받을 수 있습니다. 회원과 동의 기록은 한 번만 생성합니다. 복구 기간과 토큰 발급 방식은 논의가 필요합니다.
-      responses:
-        '200':
-          description: 가입 완료. 회원용 Access Token과 Refresh Token을 반환합니다.
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                properties:
-                  data:
-                    "$ref": "./auth.yml#/components/schemas/TokenRefreshResult"
-                additionalProperties: false
-              example:
-                data:
-                  accessToken: example-access-token
-                  refreshToken: example-refresh-token
-        '400':
-          description: |-
-            - `COMMON_INVALID_REQUEST`: 요청 형식이나 필드가 올바르지 않음
-            - `USER_REQUIRED_AGREEMENT_MISSING`: 필수 약관의 동의가 누락되거나 동의하지 않음
-          content:
-            application/json:
-              schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
-              examples:
-                COMMON_INVALID_REQUEST:
-                  value:
-                    code: COMMON_INVALID_REQUEST
-                    message: 요청이 올바르지 않습니다.
-                    errors: null
-                USER_REQUIRED_AGREEMENT_MISSING:
-                  value:
-                    code: USER_REQUIRED_AGREEMENT_MISSING
-                    message: 필수 약관에 동의해주세요.
-                    errors: null
-        '401':
-          description: |-
-            - `COMMON_UNAUTHORIZED`: 가입 전용 토큰으로 최초 가입 또는 동일 가입 요청의 복구 권한을 확인할 수 없음
-          content:
-            application/json:
-              schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
-              example:
-                code: COMMON_UNAUTHORIZED
-                message: 인증이 필요합니다.
-                errors: null
-        '403':
-          "$ref": "../common/components.yml#/responses/Forbidden"
-        '409':
-          description: |-
-            - `USER_NICKNAME_ALREADY_USED`: 가입 완료 시점에 닉네임이 이미 사용 중임
-          content:
-            application/json:
-              schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
-              example:
-                code: USER_NICKNAME_ALREADY_USED
-                message: 이미 사용 중인 닉네임입니다.
-                errors: null
+        ### 처리 조건
+        설문은 응답한 항목만 보냅니다.
+        가입이 완료되면 회원용 Access Token과 Refresh Token을 발급합니다.
+
+        ### 사용 시 주의
+        응답을 받지 못하면 가입 전용 토큰의 유효 시간 안에서 같은 토큰과 가입 내용으로 재시도할 수 있습니다. 유효 시간은 발급 시점부터 30분이며 가입 완료나 재시도로 연장하지 않습니다.
+        이미 가입이 완료됐다면 회원과 동의 기록을 다시 생성하거나 가입 정보를 변경하지 않고 회원용 Access Token과 Refresh Token을 새로 발급합니다. 최초 응답의 토큰을 저장해 다시 반환하지 않습니다.
+        가입 전용 토큰이 만료되면 소셜 로그인을 다시 진행합니다.
       security:
       - registrationBearerAuth: []
       requestBody:
@@ -118,28 +68,37 @@ paths:
           application/json:
             schema:
               type: object
-              required: [nickname, agreements]
+              required:
+              - nickname
+              - agreements
               additionalProperties: false
               properties:
                 nickname:
                   type: string
                   minLength: 1
                   maxLength: 10
-                  pattern: '^[가-힣A-Za-z0-9]+(?![\s\S])'
+                  pattern: ^[가-힣A-Za-z0-9]+(?![\s\S])
+                  description: 가입 후 프로필에 표시할 닉네임입니다. 한글 완성형, 영문과 숫자를 사용하며 공백과 특수문자는 허용하지 않습니다.
                 agreements:
                   type: array
                   items:
                     type: object
-                    required: [termsId, isAgreed]
+                    required:
+                    - termsId
+                    - isAgreed
                     additionalProperties: false
                     properties:
                       termsId:
-                        type: string
+                        allOf:
+                        - $ref: '../common/components.yml#/schemas/ResourceId'
                         description: 가입 정보 조회에서 받은 약관 버전 식별자입니다.
                       isAgreed:
                         type: boolean
+                        description: 해당 약관에 동의했는지 나타냅니다.
+                  description: 가입 정보 조회에서 받은 약관별 동의 내역입니다.
                 survey:
                   type: object
+                  description: 가입 시 응답한 설문입니다. 생략하면 설문 응답을 제출하지 않습니다.
                   additionalProperties: false
                   properties:
                     gender:
@@ -147,6 +106,7 @@ paths:
                       description: 성별 선택값입니다. 허용 코드는 논의 중입니다.
                     isTripOrganizer:
                       type: boolean
+                      description: 여행을 주로 준비하는지 나타내는 응답입니다. 생략하면 해당 항목에 응답하지 않습니다.
                     settlementPainPoints:
                       type: array
                       maxItems: 2
@@ -157,127 +117,184 @@ paths:
                     otherSettlementPainPoint:
                       type: string
                       description: settlementPainPoints에 OTHER가 있을 때만 보낼 수 있습니다.
-  "/api/v1/nickname-availability":
-    get:
-      tags:
-      - Member
-      summary: USER-02 닉네임 중복 확인
-      operationId: checkNicknameAvailability
-      description: |-
-        입력한 닉네임의 현재 사용 가능 여부를 조회합니다.
-
-        사용 가능 응답을 받아도 닉네임은 예약되지 않습니다. 글자 수 산정과 탈퇴 닉네임 재사용은 논의가 필요합니다.
+            examples:
+              request:
+                summary: 닉네임과 필수 약관 동의로 가입 완료
+                value:
+                  nickname: 김빌릿
+                  agreements:
+                  - termsId: 'example-privacy-terms-id'
+                    isAgreed: true
       responses:
         '200':
-          description: 처리 성공.
+          description: 가입 완료
           content:
             application/json:
               schema:
                 type: object
                 required:
                 - data
+                additionalProperties: false
                 properties:
                   data:
-                    allOf:
-                    - "$ref": "#/components/schemas/NicknameAvailability"
-                additionalProperties: false
-              example:
-                data:
-                  nickname: 김빌릿
-                  isAvailable: true
+                    $ref: './auth.yml#/components/schemas/TokenRefreshResult'
+              examples:
+                success:
+                  summary: 가입 완료
+                  value:
+                    data:
+                      accessToken: example-access-token
+                      refreshToken: example-refresh-token
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
+          description: |
+            | 오류 코드 | 발생 조건 |
+            | --- | --- |
+            | `COMMON_INVALID_REQUEST` | 요청 형식이나 필드가 올바르지 않습니다. |
+            | `USER_REQUIRED_AGREEMENT_MISSING` | 필수 약관의 동의가 누락됐거나 동의하지 않았습니다. |
+          content:
+            application/json:
+              schema:
+                $ref: '../common/components.yml#/schemas/ErrorResponse'
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 요청 형식이나 필드가 올바르지 않습니다.
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors: null
+                USER_REQUIRED_AGREEMENT_MISSING:
+                  summary: 필수 약관의 동의가 누락됐거나 동의하지 않았습니다.
+                  value:
+                    code: USER_REQUIRED_AGREEMENT_MISSING
+                    message: 필수 약관에 동의해주세요.
+                    errors: null
         '401':
-          "$ref": "#/components/responses/RegistrationUnauthorized"
+          description: |
+            가입 전용 토큰이 만료됐거나 최초 가입 또는 동일 가입 요청의 복구 권한을 확인할 수 없습니다.
+
+            **오류 코드:** `COMMON_UNAUTHORIZED`
+          content:
+            application/json:
+              schema:
+                $ref: '../common/components.yml#/schemas/ErrorResponse'
+              examples:
+                COMMON_UNAUTHORIZED:
+                  summary: 가입 전용 토큰이 만료됐거나 최초 가입 또는 동일 가입 요청의 복구 권한을 확인할 수 없습니다.
+                  value:
+                    code: COMMON_UNAUTHORIZED
+                    message: 인증이 필요합니다.
+                    errors: null
+        '403':
+          $ref: '../common/components.yml#/responses/Forbidden'
+        '409':
+          description: |
+            가입 완료 시점에 닉네임이 이미 사용 중입니다.
+
+            **오류 코드:** `USER_NICKNAME_ALREADY_USED`
+          content:
+            application/json:
+              schema:
+                $ref: '../common/components.yml#/schemas/ErrorResponse'
+              examples:
+                USER_NICKNAME_ALREADY_USED:
+                  summary: 가입 완료 시점에 닉네임이 이미 사용 중입니다.
+                  value:
+                    code: USER_NICKNAME_ALREADY_USED
+                    message: 이미 사용 중인 닉네임입니다.
+                    errors: null
+  '/api/v1/nickname-availability':
+    get:
+      tags:
+      - Member
+      operationId: 'checkNicknameAvailability'
+      summary: 닉네임 중복 확인
+      description: |
+        입력한 닉네임의 현재 사용 가능 여부를 조회합니다.
+
+        ### 사용 시 주의
+        사용 가능 응답을 받아도 닉네임은 예약되지 않습니다. 글자 수 산정과 탈퇴 닉네임 재사용은 논의가 필요합니다.
       security:
       - registrationBearerAuth: []
       parameters:
       - name: nickname
         in: query
         required: true
-        description: 1~10자, 한글 완성형과 영문 및 숫자만 허용. 한글 자모, 공백과 특수문자 금지. 글자 수 산정 기준은 논의 필요.
+        description: 사용 가능 여부를 확인할 닉네임입니다. 한글 완성형, 영문과 숫자를 허용하며 한글 자모, 공백과 특수문자는 허용하지 않습니다. 글자 수 산정 기준은 논의가 필요합니다.
         schema:
           type: string
           minLength: 1
           maxLength: 10
-          pattern: '^[가-힣A-Za-z0-9]+(?![\s\S])'
-  "/api/v1/me":
-    get:
-      tags:
-      - Member
-      summary: USER-04 내 프로필 조회
-      operationId: getMyProfile
-      description: |-
-        설정과 프로필 화면에 표시할 본인 계정 정보를 조회합니다.
-      security:
-      - bearerAuth: []
+          pattern: ^[가-힣A-Za-z0-9]+(?![\s\S])
+          example: 김빌릿
       responses:
         '200':
-          description: 조회 성공.
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [data]
-                additionalProperties: false
-                properties:
-                  data:
-                    "$ref": "#/components/schemas/MemberProfile"
-        '401':
-          "$ref": "../common/components.yml#/responses/Unauthorized"
-  "/api/v1/me/profile-image":
-    put:
-      tags:
-      - Member
-      summary: USER-05 프로필 이미지 변경
-      operationId: updateProfileImage
-      description: |-
-        본인의 프로필 이미지를 변경합니다.
-
-        업로드에 실패하면 기존 이미지를 유지합니다. multipart Part 이름은 검토 중이며, 파일 형식과 최대 용량은 논의가 필요합니다.
-      responses:
-        '200':
-          description: 처리 성공.
+          description: 닉네임 중복 확인 성공
           content:
             application/json:
               schema:
                 type: object
                 required:
                 - data
+                additionalProperties: false
                 properties:
                   data:
                     allOf:
-                    - "$ref": "#/components/schemas/ImageResult"
-                additionalProperties: false
-              example:
-                data:
-                  profileImageUrl: https://cdn.example.com/profile/example.png
+                    - $ref: '#/components/schemas/NicknameAvailability'
+              examples:
+                success:
+                  summary: 닉네임 중복 확인 성공
+                  value:
+                    data:
+                      nickname: 김빌릿
+                      isAvailable: true
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
+          $ref: '../common/components.yml#/responses/BadRequest'
         '401':
-          "$ref": "../common/components.yml#/responses/Unauthorized"
-        '413':
-          description: |-
-            - `USER_PROFILE_IMAGE_TOO_LARGE`: 허용 용량을 초과한 이미지
+          $ref: '#/components/responses/RegistrationUnauthorized'
+  '/api/v1/me':
+    get:
+      tags:
+      - Member
+      operationId: 'getMyProfile'
+      summary: 내 프로필 조회
+      description: 설정과 프로필 화면에 표시할 본인 계정 정보를 조회합니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: 내 프로필 조회 성공
           content:
             application/json:
               schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
-              example:
-                code: USER_PROFILE_IMAGE_TOO_LARGE
-                message: 프로필 이미지가 허용 용량을 초과했습니다.
-                errors: null
-        '415':
-          description: |-
-            - `USER_PROFILE_IMAGE_UNSUPPORTED`: 지원하지 않는 실제 이미지 형식
-          content:
-            application/json:
-              schema:
-                "$ref": "../common/components.yml#/schemas/ErrorResponse"
-              example:
-                code: USER_PROFILE_IMAGE_UNSUPPORTED
-                message: 지원하지 않는 프로필 이미지 형식입니다.
-                errors: null
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MemberProfile'
+              examples:
+                success:
+                  summary: 프로필 이미지가 없는 회원의 프로필 조회
+                  value:
+                    data:
+                      memberId: 'example-member-id'
+                      nickname: 김빌릿
+                      profileImageUrl: null
+                      socialProvider: GOOGLE
+        '401':
+          $ref: '../common/components.yml#/responses/Unauthorized'
+  '/api/v1/me/profile-image':
+    put:
+      tags:
+      - Member
+      operationId: 'updateProfileImage'
+      summary: 프로필 이미지 변경
+      description: |
+        본인의 프로필 이미지를 변경합니다.
+
+        ### 사용 시 주의
+        업로드에 실패하면 기존 이미지를 유지합니다. multipart Part 이름은 검토 중이며, 파일 형식과 최대 용량은 논의가 필요합니다.
       security:
       - bearerAuth: []
       requestBody:
@@ -289,109 +306,182 @@ paths:
               type: object
               required:
               - image
+              additionalProperties: false
               properties:
                 image:
                   type: string
                   format: binary
                   description: 이미지 1개. 허용 형식과 용량 상한은 미정입니다.
-              additionalProperties: false
             encoding:
               image:
                 contentType: image/*
-  "/api/v1/me/withdrawal-preview":
-    get:
-      tags:
-      - Member
-      summary: USER-06 탈퇴 영향 조회
-      operationId: getWithdrawalPreview
-      description: |-
-        탈퇴 전 미완료 정산 건수와 생성한 여행에 미치는 영향을 조회합니다.
-
-        미완료 정산의 집계 기준과 탈퇴 영향의 표시 범위는 PM 확인이 필요합니다.
       responses:
         '200':
-          description: 처리 성공.
+          description: 프로필 이미지 변경 성공
           content:
             application/json:
               schema:
                 type: object
                 required:
                 - data
+                additionalProperties: false
                 properties:
                   data:
                     allOf:
-                    - "$ref": "#/components/schemas/WithdrawalPreview"
-                additionalProperties: false
-              example:
-                data:
-                  incompleteSettlementCount: 1
-                  affectedCreatedTripIds:
-                  - trip-example-a
+                    - $ref: '#/components/schemas/ImageResult'
+              examples:
+                success:
+                  summary: 프로필 이미지 변경 성공
+                  value:
+                    data:
+                      profileImageUrl: https://cdn.example.com/profile/example.png
+        '400':
+          $ref: '../common/components.yml#/responses/BadRequest'
         '401':
-          "$ref": "../common/components.yml#/responses/Unauthorized"
+          $ref: '../common/components.yml#/responses/Unauthorized'
+        '413':
+          description: |
+            업로드한 이미지가 허용 용량을 초과했습니다.
+
+            **오류 코드:** `USER_PROFILE_IMAGE_TOO_LARGE`
+          content:
+            application/json:
+              schema:
+                $ref: '../common/components.yml#/schemas/ErrorResponse'
+              examples:
+                USER_PROFILE_IMAGE_TOO_LARGE:
+                  summary: 업로드한 이미지가 허용 용량을 초과했습니다.
+                  value:
+                    code: USER_PROFILE_IMAGE_TOO_LARGE
+                    message: 프로필 이미지가 허용 용량을 초과했습니다.
+                    errors: null
+        '415':
+          description: |
+            업로드한 이미지의 실제 형식을 지원하지 않습니다.
+
+            **오류 코드:** `USER_PROFILE_IMAGE_UNSUPPORTED`
+          content:
+            application/json:
+              schema:
+                $ref: '../common/components.yml#/schemas/ErrorResponse'
+              examples:
+                USER_PROFILE_IMAGE_UNSUPPORTED:
+                  summary: 업로드한 이미지의 실제 형식을 지원하지 않습니다.
+                  value:
+                    code: USER_PROFILE_IMAGE_UNSUPPORTED
+                    message: 지원하지 않는 프로필 이미지 형식입니다.
+                    errors: null
+  '/api/v1/me/withdrawal-preview':
+    get:
+      tags:
+      - Member
+      operationId: 'getWithdrawalPreview'
+      summary: 탈퇴 영향 조회
+      description: |
+        탈퇴 전 미완료 정산 건수와 생성한 여행에 미치는 영향을 조회합니다.
+
+        ### 사용 시 주의
+        미완료 정산의 집계 기준과 탈퇴 영향의 표시 범위는 PM 확인이 필요합니다.
       security:
       - bearerAuth: []
-  "/api/v1/me/withdrawal":
+      responses:
+        '200':
+          description: 탈퇴 영향 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    allOf:
+                    - $ref: '#/components/schemas/WithdrawalPreview'
+              examples:
+                success:
+                  summary: 탈퇴 영향 조회 성공
+                  value:
+                    data:
+                      incompleteSettlementCount: 1
+                      affectedCreatedTripIds:
+                      - 'trip-example-a'
+        '401':
+          $ref: '../common/components.yml#/responses/Unauthorized'
+  '/api/v1/me/withdrawal':
     post:
       tags:
       - Member
-      summary: USER-07 회원 탈퇴
-      operationId: withdraw
-      description: |-
+      operationId: 'withdraw'
+      summary: 회원 탈퇴
+      description: |
         최종 확인을 마친 회원을 탈퇴 처리하고 계정 접근을 차단합니다.
 
+        ### 사용 시 주의
         개인정보 삭제와 공동 기록 보존 범위는 PM 확인이 필요합니다.
-      responses:
-        '204':
-          "$ref": "../common/components.yml#/responses/NoContent"
-        '401':
-          "$ref": "../common/components.yml#/responses/Unauthorized"
       security:
       - bearerAuth: []
+      responses:
+        '204':
+          $ref: '../common/components.yml#/responses/NoContent'
+        '401':
+          $ref: '../common/components.yml#/responses/Unauthorized'
 components:
   responses:
     RegistrationUnauthorized:
-      description: |-
-        - `COMMON_UNAUTHORIZED`: 소셜 로그인을 마친 가입 미완료 사용자인지 확인할 수 없음
+      description: |
+        소셜 로그인을 마친 가입 미완료 사용자인지 확인할 수 없습니다.
+
+        **오류 코드:** `COMMON_UNAUTHORIZED`
       content:
         application/json:
           schema:
-            "$ref": "../common/components.yml#/schemas/ErrorResponse"
-          example:
-            code: COMMON_UNAUTHORIZED
-            message: 인증이 필요합니다.
-            errors: null
+            $ref: '../common/components.yml#/schemas/ErrorResponse'
+          examples:
+            COMMON_UNAUTHORIZED:
+              summary: 소셜 로그인을 마친 가입 미완료 사용자인지 확인할 수 없습니다.
+              value:
+                code: COMMON_UNAUTHORIZED
+                message: 인증이 필요합니다.
+                errors: null
   schemas:
     ImageResult:
       type: object
+      required:
+      - profileImageUrl
+      additionalProperties: false
       properties:
         profileImageUrl:
           type: string
-          description: 최종 반영된 이미지 접근 URL.
-      additionalProperties: false
-      required:
-      - profileImageUrl
+          description: 변경 후 프로필 이미지에 접근할 URL입니다.
     NicknameAvailability:
       type: object
-      properties:
-        nickname:
-          type: string
-          description: 조회한 닉네임.
-        isAvailable:
-          type: boolean
-          description: 현재 시점의 사용 가능 여부. 예약을 의미하지 않는다.
-      additionalProperties: false
       required:
       - nickname
       - isAvailable
+      additionalProperties: false
+      properties:
+        nickname:
+          type: string
+          description: 사용 가능 여부를 조회한 닉네임입니다.
+        isAvailable:
+          type: boolean
+          description: 현재 시점에 사용할 수 있는지 나타냅니다. 닉네임 예약을 의미하지 않습니다.
     RegistrationInfo:
       type: object
+      required:
+      - status
+      - socialDisplayName
+      - terms
+      - name
+      - age
+      additionalProperties: false
       properties:
         status:
           type: string
           enum:
           - SIGNING_UP
-          description: 가입 미완료 상태인 `SIGNING_UP`을 반환한다.
+          description: 가입 미완료 상태를 나타내는 SIGNING_UP을 반환합니다.
         socialDisplayName:
           type: string
           nullable: true
@@ -399,65 +489,80 @@ components:
         terms:
           type: array
           items:
-            "$ref": "#/components/schemas/RegistrationTerms"
+            $ref: '#/components/schemas/RegistrationTerms'
+          description: 가입 화면에 표시할 약관 목록입니다.
         name:
           type: string
-          description: 소셜 제공값이 없으면 null.
           nullable: true
+          description: 소셜 제공자에서 받은 이름입니다. 제공값이 없으면 null입니다.
         age:
           type: integer
-          description: 소셜 제공값이 없으면 null. 직접 입력의 필수 여부는 논의 필요.
           nullable: true
-      additionalProperties: false
-      required:
-      - status
-      - socialDisplayName
-      - terms
-      - name
-      - age
+          description: 소셜 제공자에서 받은 나이입니다. 제공값이 없으면 null이며 직접 입력의 필수 여부는 논의가 필요합니다.
     RegistrationTerms:
       type: object
-      required: [termsId, title, isRequired, contentUrl]
+      required:
+      - termsId
+      - title
+      - isRequired
+      - contentUrl
       additionalProperties: false
       properties:
         termsId:
-          type: string
+          allOf:
+          - $ref: '../common/components.yml#/schemas/ResourceId'
+          description: 동의 내역 제출에 사용할 약관 버전 식별자입니다.
         title:
           type: string
+          description: 가입 화면에 표시할 약관 제목입니다.
         isRequired:
           type: boolean
+          description: 회원 가입을 위해 동의해야 하는 약관인지 나타냅니다.
         contentUrl:
           type: string
           format: uri
+          description: 약관 전문을 확인할 URL입니다.
     MemberProfile:
       type: object
-      required: [memberId, nickname, profileImageUrl, socialProvider]
+      required:
+      - memberId
+      - nickname
+      - profileImageUrl
+      - socialProvider
       additionalProperties: false
       properties:
         memberId:
-          type: string
+          allOf:
+          - $ref: '../common/components.yml#/schemas/ResourceId'
+          description: 본인 회원 계정의 식별자입니다.
         nickname:
           type: string
+          description: 프로필에 표시할 닉네임입니다.
         profileImageUrl:
           type: string
           format: uri
           nullable: true
+          description: 프로필 이미지에 접근할 URL입니다. 설정된 이미지가 없으면 null입니다.
         socialProvider:
           type: string
-          enum: [GOOGLE, APPLE, KAKAO]
+          enum:
+          - GOOGLE
+          - APPLE
+          - KAKAO
+          description: 계정에 연결된 소셜 제공자입니다. GOOGLE은 Google, APPLE은 Apple, KAKAO는 Kakao입니다.
     WithdrawalPreview:
       type: object
+      required:
+      - incompleteSettlementCount
+      - affectedCreatedTripIds
+      additionalProperties: false
       properties:
         incompleteSettlementCount:
           type: integer
           minimum: 0
-          description: 미완료 정산 건수, 0 이상. 집계 대상의 구체적인 상태는 논의 필요.
+          description: 탈퇴 전 확인할 미완료 정산 건수입니다. 집계 대상의 구체적인 상태는 논의가 필요합니다.
         affectedCreatedTripIds:
           type: array
           items:
-            type: string
-          description: 생성자 탈퇴로 다른 참여자의 접근도 차단되는 여행 식별자 목록.
-      additionalProperties: false
-      required:
-      - incompleteSettlementCount
-      - affectedCreatedTripIds
+            $ref: '../common/components.yml#/schemas/ResourceId'
+          description: 생성자 탈퇴로 다른 참여자의 접근도 차단되는 여행 식별자 목록입니다.
