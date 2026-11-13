@@ -124,6 +124,18 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 
 모든 프로필에서 Flyway를 활성화하고 `classpath:db/migration`의 SQL을 적용합니다. 스키마 변경과 이력 관리 기준은 [영속성 가이드](../contributing/persistence.md#flyway-migration)를 따릅니다.
 
+## 인증 토큰
+
+네 프로필의 `app.auth.jwt.secret`에서 회원 토큰과 가입 전용 토큰의 HS512 서명 키를 설정합니다.
+
+| 환경변수 | local | test | dev, prod |
+| --- | --- | --- | --- |
+| `JWT_SECRET` | 개발용 기본값 | 설정 파일의 테스트 전용 값 | 필수, 환경별로 다른 값 |
+
+- 값은 64바이트 이상의 임의 값을 base64로 인코딩해 넣습니다. 예: `openssl rand -base64 64 | tr -d '\n'`
+- 값이 없거나 base64가 아니거나 64바이트보다 짧으면 기동이 실패합니다.
+- 세션과 Refresh Token 해시는 PostgreSQL `auth_session`에 저장하며 Redis에 두지 않습니다.
+
 ## 인증과 프론트 연동
 
 - 클라이언트가 전달한 `environment`로 서버 프로필이나 운영 자격증명을 선택하지 않습니다.

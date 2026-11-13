@@ -63,6 +63,9 @@ app:
     core-pool-size: ${EVENT_EXECUTOR_CORE_POOL_SIZE:2}
     max-pool-size: ${EVENT_EXECUTOR_MAX_POOL_SIZE:4}
     queue-capacity: ${EVENT_EXECUTOR_QUEUE_CAPACITY:100}
+  auth:
+    jwt:
+      secret: ${JWT_SECRET:YmlsbGl0LWxvY2FsLW9ubHktand0LXNpZ25pbmcta2V5LWRvLW5vdC11c2Utb24tZGV2LW9yLXByb2QtMDAwMA==}
 
 logging:
   pattern:
