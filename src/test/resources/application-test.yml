@@ -87,6 +87,9 @@ app:
         apple-endpoint-required: false
     token-encryption:
       key: YmlsbGl0LXRlc3Qtb25seS10b2tlbi1lbmMta2V5ISE=
+  member:
+    policy:
+      content-base-url: https://terms.billit.test/terms
 
 logging:
   pattern:

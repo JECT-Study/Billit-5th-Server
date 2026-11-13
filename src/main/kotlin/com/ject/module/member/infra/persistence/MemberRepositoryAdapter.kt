@@ -1,15 +1,19 @@
 package com.ject.module.member.infra.persistence
 
 import com.ject.module.member.domain.AuthProvider
+import com.ject.module.member.domain.Gender
 import com.ject.module.member.domain.Member
 import com.ject.module.member.domain.MemberRepository
 import com.ject.module.member.domain.MemberStatus
+import com.ject.module.member.domain.RegistrationCompletionResult
+import com.ject.module.member.domain.RegistrationMemberResult
 import com.ject.module.member.domain.SocialMemberResult
 import com.ject.module.member.infra.persistence.jpa.MemberJpaRepository
 import org.hibernate.exception.ConstraintViolationException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Repository
 import java.time.Clock
+import java.time.Instant
 
 @Repository
 class MemberRepositoryAdapter(
@@ -48,7 +52,7 @@ class MemberRepositoryAdapter(
         return try {
             checkNotNull(memberJpaRepository.saveAndFlush(member).id)
         } catch (exception: DataIntegrityViolationException) {
-            if (!isSocialAccountUniqueViolation(exception)) {
+            if (!isUniqueViolation(exception, SOCIAL_ACCOUNT_UNIQUE_CONSTRAINT)) {
                 throw exception
             }
             null
@@ -66,6 +70,38 @@ class MemberRepositoryAdapter(
             updatedAt = clock.instant(),
         ) == 1
 
+    override fun findRegistrationMember(memberId: Long): RegistrationMemberResult? = memberJpaRepository.findRegistrationMember(memberId)
+
+    override fun existsByNickname(nickname: String): Boolean = memberJpaRepository.existsByNickname(nickname)
+
+    override fun completeRegistrationIfPending(
+        memberId: Long,
+        nickname: String,
+        gender: Gender?,
+        isTreasurer: Boolean?,
+        marketingPushAgreedAt: Instant?,
+    ): RegistrationCompletionResult {
+        val updated =
+            try {
+                memberJpaRepository.completeRegistrationIfPending(
+                    id = memberId,
+                    pendingStatus = MemberStatus.PENDING,
+                    completedStatus = MemberStatus.ACTIVE,
+                    nickname = nickname,
+                    gender = gender,
+                    isTreasurer = isTreasurer,
+                    marketingPushAgreedAt = marketingPushAgreedAt,
+                    updatedAt = clock.instant(),
+                )
+            } catch (exception: DataIntegrityViolationException) {
+                if (!isUniqueViolation(exception, NICKNAME_UNIQUE_CONSTRAINT)) {
+                    throw exception
+                }
+                return RegistrationCompletionResult.NICKNAME_ALREADY_USED
+            }
+        return if (updated == 1) RegistrationCompletionResult.COMPLETED else RegistrationCompletionResult.NOT_PENDING
+    }
+
     /** PostgreSQL `VARCHAR` 길이는 문자(코드 포인트) 수이므로 서로게이트 쌍을 나누지 않고 자릅니다. */
     private fun truncateSocialDisplayName(socialDisplayName: String): String {
         if (socialDisplayName.codePointCount(0, socialDisplayName.length) <= MemberRepository.SOCIAL_DISPLAY_NAME_MAX_LENGTH) {
@@ -74,17 +110,21 @@ class MemberRepositoryAdapter(
         return socialDisplayName.substring(0, socialDisplayName.offsetByCodePoints(0, MemberRepository.SOCIAL_DISPLAY_NAME_MAX_LENGTH))
     }
 
-    private fun isSocialAccountUniqueViolation(exception: DataIntegrityViolationException): Boolean {
+    private fun isUniqueViolation(
+        exception: DataIntegrityViolationException,
+        constraintName: String,
+    ): Boolean {
         val violation =
             generateSequence(exception.cause) { it.cause }
                 .filterIsInstance<ConstraintViolationException>()
                 .firstOrNull() ?: return false
         return violation.sqlState == UNIQUE_VIOLATION_SQL_STATE &&
-            violation.constraintName.equals(SOCIAL_ACCOUNT_UNIQUE_CONSTRAINT, ignoreCase = true)
+            violation.constraintName.equals(constraintName, ignoreCase = true)
     }
 
     companion object {
         private const val UNIQUE_VIOLATION_SQL_STATE = "23505"
         private const val SOCIAL_ACCOUNT_UNIQUE_CONSTRAINT = "uq_member_social_provider_social_provider_user_id"
+        private const val NICKNAME_UNIQUE_CONSTRAINT = "uq_member_nickname"
     }
 }
