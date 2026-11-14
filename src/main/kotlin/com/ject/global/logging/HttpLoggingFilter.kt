@@ -34,7 +34,7 @@ class HttpLoggingFilter : OncePerRequestFilter() {
                 completed = true
             } finally {
                 val uri = request.requestURI
-                val shouldLog = uri != "/actuator" && !uri.startsWith("/actuator/")
+                val shouldLog = uri != "/actuator" && !uri.startsWith("/actuator/") && uri !in HEALTH_CHECK_PATHS
                 if (shouldLog) {
                     val path = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE)?.toString() ?: uri
                     val status = if (!completed && response.status < 400) 500 else response.status
@@ -60,5 +60,6 @@ class HttpLoggingFilter : OncePerRequestFilter() {
         const val REQUEST_ID_MDC_KEY = "requestId"
         private val log = KotlinLogging.logger {}
         private val VALID_REQUEST_ID = Pattern.compile("[A-Za-z0-9._:-]{1,128}")
+        private val HEALTH_CHECK_PATHS = setOf("/healthz", "/readyz")
     }
 }

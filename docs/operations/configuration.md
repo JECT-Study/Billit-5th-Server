@@ -169,6 +169,43 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 
 필터는 servlet container와 Spring Security 중 실행 경로를 정합니다. Security 체인 전용 필터가 Spring Bean이면 servlet 자동 등록을 비활성화하고 체인 내 순서를 명시합니다. 로그 기록 기준은 [로깅](logging.md)을 따릅니다.
 
+## 서버와 종료
+
+| 설정 키 | 값 | 적용 조건 |
+| --- | --- | --- |
+| `server.port` | `${PORT:8080}`, `test`는 `0` | 배포 환경의 컨테이너 포트는 `8080`입니다. |
+| `server.shutdown` | `graceful` | 컨테이너 종료 시 처리 중인 요청을 마칩니다. |
+| `spring.lifecycle.timeout-per-shutdown-phase` | `20s` | 배포 환경의 컨테이너 종료 대기(30초)보다 짧게 둡니다. |
+| `server.forward-headers-strategy` | `native` | 배포 환경에서는 Nginx가 전달한 `X-Forwarded-*` 헤더로 요청 주소를 판단합니다. |
+| `spring.datasource.hikari.connection-timeout` | `5000`(밀리초) | DB에 연결할 수 없을 때 요청과 상태 확인의 대기 시간을 제한합니다. |
+
+## 상태 확인과 지표
+
+배포 스크립트, Nginx와 모니터링이 다음 경로를 사용합니다. 경로나 포트를 바꾸려면 인프라 담당과 먼저 맞춥니다.
+
+| 경로 | 포트 | 용도 | 응답 |
+| --- | --- | --- | --- |
+| `/healthz` | 앱 포트 | 컨테이너 상태 검사 | 프로세스가 동작하면 외부 자원과 관계없이 200 |
+| `/readyz` | 앱 포트 | 배포 성공 판단과 외부 접속 확인 | DB와 Redis에 연결되면 200, 아니면 503 |
+| `/actuator/health`, `/actuator/prometheus` | 관리 포트 `8081` | 서버 내부 지표 수집 | 관리 포트는 서버 밖으로 열지 않고 Nginx도 `/actuator`를 차단합니다. |
+
+- `management.endpoint.health.probes.enabled`를 켜고 readiness 그룹에 `readinessState,db,redis`, liveness 그룹에 `livenessState`를 포함합니다. 두 그룹은 `additional-path`로 앱 포트의 `/readyz`, `/healthz`에 연결합니다.
+- 노출하는 actuator 엔드포인트는 `health`, `prometheus`뿐이며 상태 응답에 상세 정보를 포함하지 않습니다.
+- 지표에는 `application` 태그로 `spring.application.name`을 붙입니다.
+- 관리 포트는 `dev`, `prod`에서 `8081`, `local`에서 `${MANAGEMENT_PORT:8081}`, `test`에서 `0`입니다.
+- 인증을 적용해도 `/healthz`, `/readyz`와 관리 포트의 actuator는 인증 없이 응답해야 합니다.
+
+## 배포
+
+[cd 워크플로](../../.github/workflows/cd.yml)가 Billit-5th-Infra의 공통 워크플로로 이미지를 빌드하고 배포합니다.
+
+- `develop`에 PR이 병합되면 병합된 코드로 `lint`, `test`를 다시 실행하고, 통과하면 ARM64 이미지를 `ghcr.io/ject-study/ject-be`에 게시합니다. `docs`와 Markdown만 바뀐 병합은 배포하지 않습니다.
+- 개발 서버에는 최신 `develop` 커밋으로 만든 이미지만 배포합니다. 빌드 중 코드가 바뀐 커밋이 병합되면 이전 커밋의 배포는 건너뜁니다.
+- `develop` 배포 실행은 한 번에 하나씩 순서대로 진행하고, 대기 중인 실행은 가장 최근 것만 남깁니다.
+- 운영 배포와 롤백은 Actions에서 수동으로 실행합니다. 운영에는 개발 배포에 성공한 같은 이미지 digest와 그 커밋만 배포합니다.
+- 상태 확인에 실패하면 배포 스크립트가 이전 이미지로 복구를 시도합니다. 이전 이미지가 없거나 복구에도 실패하면 배포 작업이 실패로 끝나며 서버 상태를 직접 확인해야 합니다. DB 스키마는 복구하지 않으므로 마이그레이션은 [영속성 가이드](../contributing/persistence.md#flyway-migration)를 따릅니다.
+- 자동 배포는 저장소 변수 `CD_ENABLED`가 `true`일 때만 동작합니다. 환경별 비밀값과 변수는 저장소 Environments `development`, `production`에 둡니다.
+
 ## 변경 후 검증
 
 - 네 프로필 파일의 키, 계층과 순서가 일치하는지 확인합니다.
