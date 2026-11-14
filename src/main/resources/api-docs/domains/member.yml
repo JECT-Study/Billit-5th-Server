@@ -251,6 +251,8 @@ paths:
           $ref: '../common/components.yml#/responses/BadRequest'
         '401':
           $ref: '#/components/responses/RegistrationUnauthorized'
+        '403':
+          $ref: '../common/components.yml#/responses/Forbidden'
   '/api/v1/me':
     get:
       tags:
