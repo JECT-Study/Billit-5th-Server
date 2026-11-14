@@ -68,7 +68,7 @@ log.error(exception) { "event=operation_failed stage=database_write" }
 
 [HttpLoggingFilter](../../src/main/kotlin/com/ject/global/logging/HttpLoggingFilter.kt)가 요청 헤더 `X-Request-Id`를 확인합니다. 영문자, 숫자와 `._:-`로 구성된 1~128자 값만 사용하고, 없거나 형식이 맞지 않으면 UUID를 생성합니다. 요청 ID는 MDC의 `requestId`와 응답 헤더 `X-Request-Id`에 기록합니다.
 
-요청 완료 로그는 HTTP 메서드, URI, 상태 코드와 처리 시간을 포함합니다. MVC 라우트 패턴이 있으면 실제 경로 대신 패턴을 기록합니다. 쿼리 문자열과 요청, 응답 본문은 기록하지 않습니다. `/actuator`와 하위 경로는 요청 완료 로그에서 제외합니다.
+요청 완료 로그는 HTTP 메서드, URI, 상태 코드와 처리 시간을 포함합니다. MVC 라우트 패턴이 있으면 실제 경로 대신 패턴을 기록합니다. 쿼리 문자열과 요청, 응답 본문은 기록하지 않습니다. `/actuator`와 하위 경로, 상태 확인 경로 `/healthz`, `/readyz`는 요청 완료 로그에서 제외합니다.
 
 처리되지 않은 예외로 요청이 종료됐고 응답 상태가 오류로 설정되지 않았다면 완료 로그의 상태는 `500`으로 기록합니다. 예외 스택은 최종 예외 처리 경계에서 기록합니다.
 
