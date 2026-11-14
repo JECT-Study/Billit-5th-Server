@@ -1,0 +1,325 @@
+paths:
+  '/api/v1/auth/social-logins':
+    post:
+      tags:
+      - Auth
+      operationId: 'socialLogin'
+      summary: 소셜 로그인
+      description: |
+        소셜 계정으로 로그인하거나 가입 절차를 시작합니다.
+
+        ### 사용 시 주의
+        Apple 로그인 응답을 받지 못하면 소셜 인증을 다시 진행해 새 인가 코드를 받습니다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - $ref: '#/components/schemas/SocialIdTokenRequest'
+              - $ref: '#/components/schemas/AppleSocialLoginRequest'
+            examples:
+              googleLogin:
+                summary: Google ID 토큰으로 로그인
+                value:
+                  provider: GOOGLE
+                  idToken: example-google-id-token
+              kakaoLogin:
+                summary: Kakao ID 토큰으로 로그인
+                value:
+                  provider: KAKAO
+                  idToken: example-kakao-id-token
+              appleLogin:
+                summary: Apple ID 토큰과 인가 코드로 로그인
+                value:
+                  provider: APPLE
+                  idToken: example-apple-id-token
+                  authorizationCode: example-apple-authorization-code
+                  fullName: 김빌릿
+      responses:
+        '200':
+          description: 소셜 인증 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    oneOf:
+                    - $ref: '#/components/schemas/AuthenticatedSocialLogin'
+                    - $ref: '#/components/schemas/RegistrationRequiredSocialLogin'
+              examples:
+                success:
+                  summary: 기존 회원 로그인 성공
+                  value:
+                    data:
+                      status: AUTHENTICATED
+                      accessToken: example-access-token
+                      refreshToken: example-refresh-token
+                registrationRequired:
+                  summary: 신규 사용자의 가입 절차 필요
+                  value:
+                    data:
+                      status: REGISTRATION_REQUIRED
+                      registrationToken: example-registration-token
+        '400':
+          $ref: '../common/components.yml#/responses/BadRequest'
+        '401':
+          description: |
+            ID 토큰 또는 Apple 인가 코드 검증에 실패했습니다.
+
+            **오류 코드:** `AUTH_SOCIAL_AUTHENTICATION_FAILED`
+          content:
+            application/json:
+              schema:
+                $ref: '../common/components.yml#/schemas/ErrorResponse'
+              examples:
+                AUTH_SOCIAL_AUTHENTICATION_FAILED:
+                  summary: ID 토큰 또는 Apple 인가 코드 검증에 실패했습니다.
+                  value:
+                    code: AUTH_SOCIAL_AUTHENTICATION_FAILED
+                    message: 소셜 인증에 실패했습니다.
+                    errors: null
+        '503':
+          description: |
+            소셜 제공자의 장애나 타임아웃으로 로그인 요청을 처리할 수 없습니다.
+
+            **오류 코드:** `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`
+          content:
+            application/json:
+              schema:
+                $ref: '../common/components.yml#/schemas/ErrorResponse'
+              examples:
+                AUTH_SOCIAL_PROVIDER_UNAVAILABLE:
+                  summary: 소셜 제공자의 장애나 타임아웃으로 로그인 요청을 처리할 수 없습니다.
+                  value:
+                    code: AUTH_SOCIAL_PROVIDER_UNAVAILABLE
+                    message: 소셜 로그인 제공자에 연결할 수 없습니다.
+                    errors: null
+  '/api/v1/auth/token-refreshes':
+    post:
+      tags:
+      - Auth
+      operationId: 'refreshTokens'
+      summary: Access Token 갱신
+      description: |
+        현재 세션의 Access Token과 Refresh Token을 갱신합니다.
+
+        ### 처리 조건
+        갱신에 성공하면 기존 Refresh Token을 폐기합니다. 새 Access Token은 15분, 새 Refresh Token은 30일간 유효합니다.
+
+        ### 사용 시 주의
+        폐기된 Refresh Token을 다시 제출하면 해당 세션의 두 토큰을 즉시 차단합니다. 다른 세션은 유지합니다.
+        네트워크 오류로 응답을 받지 못하면 기존 Refresh Token으로 재시도하지 않고 다시 로그인합니다. 401을 받은 경우에도 다시 로그인합니다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - refreshToken
+              additionalProperties: false
+              properties:
+                refreshToken:
+                  type: string
+                  minLength: 1
+                  description: 해당 기기의 로그인 유지와 토큰 갱신에 사용하는 Refresh Token입니다.
+            examples:
+              request:
+                summary: 현재 Refresh Token으로 토큰 갱신
+                value:
+                  refreshToken: example-refresh-token
+      responses:
+        '200':
+          description: 토큰 갱신 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    $ref: '#/components/schemas/TokenRefreshResult'
+              examples:
+                success:
+                  summary: 토큰 갱신 성공
+                  value:
+                    data:
+                      accessToken: example-access-token
+                      refreshToken: example-refresh-token
+        '400':
+          $ref: '../common/components.yml#/responses/BadRequest'
+        '401':
+          description: |
+            제출한 Refresh Token이 만료됐거나 유효하지 않습니다. 이미 갱신에 사용한 토큰도 포함하며, 재사용을 감지하면 해당 세션의 두 토큰을 즉시 차단합니다.
+
+            **오류 코드:** `AUTH_REFRESH_TOKEN_INVALID`
+          content:
+            application/json:
+              schema:
+                $ref: '../common/components.yml#/schemas/ErrorResponse'
+              examples:
+                AUTH_REFRESH_TOKEN_INVALID:
+                  summary: 제출한 Refresh Token이 만료됐거나 유효하지 않습니다. 이미 갱신에 사용한 토큰도 포함하며, 재사용을 감지하면 해당 세션의 두 토큰을 즉시 차단합니다.
+                  value:
+                    code: AUTH_REFRESH_TOKEN_INVALID
+                    message: Refresh Token이 유효하지 않습니다.
+                    errors: null
+  '/api/v1/auth/logout':
+    post:
+      tags:
+      - Auth
+      operationId: 'logout'
+      summary: 현재 기기 로그아웃
+      description: |
+        현재 로그인 세션을 종료합니다.
+
+        ### 처리 조건
+        로그아웃이 완료되면 해당 세션의 두 토큰을 즉시 차단합니다. 다른 세션은 유지합니다.
+
+        ### 사용 시 주의
+        유효한 Access Token이 있으면 Authorization 헤더에 보내고 본문을 생략합니다. Access Token이 만료됐다면 헤더를 생략하고 본문에 Refresh Token을 보냅니다.
+      security:
+      - bearerAuth: []
+      - {}
+      requestBody:
+        required: false
+        description: Access Token이 만료됐을 때 유효한 Refresh Token을 전달합니다.
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - refreshToken
+              additionalProperties: false
+              properties:
+                refreshToken:
+                  type: string
+                  minLength: 1
+            examples:
+              request:
+                summary: 만료된 Access Token 대신 Refresh Token으로 로그아웃
+                value:
+                  refreshToken: example-refresh-token
+      responses:
+        '204':
+          $ref: '../common/components.yml#/responses/NoContent'
+        '400':
+          $ref: '../common/components.yml#/responses/BadRequest'
+        '401':
+          description: |
+            세션을 확인할 유효한 토큰이 없거나 해당 세션이 이미 종료됐습니다.
+
+            **오류 코드:** `COMMON_UNAUTHORIZED`
+          content:
+            application/json:
+              schema:
+                $ref: '../common/components.yml#/schemas/ErrorResponse'
+              examples:
+                COMMON_UNAUTHORIZED:
+                  summary: 세션을 확인할 유효한 토큰이 없거나 해당 세션이 이미 종료됐습니다.
+                  value:
+                    code: COMMON_UNAUTHORIZED
+                    message: 인증이 필요합니다.
+                    errors: null
+components:
+  schemas:
+    SocialIdTokenRequest:
+      type: object
+      required:
+      - provider
+      - idToken
+      additionalProperties: false
+      properties:
+        provider:
+          type: string
+          enum:
+          - GOOGLE
+          - KAKAO
+          description: ID 토큰을 발급한 소셜 제공자입니다. GOOGLE은 Google, KAKAO는 Kakao 로그인입니다.
+        idToken:
+          type: string
+          pattern: \S
+          description: 모바일 SDK에서 받은 ID 토큰입니다.
+    AppleSocialLoginRequest:
+      type: object
+      required:
+      - provider
+      - idToken
+      - authorizationCode
+      additionalProperties: false
+      properties:
+        provider:
+          type: string
+          enum:
+          - APPLE
+          description: Apple 로그인을 나타내는 APPLE을 전달합니다.
+        idToken:
+          type: string
+          pattern: \S
+          description: Apple 모바일 SDK에서 받은 ID 토큰입니다.
+        authorizationCode:
+          type: string
+          pattern: \S
+          description: Apple 로그인 시 교환할 인가 코드입니다.
+        fullName:
+          type: string
+          pattern: \S
+          description: 최초 권한 부여 시 Apple SDK가 반환한 표시 이름입니다. 생략하면 표시 이름을 전달하지 않습니다.
+    AuthenticatedSocialLogin:
+      type: object
+      required:
+      - status
+      - accessToken
+      - refreshToken
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+          - AUTHENTICATED
+          description: 기존 회원의 로그인 완료를 나타내는 AUTHENTICATED를 반환합니다.
+        accessToken:
+          type: string
+          description: 회원 인증에 사용하는 Access Token입니다.
+        refreshToken:
+          type: string
+          description: 회원의 토큰 갱신에 사용하는 Refresh Token입니다.
+    RegistrationRequiredSocialLogin:
+      type: object
+      required:
+      - status
+      - registrationToken
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum:
+          - REGISTRATION_REQUIRED
+          description: 신규 사용자의 가입 필요 상태를 나타내는 REGISTRATION_REQUIRED를 반환합니다.
+        registrationToken:
+          type: string
+          description: 발급 시점부터 30분간 유효한 가입 전용 토큰입니다.
+    TokenRefreshResult:
+      type: object
+      required:
+      - accessToken
+      - refreshToken
+      additionalProperties: false
+      properties:
+        accessToken:
+          type: string
+          minLength: 1
+          description: 새로 발급한 회원용 Access Token입니다.
+        refreshToken:
+          type: string
+          minLength: 1
+          description: 다음 토큰 갱신에 사용할 Refresh Token입니다.
