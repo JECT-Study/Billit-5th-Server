@@ -10,6 +10,8 @@ tags:
   description: 로그인, 인증/인가
 - name: Member
   description: 회원 계정과 프로필
+- name: Trip
+  description: 여행
 paths:
   '/api/v1/auth/social-logins':
     $ref: './domains/auth.yml#/paths/~1api~1v1~1auth~1social-logins'
@@ -29,6 +31,24 @@ paths:
     $ref: './domains/member.yml#/paths/~1api~1v1~1me~1withdrawal-preview'
   '/api/v1/me/withdrawal':
     $ref: './domains/member.yml#/paths/~1api~1v1~1me~1withdrawal'
+  '/api/v1/trips':
+    $ref: './domains/trip.yml#/paths/~1api~1v1~1trips'
+  '/api/v1/trips/{tripId}':
+    $ref: './domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}'
+  '/api/v1/trips/{tripId}/invitation':
+    $ref: './domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1invitation'
+  '/api/v1/trip-invitations':
+    $ref: './domains/trip.yml#/paths/~1api~1v1~1trip-invitations'
+  '/api/v1/trip-memberships':
+    $ref: './domains/trip.yml#/paths/~1api~1v1~1trip-memberships'
+  '/api/v1/trips/{tripId}/guests':
+    $ref: './domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1guests'
+  '/api/v1/trips/{tripId}/guests/{tripMemberId}':
+    $ref: './domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1guests~1{tripMemberId}'
+  '/api/v1/trips/{tripId}/leave':
+    $ref: './domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1leave'
+  '/api/v1/trips/{tripId}/confirm':
+    $ref: './domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1confirm'
 components:
   securitySchemes:
     registrationBearerAuth:
