@@ -70,6 +70,8 @@ paths:
               type: object
               required:
               - nickname
+              - name
+              - age
               - agreements
               additionalProperties: false
               properties:
@@ -79,6 +81,13 @@ paths:
                   maxLength: 10
                   pattern: ^[가-힣A-Za-z0-9]+(?![\s\S])
                   description: 가입 후 프로필에 표시할 닉네임입니다. 한글 완성형, 영문과 숫자를 사용하며 공백과 특수문자는 허용하지 않습니다.
+                name:
+                  type: string
+                  minLength: 1
+                  description: 가입 정보 조회에서 받은 이름입니다. 값이 없으면 사용자가 직접 입력해 보냅니다.
+                age:
+                  type: integer
+                  description: 가입 정보 조회에서 받은 만 나이입니다. 값이 없으면 사용자가 직접 입력해 보냅니다.
                 agreements:
                   type: array
                   items:
@@ -122,6 +131,8 @@ paths:
                 summary: 닉네임과 필수 약관 동의로 가입 완료
                 value:
                   nickname: 김빌릿
+                  name: 김빌릿
+                  age: 25
                   agreements:
                   - termsId: 'example-privacy-terms-id'
                     isAgreed: true
@@ -496,11 +507,11 @@ components:
         name:
           type: string
           nullable: true
-          description: 소셜 제공자에서 받은 이름입니다. 제공값이 없으면 null입니다.
+          description: 소셜 제공자에서 받은 이름입니다. 제공값이 없으면 null이며 가입 완료 요청에서 직접 입력해 보냅니다.
         age:
           type: integer
           nullable: true
-          description: 소셜 제공자에서 받은 나이입니다. 제공값이 없으면 null이며 직접 입력의 필수 여부는 논의가 필요합니다.
+          description: 소셜 제공자에서 받은 만 나이입니다. 제공값이 없으면 null이며 가입 완료 요청에서 직접 입력해 보냅니다.
     RegistrationTerms:
       type: object
       required:
