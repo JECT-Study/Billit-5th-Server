@@ -44,7 +44,7 @@ paths:
         in: header
         required: true
         description: 여행 생성 요청의 고유키. 앱이 생성 시도마다 UUID로 만들고, 같은 요청을 다시 보낼 때만 같은 값을 사용합니다. 키는 여행 생성에만
-          쓰며 서버 전체에서 한 번만 사용할 수 있습니다. 만료되지 않고 만든 여행과 함께 보관합니다. 없거나 UUID 형식이 아니면 400입니다.
+          쓰며 여행 생성 키끼리 한 번만 사용할 수 있습니다. 만료되지 않고 만든 여행과 함께 보관합니다. 없거나 UUID 형식이 아니면 400입니다.
         schema:
           type: string
           format: uuid
@@ -720,8 +720,8 @@ components:
           description: 생성자를 포함한 총 정원
     TripUpdate:
       type: object
-      description: 보낸 필드만 수정하고 생략한 필드는 유지합니다. 각 필드의 규칙은 TripCreate와 같습니다. 모든 필드는 null을 허용하지 않으며
-        null을 보내면 400으로 거절합니다. 필드를 하나도 보내지 않아도 400으로 거절합니다.
+      description: 보낸 필드만 수정하고 생략한 필드는 유지합니다. 각 필드의 규칙은 TripCreate와 같으며, 보낸 값을 저장된 값과 합친 뒤 검증합니다.
+        모든 필드는 null을 허용하지 않으며 null을 보내면 400으로 거절합니다. 필드를 하나도 보내지 않아도 400으로 거절합니다.
       minProperties: 1
       additionalProperties: false
       properties:
