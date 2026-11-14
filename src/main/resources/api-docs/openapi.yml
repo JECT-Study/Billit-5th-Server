@@ -1,71 +1,84 @@
----
 openapi: 3.0.3
 info:
   title: Billit API
   version: 0.1.0
   description: Billit BE API Spec
 servers:
-- url: "/"
+- url: /
 tags:
 - name: Auth
   description: 로그인, 인증/인가
 - name: Member
   description: 회원 계정과 프로필
-- name: Trip
-  description: 여행
-- name: Expense
-  description: 지출
-- name: Settlement
-  description: 정산
-paths: {}
+paths:
+  '/api/v1/auth/social-logins':
+    $ref: './domains/auth.yml#/paths/~1api~1v1~1auth~1social-logins'
+  '/api/v1/auth/token-refreshes':
+    $ref: './domains/auth.yml#/paths/~1api~1v1~1auth~1token-refreshes'
+  '/api/v1/auth/logout':
+    $ref: './domains/auth.yml#/paths/~1api~1v1~1auth~1logout'
+  '/api/v1/me/registration':
+    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1registration'
+  '/api/v1/nickname-availability':
+    $ref: './domains/member.yml#/paths/~1api~1v1~1nickname-availability'
+  '/api/v1/me':
+    $ref: './domains/member.yml#/paths/~1api~1v1~1me'
+  '/api/v1/me/profile-image':
+    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1profile-image'
+  '/api/v1/me/withdrawal-preview':
+    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1withdrawal-preview'
+  '/api/v1/me/withdrawal':
+    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1withdrawal'
 components:
   securitySchemes:
+    registrationBearerAuth:
+      $ref: './common/components.yml#/securitySchemes/registrationBearerAuth'
     bearerAuth:
-      "$ref": "./common/components.yml#/securitySchemes/bearerAuth"
+      $ref: './common/components.yml#/securitySchemes/bearerAuth'
   schemas:
     ApiResponse:
-      "$ref": "./common/components.yml#/schemas/ApiResponse"
+      $ref: './common/components.yml#/schemas/ApiResponse'
     PageResponse:
-      "$ref": "./common/components.yml#/schemas/PageResponse"
+      $ref: './common/components.yml#/schemas/PageResponse'
     PageInfo:
-      "$ref": "./common/components.yml#/schemas/PageInfo"
+      $ref: './common/components.yml#/schemas/PageInfo'
     ErrorResponse:
-      "$ref": "./common/components.yml#/schemas/ErrorResponse"
+      $ref: './common/components.yml#/schemas/ErrorResponse'
     FieldError:
-      "$ref": "./common/components.yml#/schemas/FieldError"
+      $ref: './common/components.yml#/schemas/FieldError'
     ResourceId:
-      "$ref": "./common/components.yml#/schemas/ResourceId"
+      $ref: './common/components.yml#/schemas/ResourceId'
     DecimalString:
-      "$ref": "./common/components.yml#/schemas/DecimalString"
+      $ref: './common/components.yml#/schemas/DecimalString'
   parameters:
     Page:
-      "$ref": "./common/components.yml#/parameters/Page"
+      $ref: './common/components.yml#/parameters/Page'
     Size:
-      "$ref": "./common/components.yml#/parameters/Size"
+      $ref: './common/components.yml#/parameters/Size'
     Sort:
-      "$ref": "./common/components.yml#/parameters/Sort"
+      $ref: './common/components.yml#/parameters/Sort'
   responses:
     NoContent:
-      "$ref": "./common/components.yml#/responses/NoContent"
+      $ref: './common/components.yml#/responses/NoContent'
     BadRequest:
-      "$ref": "./common/components.yml#/responses/BadRequest"
+      $ref: './common/components.yml#/responses/BadRequest'
     Unauthorized:
-      "$ref": "./common/components.yml#/responses/Unauthorized"
+      $ref: './common/components.yml#/responses/Unauthorized'
     Forbidden:
-      "$ref": "./common/components.yml#/responses/Forbidden"
+      $ref: './common/components.yml#/responses/Forbidden'
     NotFound:
-      "$ref": "./common/components.yml#/responses/NotFound"
+      $ref: './common/components.yml#/responses/NotFound'
     MethodNotAllowed:
-      "$ref": "./common/components.yml#/responses/MethodNotAllowed"
+      $ref: './common/components.yml#/responses/MethodNotAllowed'
     NotAcceptable:
-      "$ref": "./common/components.yml#/responses/NotAcceptable"
+      $ref: './common/components.yml#/responses/NotAcceptable'
     Conflict:
-      "$ref": "./common/components.yml#/responses/Conflict"
+      $ref: './common/components.yml#/responses/Conflict'
     PayloadTooLarge:
-      "$ref": "./common/components.yml#/responses/PayloadTooLarge"
+      $ref: './common/components.yml#/responses/PayloadTooLarge'
     UnsupportedMediaType:
-      "$ref": "./common/components.yml#/responses/UnsupportedMediaType"
+      $ref: './common/components.yml#/responses/UnsupportedMediaType'
     InternalServerError:
-      "$ref": "./common/components.yml#/responses/InternalServerError"
+      $ref: './common/components.yml#/responses/InternalServerError'
     ServiceUnavailable:
-      "$ref": "./common/components.yml#/responses/ServiceUnavailable"
+      $ref: './common/components.yml#/responses/ServiceUnavailable'
