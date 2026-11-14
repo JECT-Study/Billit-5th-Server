@@ -72,6 +72,8 @@ paths:
               - nickname
               - name
               - age
+              - platform
+              - appVersion
               - agreements
               additionalProperties: false
               properties:
@@ -88,6 +90,16 @@ paths:
                 age:
                   type: integer
                   description: 가입 정보 조회에서 받은 만 나이입니다. 값이 없으면 사용자가 직접 입력해 보냅니다.
+                platform:
+                  type: string
+                  enum:
+                  - IOS
+                  - ANDROID
+                  description: 약관에 동의한 기기의 운영체제입니다.
+                appVersion:
+                  type: string
+                  minLength: 1
+                  description: 약관에 동의한 시점의 앱 버전입니다.
                 agreements:
                   type: array
                   items:
@@ -133,6 +145,8 @@ paths:
                   nickname: 김빌릿
                   name: 김빌릿
                   age: 25
+                  platform: IOS
+                  appVersion: 1.0.0
                   agreements:
                   - termsId: 'example-privacy-terms-id'
                     isAgreed: true
