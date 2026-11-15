@@ -12,10 +12,14 @@ spring:
         fail-on-numbers-for-enums: true
         read-enums-using-to-string: false
         write-enums-using-to-string: false
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   datasource:
     url: jdbc:postgresql://invalid:5432/invalid
     username: invalid
     password: invalid
+    hikari:
+      connection-timeout: 5000
   data:
     redis:
       host: invalid
@@ -63,3 +67,30 @@ app:
 logging:
   pattern:
     level: "%5p [requestId=%X{requestId:-}]"
+
+server:
+  port: 0
+  shutdown: graceful
+  forward-headers-strategy: native
+
+management:
+  server:
+    port: 0
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db,redis
+          additional-path: "server:/readyz"
+        liveness:
+          include: livenessState
+          additional-path: "server:/healthz"

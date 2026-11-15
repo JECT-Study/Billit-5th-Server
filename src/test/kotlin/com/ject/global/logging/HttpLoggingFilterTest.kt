@@ -106,15 +106,18 @@ class HttpLoggingFilterTest :
         }
 
         test("상태 확인 요청은 완료 로그에서 제외한다") {
-            // given
-            val request = MockHttpServletRequest("GET", "/actuator/health")
-            val response = MockHttpServletResponse()
+            listOf("/actuator/health", "/healthz", "/readyz").forEach { uri ->
+                // given
+                appender.list.clear()
+                val request = MockHttpServletRequest("GET", uri)
+                val response = MockHttpServletResponse()
 
-            // when
-            HttpLoggingFilter().doFilter(request, response, FilterChain { _, _ -> })
+                // when
+                HttpLoggingFilter().doFilter(request, response, FilterChain { _, _ -> })
 
-            // then
-            appender.list.size shouldBe 0
-            MDC.get("requestId") shouldBe null
+                // then
+                appender.list.size shouldBe 0
+                MDC.get("requestId") shouldBe null
+            }
         }
     })
