@@ -93,7 +93,7 @@ class CompleteRegistrationUseCase(
                     agreed = it.agreed,
                     source = ConsentSource.SIGNUP,
                     platform = command.platform,
-                    appVersion = null,
+                    appVersion = command.appVersion,
                 )
             },
         )

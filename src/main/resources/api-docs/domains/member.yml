@@ -38,8 +38,6 @@ paths:
                         title: 개인정보 수집 및 이용 동의
                         isRequired: true
                         contentUrl: https://example.com/terms/privacy/v1
-                      name: null
-                      age: null
         '401':
           $ref: '#/components/responses/RegistrationUnauthorized'
         '403':
@@ -50,9 +48,10 @@ paths:
       operationId: 'completeRegistration'
       summary: 가입 완료
       description: |
-        닉네임과 약관 동의를 제출해 회원 가입을 완료합니다.
+        닉네임, 약관 동의와 만 18세 이상 확인을 제출해 회원 가입을 완료합니다.
 
         ### 처리 조건
+        만 18세 이상만 가입할 수 있습니다. 이름과 나이는 받지 않고 만 18세 이상인지만 확인합니다.
         설문은 응답한 항목만 보냅니다.
         가입이 완료되면 회원용 Access Token과 Refresh Token을 발급합니다.
 
@@ -70,10 +69,9 @@ paths:
               type: object
               required:
               - nickname
-              - name
-              - age
               - platform
               - appVersion
+              - isAgeEligible
               - agreements
               additionalProperties: false
               properties:
@@ -83,13 +81,6 @@ paths:
                   maxLength: 10
                   pattern: ^[가-힣A-Za-z0-9]+(?![\s\S])
                   description: 가입 후 프로필에 표시할 닉네임입니다. 한글 완성형, 영문과 숫자를 사용하며 공백과 특수문자는 허용하지 않습니다.
-                name:
-                  type: string
-                  minLength: 1
-                  description: 가입 정보 조회에서 받은 이름입니다. 값이 없으면 사용자가 직접 입력해 보냅니다.
-                age:
-                  type: integer
-                  description: 가입 정보 조회에서 받은 만 나이입니다. 값이 없으면 사용자가 직접 입력해 보냅니다.
                 platform:
                   type: string
                   enum:
@@ -99,7 +90,13 @@ paths:
                 appVersion:
                   type: string
                   minLength: 1
+                  maxLength: 20
                   description: 약관에 동의한 시점의 앱 버전입니다.
+                isAgeEligible:
+                  type: boolean
+                  enum:
+                  - true
+                  description: 사용자가 만 18세 이상인지 확인한 값입니다. false면 가입할 수 없습니다.
                 agreements:
                   type: array
                   items:
@@ -143,10 +140,9 @@ paths:
                 summary: 닉네임과 필수 약관 동의로 가입 완료
                 value:
                   nickname: 김빌릿
-                  name: 김빌릿
-                  age: 25
                   platform: IOS
                   appVersion: 1.0.0
+                  isAgeEligible: true
                   agreements:
                   - termsId: 'example-privacy-terms-id'
                     isAgreed: true
@@ -174,7 +170,7 @@ paths:
           description: |
             | 오류 코드 | 발생 조건 |
             | --- | --- |
-            | `COMMON_INVALID_REQUEST` | 요청 형식이나 필드가 올바르지 않습니다. |
+            | `COMMON_INVALID_REQUEST` | 요청 형식이나 필드가 올바르지 않거나, `isAgeEligible`이 false입니다. |
             | `USER_REQUIRED_AGREEMENT_MISSING` | 필수 약관의 동의가 누락됐거나 동의하지 않았습니다. |
           content:
             application/json:
@@ -500,8 +496,6 @@ components:
       - status
       - socialDisplayName
       - terms
-      - name
-      - age
       additionalProperties: false
       properties:
         status:
@@ -518,14 +512,6 @@ components:
           items:
             $ref: '#/components/schemas/RegistrationTerms'
           description: 가입 화면에 표시할 약관 목록입니다.
-        name:
-          type: string
-          nullable: true
-          description: 소셜 제공자에서 받은 이름입니다. 제공값이 없으면 null이며 가입 완료 요청에서 직접 입력해 보냅니다.
-        age:
-          type: integer
-          nullable: true
-          description: 소셜 제공자에서 받은 만 나이입니다. 제공값이 없으면 null이며 가입 완료 요청에서 직접 입력해 보냅니다.
     RegistrationTerms:
       type: object
       required:

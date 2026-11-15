@@ -4,8 +4,6 @@ data class RegistrationInfoResponse(
     val status: RegistrationStatus,
     val socialDisplayName: String?,
     val terms: List<Terms>,
-    val name: String?,
-    val age: Int?,
 ) {
     data class Terms(
         val termsId: String,

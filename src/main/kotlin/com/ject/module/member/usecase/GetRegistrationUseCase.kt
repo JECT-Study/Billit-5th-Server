@@ -29,8 +29,6 @@ class GetRegistrationUseCase(
             }
         return RegistrationInfoResult(
             socialDisplayName = member.socialDisplayName,
-            name = member.name,
-            age = member.age,
             terms = terms,
         )
     }

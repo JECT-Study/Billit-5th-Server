@@ -86,8 +86,6 @@ class MemberControllerTest : IntegrationTestSupport() {
                                                 "contentUrl" to "https://terms.billit.test/terms/marketing/v1",
                                             ),
                                         ),
-                                    "name" to null,
-                                    "age" to null,
                                 ),
                         )
                 }
@@ -231,6 +229,8 @@ class MemberControllerTest : IntegrationTestSupport() {
                       "nickname": "$nickname",
                       "agreements": [{"termsId": "$termsId", "isAgreed": true}],
                       "platform": "IOS",
+                      "appVersion": "1.0.0",
+                      "isAgeEligible": true,
                       "survey": {
                         "gender": "MALE",
                         "isTripOrganizer": false,
@@ -259,8 +259,8 @@ class MemberControllerTest : IntegrationTestSupport() {
                 val memberId = createMember("PENDING")
                 val requestBodies =
                     listOf(
-                        """{"nickname":"${newNickname()}","agreements":[],"platform":"IOS","survey":{"gender":"MALE"}}""",
-                        """{"nickname":"${newNickname()}","agreements":[],"platform":"IOS","survey":{}}""",
+                        """{"nickname":"${newNickname()}","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"survey":{"gender":"MALE"}}""",
+                        """{"nickname":"${newNickname()}","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"survey":{}}""",
                     )
                 val otherMemberId = createMember("PENDING")
 
@@ -284,7 +284,7 @@ class MemberControllerTest : IntegrationTestSupport() {
                 val memberId = createMember("PENDING")
                 val termsId = createPolicy("TERMS", "v1", isRequired = true, effectiveAt = "now() - interval '1 day'")
                 val requestBody =
-                    """{"nickname":"${newNickname()}","agreements":[{"termsId":"$termsId","isAgreed":false}],"platform":"ANDROID"}"""
+                    """{"nickname":"${newNickname()}","agreements":[{"termsId":"$termsId","isAgreed":false}],"platform":"ANDROID","appVersion":"1.0.0","isAgeEligible":true}"""
 
                 // when
                 val response = post(REGISTRATION_PATH, requestBody, authTokenCreator.createRegistrationToken(memberId))
@@ -303,7 +303,8 @@ class MemberControllerTest : IntegrationTestSupport() {
                 val nickname = newNickname()
                 createMember("ACTIVE", nickname = nickname)
                 val memberId = createMember("PENDING")
-                val requestBody = """{"nickname":"$nickname","agreements":[],"platform":"ANDROID"}"""
+                val requestBody =
+                    """{"nickname":"$nickname","agreements":[],"platform":"ANDROID","appVersion":"1.0.0","isAgeEligible":true}"""
 
                 // when
                 val response = post(REGISTRATION_PATH, requestBody, authTokenCreator.createRegistrationToken(memberId))
@@ -324,31 +325,49 @@ class MemberControllerTest : IntegrationTestSupport() {
                 val nickname = newNickname()
                 val requestBodies =
                     mapOf(
-                        "닉네임에 공백" to """{"nickname":"빌릿 ","agreements":[],"platform":"IOS"}""",
-                        "닉네임 11자" to """{"nickname":"가나다라마바사아자차카","agreements":[],"platform":"IOS"}""",
-                        "닉네임 누락" to """{"agreements":[],"platform":"IOS"}""",
-                        "약관 동의 목록 누락" to """{"nickname":"$nickname","platform":"IOS"}""",
-                        "동의 기기 누락" to """{"nickname":"$nickname","agreements":[]}""",
-                        "허용하지 않는 동의 기기" to """{"nickname":"$nickname","agreements":[],"platform":"WEB"}""",
-                        "동의 여부 누락" to """{"nickname":"$nickname","agreements":[{"termsId":"1"}],"platform":"IOS"}""",
+                        "닉네임에 공백" to """{"nickname":"빌릿 ","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                        "닉네임 11자" to
+                            """{"nickname":"가나다라마바사아자차카","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                        "닉네임 누락" to """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                        "약관 동의 목록 누락" to """{"nickname":"$nickname","platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                        "동의 기기 누락" to """{"nickname":"$nickname","agreements":[],"appVersion":"1.0.0","isAgeEligible":true}""",
+                        "허용하지 않는 동의 기기" to
+                            """{"nickname":"$nickname","agreements":[],"platform":"WEB","appVersion":"1.0.0","isAgeEligible":true}""",
+                        "동의 여부 누락" to
+                            """{"nickname":"$nickname","agreements":[{"termsId":"1"}],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "숫자가 아닌 약관 식별자" to
-                            """{"nickname":"$nickname","agreements":[{"termsId":"terms","isAgreed":true}],"platform":"IOS"}""",
-                        "허용하지 않는 성별" to """{"nickname":"$nickname","agreements":[],"platform":"IOS","survey":{"gender":"OTHER"}}""",
+                            """{"nickname":"$nickname","agreements":[{"termsId":"terms","isAgreed":true}],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                        "허용하지 않는 성별" to
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"survey":{"gender":"OTHER"}}""",
                         "불편 사항 3개" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS",""" +
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
                             """"survey":{"settlementPainPoints":["SHARE_CALCULATION","PAYMENT_HISTORY","ETC"]}}""",
                         "불편 사항 중복" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS",""" +
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
                             """"survey":{"settlementPainPoints":["ETC","ETC"]}}""",
-                        "닉네임 null" to """{"nickname":null,"agreements":[],"platform":"IOS"}""",
-                        "약관 동의 목록에 null" to """{"nickname":"$nickname","agreements":[null],"platform":"IOS"}""",
+                        "닉네임 null" to """{"nickname":null,"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                        "약관 동의 목록에 null" to
+                            """{"nickname":"$nickname","agreements":[null],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "공백뿐인 기타 입력" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS",""" +
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
                             """"survey":{"settlementPainPoints":["ETC"],"otherSettlementPainPoint":" "}}""",
                         "기타 없이 기타 입력" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS",""" +
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
                             """"survey":{"settlementPainPoints":["PAYMENT_HISTORY"],"otherSettlementPainPoint":"환율 계산"}}""",
-                        "명세에 없는 필드" to """{"nickname":"$nickname","agreements":[],"platform":"IOS","name":"김빌릿"}""",
+                        "앱 버전 누락" to
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","isAgeEligible":true}""",
+                        "공백뿐인 앱 버전" to
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":" ","isAgeEligible":true}""",
+                        "앱 버전 21자" to
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"${"1".repeat(
+                                21,
+                            )}","isAgeEligible":true}""",
+                        "만 18세 이상 확인 누락" to
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0"}""",
+                        "만 18세 미만" to
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":false}""",
+                        "명세에 없는 필드" to
+                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"name":"김빌릿"}""",
                     )
 
                 // when

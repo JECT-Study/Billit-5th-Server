@@ -9,6 +9,7 @@ data class CompleteRegistrationCommand(
     val nickname: String,
     val agreements: List<PolicyAgreement>,
     val platform: PlatformType,
+    val appVersion: String,
     val gender: Gender?,
     val isTreasurer: Boolean?,
     val painPoints: List<PainPoint>,

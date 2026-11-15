@@ -64,6 +64,7 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
                             PolicyAgreement(marketingId, agreed = true),
                         ),
                     platform = PlatformType.IOS,
+                    appVersion = "1.2.3",
                     gender = Gender.FEMALE,
                     isTreasurer = true,
                     painPoints = listOf(PainPoint.PAYMENT_HISTORY, PainPoint.ETC),
@@ -83,7 +84,7 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
                 )
             val consents =
                 jdbc.queryForList(
-                    "SELECT policy_id, channel::text AS channel, agreed, source::text AS source, platform::text AS platform " +
+                    "SELECT policy_id, channel::text AS channel, agreed, source::text AS source, platform::text AS platform, app_version " +
                         "FROM member_consent WHERE member_id = ?",
                     memberId,
                 )
@@ -107,12 +108,13 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
                         it["agreed"],
                         it["source"],
                         it["platform"],
+                        it["app_version"],
                     )
                 } shouldContainExactlyInAnyOrder
                     listOf(
-                        listOf(termsId, null, true, "SIGNUP", "IOS"),
-                        listOf(privacyId, null, true, "SIGNUP", "IOS"),
-                        listOf(marketingId, "PUSH", true, "SIGNUP", "IOS"),
+                        listOf(termsId, null, true, "SIGNUP", "IOS", "1.2.3"),
+                        listOf(privacyId, null, true, "SIGNUP", "IOS", "1.2.3"),
+                        listOf(marketingId, "PUSH", true, "SIGNUP", "IOS", "1.2.3"),
                     )
                 painPoints.map { it["pain_point"] to it["other_reason_text"] } shouldContainExactlyInAnyOrder
                     listOf("PAYMENT_HISTORY" to null, "ETC" to "환율 계산")
@@ -388,6 +390,7 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
             nickname = nickname,
             agreements = agreements,
             platform = PlatformType.ANDROID,
+            appVersion = "1.0.0",
             gender = null,
             isTreasurer = null,
             painPoints = painPoints,

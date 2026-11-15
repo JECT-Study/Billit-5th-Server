@@ -4,6 +4,7 @@ import com.ject.module.member.domain.Gender
 import com.ject.module.member.domain.PainPoint
 import com.ject.module.member.domain.PlatformType
 import jakarta.validation.Valid
+import jakarta.validation.constraints.AssertTrue
 import jakarta.validation.constraints.NotNull
 import jakarta.validation.constraints.Pattern
 import jakarta.validation.constraints.Size
@@ -11,7 +12,8 @@ import jakarta.validation.constraints.Size
 /**
  * 가입 완료 요청입니다.
  *
- * [platform]은 동의 이력에 남길 동의 기기입니다. [survey]는 응답한 항목만 받습니다.
+ * [platform]과 [appVersion]은 동의 이력에 남길 동의 기기와 앱 버전입니다. [survey]는 응답한 항목만 받습니다.
+ * 만 18세 이상만 가입할 수 있어 [isAgeEligible]이 true여야 합니다.
  */
 data class CompleteRegistrationRequest(
     @field:Size(min = NICKNAME_MIN_LENGTH, max = NICKNAME_MAX_LENGTH)
@@ -20,6 +22,12 @@ data class CompleteRegistrationRequest(
     @field:Valid
     val agreements: List<Agreement>,
     val platform: PlatformType,
+    @field:Size(min = 1, max = APP_VERSION_MAX_LENGTH)
+    @field:Pattern(regexp = NOT_BLANK_PATTERN)
+    val appVersion: String,
+    @field:NotNull
+    @field:AssertTrue
+    val isAgeEligible: Boolean?,
     @field:Valid
     val survey: Survey? = null,
 ) {
@@ -54,6 +62,9 @@ data class CompleteRegistrationRequest(
 
         /** 공백이 아닌 문자를 하나 이상 포함합니다. 값이 없으면 검사하지 않습니다. */
         private const val NOT_BLANK_PATTERN = "(?s).*\\S.*"
+
+        /** `member_consent.app_version`의 최대 길이입니다. */
+        private const val APP_VERSION_MAX_LENGTH = 20
 
         /** `member_pain_point.other_reason_text`의 최대 길이입니다. */
         private const val OTHER_PAIN_POINT_MAX_LENGTH = 255

@@ -49,8 +49,6 @@ class MemberController(
                             contentUrl = it.contentUrl,
                         )
                     },
-                name = registration.name,
-                age = registration.age,
             ),
         )
     }
@@ -68,6 +66,7 @@ class MemberController(
                         CompleteRegistrationCommand.PolicyAgreement(policyId = it.termsId.toLong(), agreed = checkNotNull(it.isAgreed))
                     },
                 platform = request.platform,
+                appVersion = request.appVersion,
                 gender = request.survey?.gender,
                 isTreasurer = request.survey?.isTripOrganizer,
                 painPoints = request.survey?.settlementPainPoints.orEmpty(),
