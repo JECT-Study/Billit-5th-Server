@@ -274,6 +274,7 @@ components:
         fullName:
           type: string
           pattern: \S
+          maxLength: 100
           description: 최초 권한 부여 시 Apple SDK가 반환한 표시 이름입니다. 생략하면 표시 이름을 전달하지 않습니다.
     AuthenticatedSocialLogin:
       type: object
