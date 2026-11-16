@@ -39,7 +39,7 @@ interface MemberJpaRepository : JpaRepository<Member, Long> {
 
     @Query(
         """
-        SELECT new com.ject.module.member.domain.RegistrationMemberResult(m.status, m.socialDisplayName, m.name, m.age)
+        SELECT new com.ject.module.member.domain.RegistrationMemberResult(m.status, m.socialDisplayName)
         FROM Member m
         WHERE m.id = :id
         """,

@@ -4,6 +4,4 @@ package com.ject.module.member.domain
 data class RegistrationMemberResult(
     val status: MemberStatus,
     val socialDisplayName: String?,
-    val name: String?,
-    val age: Int?,
 )

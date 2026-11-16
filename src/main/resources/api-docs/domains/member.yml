@@ -34,7 +34,7 @@ paths:
                       status: SIGNING_UP
                       socialDisplayName: 김빌릿
                       terms:
-                      - termsId: 'example-privacy-terms-id'
+                      - termsId: '1'
                         title: 개인정보 수집 및 이용 동의
                         isRequired: true
                         contentUrl: https://example.com/terms/privacy/v1
@@ -144,7 +144,7 @@ paths:
                   appVersion: 1.0.0
                   isAgeEligible: true
                   agreements:
-                  - termsId: 'example-privacy-terms-id'
+                  - termsId: '1'
                     isAgreed: true
       responses:
         '200':
