@@ -4,8 +4,10 @@ import com.ject.global.error.BusinessException
 import com.ject.module.auth.domain.AuthErrorCode
 import com.ject.module.auth.domain.AuthSessionRepository
 import com.ject.module.auth.domain.AuthTokenResult
+import com.ject.module.auth.domain.RefreshTokenRetryPolicy
 import com.ject.module.auth.implement.AuthTokenCreator
 import com.ject.module.auth.implement.RefreshTokenHasher
+import com.ject.module.auth.implement.RefreshTokenReader
 import com.ject.support.IntegrationTestSupport
 import com.nimbusds.jwt.SignedJWT
 import io.kotest.assertions.assertSoftly
@@ -35,7 +37,10 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class RefreshTokensUseCaseTest : IntegrationTestSupport() {
     @Autowired
-    private lateinit var refreshTokensUseCase: RefreshTokensUseCase
+    private lateinit var refreshTokenReader: RefreshTokenReader
+
+    @Autowired
+    private lateinit var refreshTokenRetryPolicy: RefreshTokenRetryPolicy
 
     @Autowired
     private lateinit var authTokenCreator: AuthTokenCreator
@@ -51,6 +56,20 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
     private lateinit var authSessionRepository: AuthSessionRepository
 
     private val refreshTokenHasher = RefreshTokenHasher()
+
+    /** 갱신과 재시도 허용 시간 판단의 기준 시각입니다. 테스트 실행이 늦어져도 유예 시간 안팎 판정이 바뀌지 않게 고정합니다. */
+    private val clock = Clock.fixed(Instant.now(), ZoneOffset.UTC)
+
+    private val refreshTokensUseCase by lazy {
+        RefreshTokensUseCase(
+            refreshTokenReader,
+            authSessionRepository,
+            refreshTokenHasher,
+            authTokenCreator,
+            refreshTokenRetryPolicy,
+            clock,
+        )
+    }
     private val memberIds = mutableListOf<Long>()
 
     init {
@@ -294,11 +313,16 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
     ) {
         jdbc.update(
             "UPDATE auth_session SET refresh_token_rotated_at = ? WHERE id = ?",
-            Timestamp.from(Instant.now().minus(elapsed)),
+            Timestamp.from(clock.instant().minus(elapsed)),
             sessionId,
         )
     }
 
     private fun issuedBefore(duration: Duration): AuthTokenCreator =
-        AuthTokenCreator(jwtEncoder, authSessionRepository, refreshTokenHasher, Clock.fixed(Instant.now().minus(duration), ZoneOffset.UTC))
+        AuthTokenCreator(
+            jwtEncoder,
+            authSessionRepository,
+            refreshTokenHasher,
+            Clock.fixed(clock.instant().minus(duration), ZoneOffset.UTC),
+        )
 }
