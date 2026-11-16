@@ -12,11 +12,9 @@ import org.springframework.core.env.Environment
 import org.springframework.security.oauth2.jwt.JwtDecoder
 import tools.jackson.databind.json.JsonMapper
 import java.net.URI
-import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -122,101 +120,6 @@ class MemberControllerTest : IntegrationTestSupport() {
             }
         }
 
-        context("GET /api/v1/nickname-availability") {
-            test("아무도 쓰지 않는 닉네임은 200과 isAvailable true를 반환한다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
-                val nickname = newNickname()
-
-                // when
-                val response = get(nicknamePath(nickname), registrationToken)
-
-                // then
-                assertSoftly {
-                    response.statusCode() shouldBe 200
-                    body(response) shouldBe mapOf("data" to mapOf("nickname" to nickname, "isAvailable" to true))
-                }
-            }
-
-            test("다른 회원이 쓰는 닉네임은 200과 isAvailable false를 반환한다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
-                val nickname = newNickname()
-                createMember("ACTIVE", nickname = nickname)
-
-                // when
-                val response = get(nicknamePath(nickname), registrationToken)
-
-                // then
-                assertSoftly {
-                    response.statusCode() shouldBe 200
-                    body(response) shouldBe mapOf("data" to mapOf("nickname" to nickname, "isAvailable" to false))
-                }
-            }
-
-            test("11자, 공백 포함, 한글 자모, 빈 닉네임과 닉네임 누락은 400 COMMON_INVALID_REQUEST를 반환한다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
-                val paths =
-                    listOf(
-                        nicknamePath("가나다라마바사아자차카"),
-                        nicknamePath("빌릿 "),
-                        nicknamePath("ㅂㅣㄹ"),
-                        nicknamePath(""),
-                        NICKNAME_AVAILABILITY_PATH,
-                    )
-
-                // when
-                val responses = paths.map { get(it, registrationToken) }
-
-                // then
-                assertSoftly {
-                    responses.map { it.statusCode() } shouldBe listOf(400, 400, 400, 400, 400)
-                    responses.map { body(it)["code"] }.toSet() shouldBe setOf("COMMON_INVALID_REQUEST")
-                }
-            }
-
-            test("가입을 마친 회원의 가입 전용 토큰이면 403 COMMON_FORBIDDEN을 반환한다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("ACTIVE"))
-
-                // when
-                val response = get(nicknamePath(newNickname()), registrationToken)
-
-                // then
-                assertSoftly {
-                    response.statusCode() shouldBe 403
-                    body(response)["code"] shouldBe "COMMON_FORBIDDEN"
-                }
-            }
-
-            test("형식이 틀린 닉네임은 오류 필드로 nickname을 알려준다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
-
-                // when
-                val response = get(nicknamePath("빌릿!"), registrationToken)
-
-                // then
-                val errors = body(response)["errors"] as List<*>
-                assertSoftly {
-                    response.statusCode() shouldBe 400
-                    errors.map { (it as Map<*, *>)["field"] } shouldBe listOf("nickname")
-                }
-            }
-
-            test("한글 완성형, 영문과 숫자를 섞은 10자 닉네임은 200을 반환한다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
-
-                // when
-                val response = get(nicknamePath("빌릿Abc12345"), registrationToken)
-
-                // then
-                response.statusCode() shouldBe 200
-            }
-        }
-
         context("POST /api/v1/me/registration") {
             test("필수 약관에 동의한 가입 완료 요청은 200과 회원용 Access Token, Refresh Token만 반환한다") {
                 // given
@@ -298,23 +201,18 @@ class MemberControllerTest : IntegrationTestSupport() {
                 }
             }
 
-            test("다른 회원이 쓰는 닉네임이면 409 USER_NICKNAME_ALREADY_USED를 반환한다") {
+            test("닉네임 없이 보내도 200으로 가입을 완료한다") {
                 // given
-                val nickname = newNickname()
-                createMember("ACTIVE", nickname = nickname)
                 val memberId = createMember("PENDING")
-                val requestBody =
-                    """{"nickname":"$nickname","agreements":[],"platform":"ANDROID","appVersion":"1.0.0","isAgeEligible":true}"""
+                val requestBody = """{"agreements":[],"platform":"ANDROID","appVersion":"1.0.0","isAgeEligible":true}"""
 
                 // when
                 val response = post(REGISTRATION_PATH, requestBody, authTokenCreator.createRegistrationToken(memberId))
 
                 // then
                 assertSoftly {
-                    response.statusCode() shouldBe 409
-                    body(response) shouldBe
-                        mapOf("code" to "USER_NICKNAME_ALREADY_USED", "message" to "이미 사용 중인 닉네임입니다.", "errors" to null)
-                    findStatus(memberId) shouldBe "PENDING"
+                    response.statusCode() shouldBe 200
+                    findStatus(memberId) shouldBe "ACTIVE"
                 }
             }
 
@@ -328,7 +226,6 @@ class MemberControllerTest : IntegrationTestSupport() {
                         "닉네임에 공백" to """{"nickname":"빌릿 ","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "닉네임 11자" to
                             """{"nickname":"가나다라마바사아자차카","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
-                        "닉네임 누락" to """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "약관 동의 목록 누락" to """{"nickname":"$nickname","platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "동의 기기 누락" to """{"nickname":"$nickname","agreements":[],"appVersion":"1.0.0","isAgeEligible":true}""",
                         "허용하지 않는 동의 기기" to
@@ -345,7 +242,6 @@ class MemberControllerTest : IntegrationTestSupport() {
                         "불편 사항 중복" to
                             """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
                             """"survey":{"settlementPainPoints":["ETC","ETC"]}}""",
-                        "닉네임 null" to """{"nickname":null,"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "약관 동의 목록에 null" to
                             """{"nickname":"$nickname","agreements":[null],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "공백뿐인 기타 입력" to
@@ -389,9 +285,6 @@ class MemberControllerTest : IntegrationTestSupport() {
             .toString()
             .replace("-", "")
             .take(10)
-
-    private fun nicknamePath(nickname: String): String =
-        "$NICKNAME_AVAILABILITY_PATH?nickname=${URLEncoder.encode(nickname, StandardCharsets.UTF_8)}"
 
     private fun createMember(
         status: String,
@@ -465,6 +358,5 @@ class MemberControllerTest : IntegrationTestSupport() {
 
     companion object {
         private const val REGISTRATION_PATH = "/api/v1/me/registration"
-        private const val NICKNAME_AVAILABILITY_PATH = "/api/v1/nickname-availability"
     }
 }

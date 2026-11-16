@@ -19,8 +19,6 @@ paths:
     $ref: './domains/auth.yml#/paths/~1api~1v1~1auth~1logout'
   '/api/v1/me/registration':
     $ref: './domains/member.yml#/paths/~1api~1v1~1me~1registration'
-  '/api/v1/nickname-availability':
-    $ref: './domains/member.yml#/paths/~1api~1v1~1nickname-availability'
   '/api/v1/me':
     $ref: './domains/member.yml#/paths/~1api~1v1~1me'
   '/api/v1/me/profile-image':

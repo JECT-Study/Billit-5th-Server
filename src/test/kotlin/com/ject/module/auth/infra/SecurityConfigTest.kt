@@ -414,7 +414,7 @@ class SecurityConfigTest : IntegrationTestSupport() {
 
             // when
             val responses =
-                listOf(REGISTRATION_PROBE_PATH, "/api/v1/nickname-availability").map {
+                listOf(REGISTRATION_PROBE_PATH).map {
                     get(serverUrl(it), tokens.accessToken)
                 }
 

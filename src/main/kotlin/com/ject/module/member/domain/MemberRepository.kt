@@ -39,16 +39,13 @@ interface MemberRepository {
     /** 가입 절차에서 확인할 회원의 현재 상태와 표시 값을 조회합니다. 영속성 컨텍스트에 남은 값이 아니라 조회 시점의 DB 값을 반환합니다. */
     fun findRegistrationMember(memberId: Long): RegistrationMemberResult?
 
-    /** 닉네임을 쓰는 회원이 있는지 확인합니다. 대소문자를 구분하며, 닉네임을 예약하지 않습니다. */
-    fun existsByNickname(nickname: String): Boolean
-
     /**
      * 가입 중(`PENDING`) 회원에게 닉네임과 설문 응답, 마케팅 푸시 동의 시각을 저장하고 가입 완료(`ACTIVE`)로 바꿉니다.
      *
      * - 호출 전 검증: 호출하는 쪽이 닉네임 형식과 필수 약관 동의를 확인합니다.
      * - 변경 조건: 회원이 가입 중일 때만 바꿉니다. 같은 회원의 요청이 동시에 오면 한 건만 [RegistrationCompletionResult.COMPLETED]이고 나머지는 [RegistrationCompletionResult.NOT_PENDING]입니다.
-     * - 다른 회원이 같은 닉네임을 쓰고 있으면 `uq_member_nickname` 위반으로 판단해 [RegistrationCompletionResult.NICKNAME_ALREADY_USED]를 반환합니다. 다른 DB 오류는 그대로 던집니다.
-     * - 트랜잭션: 호출하는 UseCase의 트랜잭션에 참여합니다. 닉네임 중복이면 그 트랜잭션은 더 사용할 수 없으므로 호출하는 쪽이 롤백합니다.
+     * - 닉네임은 다른 회원과 겹쳐도 됩니다. DB 오류는 그대로 던집니다.
+     * - 트랜잭션: 호출하는 UseCase의 트랜잭션에 참여합니다.
      */
     fun completeRegistrationIfPending(
         memberId: Long,

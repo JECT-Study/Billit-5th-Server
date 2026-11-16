@@ -12,13 +12,14 @@ import jakarta.validation.constraints.Size
 /**
  * 가입 완료 요청입니다.
  *
+ * [nickname]을 생략하면 임의 닉네임을 부여합니다. 닉네임은 다른 회원과 겹쳐도 됩니다.
  * [platform]과 [appVersion]은 동의 이력에 남길 동의 기기와 앱 버전입니다. [survey]는 응답한 항목만 받습니다.
  * 만 18세 이상만 가입할 수 있어 [isAgeEligible]이 true여야 합니다.
  */
 data class CompleteRegistrationRequest(
     @field:Size(min = NICKNAME_MIN_LENGTH, max = NICKNAME_MAX_LENGTH)
     @field:Pattern(regexp = NICKNAME_PATTERN)
-    val nickname: String,
+    val nickname: String?,
     @field:Valid
     val agreements: List<Agreement>,
     val platform: PlatformType,

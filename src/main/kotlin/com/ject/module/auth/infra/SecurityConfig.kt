@@ -140,7 +140,6 @@ class SecurityConfig {
         private val REGISTRATION_PATHS =
             arrayOf(
                 "/api/v1/me/registration/**",
-                "/api/v1/nickname-availability",
             )
 
         private val PUBLIC_PATHS =

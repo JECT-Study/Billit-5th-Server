@@ -16,6 +16,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.kotest.matchers.string.shouldMatch
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.dao.DataIntegrityViolationException
@@ -232,7 +233,7 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
             }
         }
 
-        test("다른 회원이 쓰는 닉네임이면 닉네임 중복으로 거절하고 동의 이력과 세션을 남기지 않는다") {
+        test("다른 회원이 쓰는 닉네임으로도 가입을 완료한다") {
             // given
             val nickname = newNickname()
             createMember("ACTIVE", nickname)
@@ -241,17 +242,28 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
             val command = command(nickname = nickname, agreements = listOf(PolicyAgreement(termsId, agreed = true)))
 
             // when
-            val exception = shouldThrow<BusinessException> { completeRegistrationUseCase.complete(memberId, command) }
+            completeRegistrationUseCase.complete(memberId, command)
 
             // then
             val member = findMember(memberId)
             assertSoftly {
-                exception.errorCode shouldBe MemberErrorCode.NICKNAME_ALREADY_USED
-                member["status"] shouldBe "PENDING"
-                member["nickname"].shouldBeNull()
-                countRows("member_consent", memberId) shouldBe 0
-                countSessions(memberId) shouldBe 0
+                member["status"] shouldBe "ACTIVE"
+                member["nickname"] shouldBe nickname
             }
+        }
+
+        test("닉네임을 비우면 닉네임 규칙을 지키는 임의 닉네임으로 가입을 완료한다") {
+            // given
+            val memberId = createMember("PENDING")
+            val termsId = createPolicy("TERMS", "v1", isRequired = true)
+            val command = command(nickname = null, agreements = listOf(PolicyAgreement(termsId, agreed = true)))
+
+            // when
+            completeRegistrationUseCase.complete(memberId, command)
+
+            // then
+            val nickname = findMember(memberId)["nickname"] as String
+            nickname shouldMatch Regex("[가-힣]{1,10}")
         }
 
         test("회원을 가입 완료로 바꾼 뒤 설문 저장이 실패하면 회원 변경과 동의 이력까지 롤백하고 세션을 남기지 않는다") {
@@ -275,39 +287,6 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
                 member["nickname"].shouldBeNull()
                 countRows("member_consent", memberId) shouldBe 0
                 countSessions(memberId) shouldBe 0
-            }
-        }
-
-        test("서로 다른 회원이 같은 닉네임으로 동시에 가입하면 한 명만 가입을 완료하고 다른 한 명은 닉네임 중복으로 가입 중에 남는다") {
-            // given
-            val firstMemberId = createMember("PENDING")
-            val secondMemberId = createMember("PENDING")
-            val command = command(nickname = newNickname())
-            val barrier = CyclicBarrier(2)
-            val executor = Executors.newFixedThreadPool(2)
-
-            // when
-            val results =
-                try {
-                    listOf(firstMemberId, secondMemberId)
-                        .map { memberId ->
-                            executor.submit<Result<String>> {
-                                barrier.await(5, TimeUnit.SECONDS)
-                                runCatching { completeRegistrationUseCase.complete(memberId, command).accessToken }
-                            }
-                        }.map { it.get(10, TimeUnit.SECONDS) }
-                } finally {
-                    executor.shutdownNow()
-                }
-
-            // then
-            val failure = results.mapNotNull { it.exceptionOrNull() }.singleOrNull()
-            assertSoftly {
-                results.count { it.isSuccess } shouldBe 1
-                (failure as? BusinessException)?.errorCode shouldBe MemberErrorCode.NICKNAME_ALREADY_USED
-                listOf(findMember(firstMemberId)["status"], findMember(secondMemberId)["status"]) shouldContainExactlyInAnyOrder
-                    listOf("ACTIVE", "PENDING")
-                countSessions(firstMemberId) + countSessions(secondMemberId) shouldBe 1
             }
         }
 
@@ -381,7 +360,7 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
     }
 
     private fun command(
-        nickname: String = newNickname(),
+        nickname: String? = newNickname(),
         agreements: List<PolicyAgreement> = emptyList(),
         painPoints: List<PainPoint> = emptyList(),
         otherPainPointText: String? = null,

@@ -17,6 +17,7 @@ import com.ject.module.member.domain.PainPoint
 import com.ject.module.member.domain.Policy
 import com.ject.module.member.domain.PolicyType
 import com.ject.module.member.domain.RegistrationCompletionResult
+import com.ject.module.member.implement.RandomNicknameGenerator
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -31,13 +32,15 @@ class CompleteRegistrationUseCase(
     private val memberRepository: MemberRepository,
     private val memberRegistrationRepository: MemberRegistrationRepository,
     private val authTokenCreator: AuthTokenCreator,
+    private val randomNicknameGenerator: RandomNicknameGenerator,
     private val clock: Clock,
 ) {
     /**
      * 1. 이미 가입을 마친 회원이면 응답을 받지 못한 재시도로 보고 요청 내용을 다시 저장하지 않고 새 세션의 토큰을 발급합니다. 가입 전용 토큰의 유효 시간 안에서만 가능합니다.
      * 2. 동의한 약관이 현재 버전인지와 필수 약관에 모두 동의했는지 확인합니다.
      * 3. 가입 중 회원만 가입 완료로 바꿉니다. 같은 회원의 요청이 동시에 오면 한 건만 저장하고 나머지는 1번처럼 토큰만 발급합니다.
-     * 4. 마케팅 수신 동의는 일반 푸시 채널의 동의로 저장합니다. 야간 푸시 동의는 가입 때 받지 않습니다.
+     * 4. 닉네임을 비우면 임의 닉네임을 부여합니다. 닉네임은 다른 회원과 겹쳐도 됩니다.
+     * 5. 마케팅 수신 동의는 일반 푸시 채널의 동의로 저장합니다. 야간 푸시 동의는 가입 때 받지 않습니다.
      */
     @Transactional
     fun complete(
@@ -61,7 +64,7 @@ class CompleteRegistrationUseCase(
         val completion =
             memberRepository.completeRegistrationIfPending(
                 memberId = memberId,
-                nickname = command.nickname,
+                nickname = command.nickname ?: randomNicknameGenerator.generate(),
                 gender = command.gender,
                 isTreasurer = command.isTreasurer,
                 marketingPushAgreedAt = if (isMarketingAgreed) now else null,
@@ -69,10 +72,6 @@ class CompleteRegistrationUseCase(
         when (completion) {
             RegistrationCompletionResult.COMPLETED -> {
                 Unit
-            }
-
-            RegistrationCompletionResult.NICKNAME_ALREADY_USED -> {
-                throw BusinessException(MemberErrorCode.NICKNAME_ALREADY_USED)
             }
 
             RegistrationCompletionResult.NOT_PENDING -> {

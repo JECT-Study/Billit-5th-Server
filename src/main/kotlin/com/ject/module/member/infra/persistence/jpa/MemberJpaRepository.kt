@@ -48,8 +48,6 @@ interface MemberJpaRepository : JpaRepository<Member, Long> {
         @Param("id") id: Long,
     ): RegistrationMemberResult?
 
-    fun existsByNickname(nickname: String): Boolean
-
     @Transactional
     @Modifying
     @Query(

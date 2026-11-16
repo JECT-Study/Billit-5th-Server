@@ -9,7 +9,7 @@ paths:
         가입 화면에 표시할 본인 정보와 약관을 조회합니다.
 
         ### 처리 조건
-        닉네임 초기값은 Google ID 토큰의 `name`, Kakao ID 토큰의 `nickname`, Apple 요청의 `fullName`에서 가져옵니다.
+        `socialDisplayName`은 Google ID 토큰의 `name`, Kakao ID 토큰의 `nickname`, Apple 요청의 `fullName`입니다. 닉네임 초기값으로 쓰지 않습니다.
       security:
       - registrationBearerAuth: []
       responses:
@@ -48,7 +48,7 @@ paths:
       operationId: 'completeRegistration'
       summary: 가입 완료
       description: |
-        닉네임, 약관 동의와 만 18세 이상 확인을 제출해 회원 가입을 완료합니다.
+        약관 동의와 만 18세 이상 확인을 제출해 회원 가입을 완료합니다. 닉네임은 선택 입력이며 생략하면 임의 닉네임을 부여합니다.
 
         ### 처리 조건
         만 18세 이상만 가입할 수 있습니다. 이름과 나이는 받지 않고 만 18세 이상인지만 확인합니다.
@@ -68,7 +68,6 @@ paths:
             schema:
               type: object
               required:
-              - nickname
               - platform
               - appVersion
               - isAgeEligible
@@ -80,7 +79,7 @@ paths:
                   minLength: 1
                   maxLength: 10
                   pattern: ^[가-힣A-Za-z0-9]+(?![\s\S])
-                  description: 가입 후 프로필에 표시할 닉네임입니다. 한글 완성형, 영문과 숫자를 사용하며 공백과 특수문자는 허용하지 않습니다.
+                  description: 계정 닉네임입니다. 한글 완성형, 영문과 숫자를 사용하며 공백과 특수문자는 허용하지 않습니다. 생략하면 임의 닉네임을 부여하며, 다른 회원과 겹쳐도 됩니다.
                 platform:
                   type: string
                   enum:
@@ -205,73 +204,6 @@ paths:
                     code: COMMON_UNAUTHORIZED
                     message: 인증이 필요합니다.
                     errors: null
-        '403':
-          $ref: '../common/components.yml#/responses/Forbidden'
-        '409':
-          description: |
-            가입 완료 시점에 닉네임이 이미 사용 중입니다.
-
-            **오류 코드:** `USER_NICKNAME_ALREADY_USED`
-          content:
-            application/json:
-              schema:
-                $ref: '../common/components.yml#/schemas/ErrorResponse'
-              examples:
-                USER_NICKNAME_ALREADY_USED:
-                  summary: 가입 완료 시점에 닉네임이 이미 사용 중입니다.
-                  value:
-                    code: USER_NICKNAME_ALREADY_USED
-                    message: 이미 사용 중인 닉네임입니다.
-                    errors: null
-  '/api/v1/nickname-availability':
-    get:
-      tags:
-      - Member
-      operationId: 'checkNicknameAvailability'
-      summary: 닉네임 중복 확인
-      description: |
-        입력한 닉네임의 현재 사용 가능 여부를 조회합니다.
-
-        ### 사용 시 주의
-        사용 가능 응답을 받아도 닉네임은 예약되지 않습니다. 글자 수 산정과 탈퇴 닉네임 재사용은 논의가 필요합니다.
-      security:
-      - registrationBearerAuth: []
-      parameters:
-      - name: nickname
-        in: query
-        required: true
-        description: 사용 가능 여부를 확인할 닉네임입니다. 한글 완성형, 영문과 숫자를 허용하며 한글 자모, 공백과 특수문자는 허용하지 않습니다. 글자 수 산정 기준은 논의가 필요합니다.
-        schema:
-          type: string
-          minLength: 1
-          maxLength: 10
-          pattern: ^[가-힣A-Za-z0-9]+(?![\s\S])
-          example: 김빌릿
-      responses:
-        '200':
-          description: 닉네임 중복 확인 성공
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - data
-                additionalProperties: false
-                properties:
-                  data:
-                    allOf:
-                    - $ref: '#/components/schemas/NicknameAvailability'
-              examples:
-                success:
-                  summary: 닉네임 중복 확인 성공
-                  value:
-                    data:
-                      nickname: 김빌릿
-                      isAvailable: true
-        '400':
-          $ref: '../common/components.yml#/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/RegistrationUnauthorized'
         '403':
           $ref: '../common/components.yml#/responses/Forbidden'
   '/api/v1/me':
@@ -477,19 +409,6 @@ components:
         profileImageUrl:
           type: string
           description: 변경 후 프로필 이미지에 접근할 URL입니다.
-    NicknameAvailability:
-      type: object
-      required:
-      - nickname
-      - isAvailable
-      additionalProperties: false
-      properties:
-        nickname:
-          type: string
-          description: 사용 가능 여부를 조회한 닉네임입니다.
-        isAvailable:
-          type: boolean
-          description: 현재 시점에 사용할 수 있는지 나타냅니다. 닉네임 예약을 의미하지 않습니다.
     RegistrationInfo:
       type: object
       required:
@@ -506,7 +425,7 @@ components:
         socialDisplayName:
           type: string
           nullable: true
-          description: 가입 화면의 닉네임 초기값입니다.
+          description: 소셜 제공자가 준 표시 이름입니다. 제공값이 없으면 null입니다.
         terms:
           type: array
           items:
