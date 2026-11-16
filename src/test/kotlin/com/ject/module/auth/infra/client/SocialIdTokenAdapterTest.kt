@@ -32,13 +32,13 @@ class SocialIdTokenAdapterTest :
     FunSpec({
         lateinit var fixture: SocialIdTokenFixture
         lateinit var adapter: SocialIdTokenAdapter
-        val clock = Clock.fixed(Instant.parse("2026-11-15T00:00:00Z"), ZoneOffset.UTC)
-        val now = clock.instant()
+        val fixedClock = Clock.fixed(Instant.parse("2026-11-15T00:00:00Z"), ZoneOffset.UTC)
+        val now = fixedClock.instant()
 
         fun adapter(
             googleJwkSetUri: String,
             kakaoJwkSetUri: String,
-            clock: Clock = Clock.systemUTC(),
+            clock: Clock = fixedClock,
         ) = SocialIdTokenAdapter(
             SocialLoginProperties(
                 google = SocialLoginProperties.Google(clientId = GOOGLE_CLIENT_ID, jwkSetUri = googleJwkSetUri),
@@ -60,7 +60,7 @@ class SocialIdTokenAdapterTest :
         )
 
         beforeEach {
-            fixture = SocialIdTokenFixture(clock)
+            fixture = SocialIdTokenFixture(fixedClock)
             adapter = adapter(fixture.googleJwkSetUri, fixture.kakaoJwkSetUri)
         }
 
