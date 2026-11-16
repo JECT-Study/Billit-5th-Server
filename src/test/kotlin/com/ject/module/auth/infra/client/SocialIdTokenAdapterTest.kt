@@ -34,12 +34,12 @@ class SocialIdTokenAdapterTest :
             clock,
         )
 
-        beforeTest {
+        beforeEach {
             fixture = SocialIdTokenFixture(clock)
             adapter = adapter(fixture.googleJwkSetUri, fixture.kakaoJwkSetUri)
         }
 
-        afterTest { fixture.close() }
+        afterEach { fixture.close() }
 
         test("구글 ID 토큰의 서명, iss, aud, exp가 유효하면 외부 사용자 ID를 반환한다") {
             // given
