@@ -145,6 +145,22 @@ class MemberControllerTest : IntegrationTestSupport() {
                 }
             }
 
+            test("유효한 Access Token이어도 회원이 가입 완료 상태가 아니면 401 COMMON_UNAUTHORIZED를 반환한다") {
+                // given
+                val memberId = createMember("ACTIVE", nickname = newNickname())
+                val accessToken = authTokenCreator.createMemberTokens(memberId).accessToken
+                jdbc.update("UPDATE member SET status = 'WITHDRAWN'::member_status WHERE id = ?", memberId)
+
+                // when
+                val response = get(MY_PROFILE_PATH, accessToken)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 401
+                    body(response)["code"] shouldBe "COMMON_UNAUTHORIZED"
+                }
+            }
+
             test("가입 전용 토큰이면 401 COMMON_UNAUTHORIZED를 반환한다") {
                 // given
                 val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
