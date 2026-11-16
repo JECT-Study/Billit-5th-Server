@@ -1,11 +1,13 @@
 package com.ject.module.auth.presentation
 
+import com.ject.module.auth.implement.AuthTokenCreator
 import com.ject.support.IntegrationTestSupport
 import com.ject.support.SocialIdTokenFixture
 import com.ject.support.SocialIdTokenFixture.Companion.GOOGLE_ISSUER
 import com.nimbusds.jwt.SignedJWT
 import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
@@ -28,6 +30,9 @@ class AuthControllerTest : IntegrationTestSupport() {
 
     @Autowired
     private lateinit var jsonMapper: JsonMapper
+
+    @Autowired
+    private lateinit var authTokenCreator: AuthTokenCreator
 
     private val httpClient = HttpClient.newHttpClient()
     private val providerUserIds = mutableListOf<String>()
@@ -155,9 +160,169 @@ class AuthControllerTest : IntegrationTestSupport() {
                 }
             }
         }
+        context("POST /api/v1/auth/token-refreshes") {
+            test("유효한 Refresh Token이면 200과 새 Access Token, Refresh Token만 반환한다") {
+                // given
+                val issued = authTokenCreator.createMemberTokens(createActiveMember())
+
+                // when
+                val response = post(TOKEN_REFRESH_PATH, """{"refreshToken":"${issued.refreshToken}"}""")
+
+                // then
+                val data = body(response)["data"] as Map<*, *>
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    data.keys shouldBe setOf("accessToken", "refreshToken")
+                    data["refreshToken"] shouldNotBe issued.refreshToken
+                }
+            }
+
+            test("유효하지 않은 Refresh Token이면 401 AUTH_REFRESH_TOKEN_INVALID를 반환한다") {
+                // given
+                val requestBody = """{"refreshToken":"invalid-token"}"""
+
+                // when
+                val response = post(TOKEN_REFRESH_PATH, requestBody)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 401
+                    body(response) shouldBe
+                        mapOf("code" to "AUTH_REFRESH_TOKEN_INVALID", "message" to "Refresh Token이 유효하지 않습니다.", "errors" to null)
+                }
+            }
+
+            val invalidBodies =
+                mapOf(
+                    "refreshToken 누락" to "{}",
+                    "refreshToken이 빈 문자열" to """{"refreshToken":""}""",
+                    "refreshToken이 null" to """{"refreshToken":null}""",
+                    "정의하지 않은 필드" to """{"refreshToken":"token","deviceId":"d"}""",
+                )
+            for ((case, requestBody) in invalidBodies) {
+                test("요청 형식 오류($case)는 400 COMMON_INVALID_REQUEST를 반환한다") {
+                    // given
+                    val path = TOKEN_REFRESH_PATH
+
+                    // when
+                    val response = post(path, requestBody)
+
+                    // then
+                    response.statusCode() shouldBe 400
+                    body(response)["code"] shouldBe "COMMON_INVALID_REQUEST"
+                }
+            }
+        }
+        context("POST /api/v1/auth/logout") {
+            test("Access Token으로 본문 없이 로그아웃하면 204를 반환하고 이후 그 Access Token은 401이다") {
+                // given
+                val tokens = authTokenCreator.createMemberTokens(createActiveMember())
+
+                // when
+                val response = post(LOGOUT_PATH, requestBody = null, accessToken = tokens.accessToken)
+
+                // then
+                val afterLogout = post(LOGOUT_PATH, requestBody = null, accessToken = tokens.accessToken)
+                assertSoftly {
+                    response.statusCode() shouldBe 204
+                    response.body() shouldBe ""
+                    afterLogout.statusCode() shouldBe 401
+                    body(afterLogout)["code"] shouldBe "COMMON_UNAUTHORIZED"
+                }
+            }
+
+            test("헤더 없이 본문의 Refresh Token으로 로그아웃하면 204를 반환하고 그 세션의 두 토큰은 401이다") {
+                // given
+                val tokens = authTokenCreator.createMemberTokens(createActiveMember())
+
+                // when
+                val response = post(LOGOUT_PATH, """{"refreshToken":"${tokens.refreshToken}"}""")
+
+                // then
+                val refreshAfterLogout = post(TOKEN_REFRESH_PATH, """{"refreshToken":"${tokens.refreshToken}"}""")
+                val accessAfterLogout = post(LOGOUT_PATH, requestBody = null, accessToken = tokens.accessToken)
+                assertSoftly {
+                    response.statusCode() shouldBe 204
+                    refreshAfterLogout.statusCode() shouldBe 401
+                    body(refreshAfterLogout)["code"] shouldBe "AUTH_REFRESH_TOKEN_INVALID"
+                    accessAfterLogout.statusCode() shouldBe 401
+                }
+            }
+
+            test("로그아웃해도 같은 회원의 다른 세션은 유지한다") {
+                // given
+                val memberId = createActiveMember()
+                val current = authTokenCreator.createMemberTokens(memberId)
+                val other = authTokenCreator.createMemberTokens(memberId)
+
+                // when
+                post(LOGOUT_PATH, requestBody = null, accessToken = current.accessToken)
+
+                // then
+                val otherRefresh = post(TOKEN_REFRESH_PATH, """{"refreshToken":"${other.refreshToken}"}""")
+                otherRefresh.statusCode() shouldBe 200
+            }
+
+            test("이미 종료된 세션의 Refresh Token으로 로그아웃하면 401 COMMON_UNAUTHORIZED를 반환한다") {
+                // given
+                val tokens = authTokenCreator.createMemberTokens(createActiveMember())
+                post(LOGOUT_PATH, """{"refreshToken":"${tokens.refreshToken}"}""")
+
+                // when
+                val response = post(LOGOUT_PATH, """{"refreshToken":"${tokens.refreshToken}"}""")
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 401
+                    body(response) shouldBe mapOf("code" to "COMMON_UNAUTHORIZED", "message" to "인증이 필요합니다.", "errors" to null)
+                }
+            }
+
+            test("Access Token도 본문도 없으면 401 COMMON_UNAUTHORIZED를 반환한다") {
+                // given
+                val path = LOGOUT_PATH
+
+                // when
+                val response = post(path, requestBody = null)
+
+                // then
+                response.statusCode() shouldBe 401
+                body(response)["code"] shouldBe "COMMON_UNAUTHORIZED"
+            }
+
+            val invalidBodies =
+                mapOf(
+                    "refreshToken 누락" to "{}",
+                    "refreshToken이 빈 문자열" to """{"refreshToken":""}""",
+                    "정의하지 않은 필드" to """{"refreshToken":"token","deviceId":"d"}""",
+                )
+            for ((case, requestBody) in invalidBodies) {
+                test("Access Token 없이 보낸 본문의 형식 오류($case)는 400 COMMON_INVALID_REQUEST를 반환한다") {
+                    // given
+                    val path = LOGOUT_PATH
+
+                    // when
+                    val response = post(path, requestBody)
+
+                    // then
+                    response.statusCode() shouldBe 400
+                    body(response)["code"] shouldBe "COMMON_INVALID_REQUEST"
+                }
+            }
+        }
     }
 
     private fun newProviderUserId(): String = "test-${UUID.randomUUID()}".also { providerUserIds.add(it) }
+
+    private fun createActiveMember(): Long =
+        checkNotNull(
+            jdbc.queryForObject(
+                "INSERT INTO member (social_provider, social_provider_user_id, status, created_at, updated_at) " +
+                    "VALUES ('GOOGLE', ?, 'ACTIVE', now(), now()) RETURNING id",
+                Long::class.java,
+                newProviderUserId(),
+            ),
+        )
 
     private fun countMembers(providerUserId: String): Int =
         checkNotNull(jdbc.queryForObject("SELECT count(*) FROM member WHERE social_provider_user_id = ?", Int::class.java, providerUserId))
@@ -185,6 +350,8 @@ class AuthControllerTest : IntegrationTestSupport() {
 
     companion object {
         private const val SOCIAL_LOGIN_PATH = "/api/v1/auth/social-logins"
+        private const val TOKEN_REFRESH_PATH = "/api/v1/auth/token-refreshes"
+        private const val LOGOUT_PATH = "/api/v1/auth/logout"
         private const val GOOGLE_CLIENT_ID = "test-google-client-id"
         private const val KAKAO_APP_KEY = "test-kakao-native-app-key"
         private const val KAKAO_ISSUER = SocialIdTokenFixture.KAKAO_ISSUER

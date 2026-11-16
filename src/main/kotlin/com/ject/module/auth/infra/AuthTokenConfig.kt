@@ -1,6 +1,7 @@
 package com.ject.module.auth.infra
 
 import com.ject.module.auth.domain.AuthTokenClaims
+import com.ject.module.auth.domain.RefreshTokenRetryPolicy
 import com.ject.module.auth.domain.TokenType
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
@@ -21,7 +22,7 @@ import java.time.Clock
 import java.time.Duration
 
 @Configuration
-@EnableConfigurationProperties(AuthTokenProperties::class, SocialLoginProperties::class)
+@EnableConfigurationProperties(AuthTokenProperties::class, RefreshTokenProperties::class, SocialLoginProperties::class)
 class AuthTokenConfig {
     @Bean
     fun jwtEncoder(properties: AuthTokenProperties): JwtEncoder =
@@ -29,6 +30,10 @@ class AuthTokenConfig {
             .withSecretKey(properties.signingKey)
             .algorithm(MacAlgorithm.HS512)
             .build()
+
+    @Bean
+    fun refreshTokenRetryPolicy(properties: RefreshTokenProperties): RefreshTokenRetryPolicy =
+        RefreshTokenRetryPolicy(properties.retryGracePeriod)
 
     /** 회원용 Access Token만 허용합니다. */
     @Bean
@@ -45,6 +50,14 @@ class AuthTokenConfig {
         clock: Clock,
         accessTokenSessionValidator: AccessTokenSessionValidator,
     ): JwtDecoder = jwtDecoder(properties, clock, accessTokenSessionValidator, setOf(TokenType.ACCESS, TokenType.REGISTRATION))
+
+    /** Refresh Token 갱신과 로그아웃에서 본문으로 받은 Refresh Token만 허용합니다. 세션은 호출하는 UseCase가 확인합니다. */
+    @Bean
+    fun refreshJwtDecoder(
+        properties: AuthTokenProperties,
+        clock: Clock,
+        accessTokenSessionValidator: AccessTokenSessionValidator,
+    ): JwtDecoder = jwtDecoder(properties, clock, accessTokenSessionValidator, setOf(TokenType.REFRESH))
 
     private fun jwtDecoder(
         properties: AuthTokenProperties,

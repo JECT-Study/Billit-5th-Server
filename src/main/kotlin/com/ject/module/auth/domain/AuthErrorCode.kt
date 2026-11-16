@@ -8,6 +8,7 @@ enum class AuthErrorCode(
 ) : ErrorCode {
     SOCIAL_AUTHENTICATION_FAILED(401, "소셜 인증에 실패했습니다."),
     SOCIAL_PROVIDER_UNAVAILABLE(503, "소셜 로그인 제공자에 연결할 수 없습니다."),
+    REFRESH_TOKEN_INVALID(401, "Refresh Token이 유효하지 않습니다."),
     ;
 
     override val code: String = "AUTH_$name"

@@ -66,6 +66,8 @@ app:
   auth:
     jwt:
       secret: ${JWT_SECRET}
+    refresh-token:
+      retry-grace-period: 30s
     social:
       google:
         client-id: ${GOOGLE_CLIENT_ID}
