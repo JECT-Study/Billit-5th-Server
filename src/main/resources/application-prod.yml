@@ -87,6 +87,9 @@ app:
         apple-endpoint-required: true
     token-encryption:
       key: ${AUTH_TOKEN_ENCRYPTION_KEY}
+  member:
+    policy:
+      content-base-url: ${POLICY_CONTENT_BASE_URL}
 
 logging:
   structured:

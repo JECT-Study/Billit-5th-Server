@@ -179,6 +179,18 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - 교환 응답에 ID 토큰이 없거나 `sub`를 읽을 수 없으면 요청의 ID 토큰과 같은 사용자인지 확인할 수 없어 503 `AUTH_SOCIAL_PROVIDER_UNAVAILABLE`로 응답합니다.
 - 교환으로 받은 애플 Refresh Token은 탈퇴 시 연결 해제용으로 `apple_refresh_token`에 암호화해 회원당 하나만 저장합니다.
 
+## 가입 약관
+
+네 프로필의 `app.member.policy.content-base-url`에서 약관 전문을 제공하는 기본 주소를 설정합니다.
+
+| 환경변수 | local | test | dev, prod |
+| --- | --- | --- | --- |
+| `POLICY_CONTENT_BASE_URL` | `http://localhost:8080/terms` | 설정 파일의 테스트 전용 값 | 필수 |
+
+- 가입 정보 조회의 약관별 `contentUrl`은 `{기본 주소}/{약관 종류 소문자}/{버전}`입니다. 예: `https://example.com/terms/privacy/v1`
+- 값이 없거나 `http://`, `https://`로 시작하지 않으면 기동이 실패합니다.
+- 가입할 때 동의받는 약관은 이용약관(`TERMS`), 개인정보(`PRIVACY`), 마케팅 수신(`MARKETING`)이며, 종류별로 시행 시각이 지난 버전 중 가장 최근 버전을 사용합니다.
+
 ## 인증과 프론트 연동
 
 - 클라이언트가 전달한 `environment`로 서버 프로필이나 운영 자격증명을 선택하지 않습니다.

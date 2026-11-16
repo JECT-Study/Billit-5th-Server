@@ -87,6 +87,9 @@ app:
         apple-endpoint-required: true
     token-encryption:
       key: ${AUTH_TOKEN_ENCRYPTION_KEY:YmlsbGl0LWxvY2FsLW9ubHktdG9rZW4tZW5jLWtleSE=}
+  member:
+    policy:
+      content-base-url: ${POLICY_CONTENT_BASE_URL:http://localhost:8080/terms}
 
 logging:
   pattern:
