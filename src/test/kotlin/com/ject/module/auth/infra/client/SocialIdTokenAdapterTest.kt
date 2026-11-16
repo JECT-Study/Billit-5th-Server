@@ -14,12 +14,14 @@ import io.kotest.matchers.shouldBe
 import java.net.ServerSocket
 import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 
 class SocialIdTokenAdapterTest :
     FunSpec({
         lateinit var fixture: SocialIdTokenFixture
         lateinit var adapter: SocialIdTokenAdapter
-        val now = Instant.now()
+        val clock = Clock.fixed(Instant.parse("2026-11-15T00:00:00Z"), ZoneOffset.UTC)
+        val now = clock.instant()
 
         fun adapter(
             googleJwkSetUri: String,
@@ -29,11 +31,11 @@ class SocialIdTokenAdapterTest :
                 google = SocialLoginProperties.Google(clientId = GOOGLE_CLIENT_ID, jwkSetUri = googleJwkSetUri),
                 kakao = SocialLoginProperties.Kakao(nativeAppKey = KAKAO_APP_KEY, jwkSetUri = kakaoJwkSetUri),
             ),
-            Clock.systemUTC(),
+            clock,
         )
 
         beforeTest {
-            fixture = SocialIdTokenFixture()
+            fixture = SocialIdTokenFixture(clock)
             adapter = adapter(fixture.googleJwkSetUri, fixture.kakaoJwkSetUri)
         }
 

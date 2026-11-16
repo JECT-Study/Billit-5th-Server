@@ -11,6 +11,7 @@ import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
+import java.time.Clock
 import java.time.Instant
 import java.util.Date
 import java.util.concurrent.atomic.AtomicBoolean
@@ -19,9 +20,13 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * 구글과 카카오 대신 자체 서명 키로 ID 토큰을 만들고 JWKS를 제공합니다. 실제 제공자를 호출하지 않습니다.
  *
+ * 발급 시각(iat)은 [clock] 기준 10초 전입니다.
+ *
  * JWKS 주소는 [googleJwkSetUri], [kakaoJwkSetUri]이며 사용 후 [close]로 서버를 닫습니다.
  */
-class SocialIdTokenFixture : AutoCloseable {
+class SocialIdTokenFixture(
+    private val clock: Clock = Clock.systemUTC(),
+) : AutoCloseable {
     val signingKey: RSAKey = RSAKeyGenerator(2048).keyID("test-key").generate()
 
     /** JWKS 요청 수입니다. */
@@ -64,7 +69,7 @@ class SocialIdTokenFixture : AutoCloseable {
                 .issuer(issuer)
                 .audience(audience)
                 .subject(subject)
-                .issueTime(Date.from(Instant.now().minusSeconds(10)))
+                .issueTime(Date.from(clock.instant().minusSeconds(10)))
                 .expirationTime(expiresAt?.let(Date::from))
                 .build()
         val header =

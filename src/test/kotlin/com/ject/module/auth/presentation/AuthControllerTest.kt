@@ -3,6 +3,7 @@ package com.ject.module.auth.presentation
 import com.ject.support.IntegrationTestSupport
 import com.ject.support.SocialIdTokenFixture
 import com.ject.support.SocialIdTokenFixture.Companion.GOOGLE_ISSUER
+import com.nimbusds.jwt.SignedJWT
 import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldNotBeBlank
@@ -65,11 +66,13 @@ class AuthControllerTest : IntegrationTestSupport() {
             test("가입을 마친 구글 회원은 200과 AUTHENTICATED, Access Token과 Refresh Token만 반환한다") {
                 // given
                 val providerUserId = newProviderUserId()
-                jdbc.update(
-                    "INSERT INTO member (social_provider, social_provider_user_id, status, created_at, updated_at) " +
-                        "VALUES ('GOOGLE', ?, 'ACTIVE', now(), now())",
-                    providerUserId,
-                )
+                val memberId =
+                    jdbc.queryForObject(
+                        "INSERT INTO member (social_provider, social_provider_user_id, status, created_at, updated_at) " +
+                            "VALUES ('GOOGLE', ?, 'ACTIVE', now(), now()) RETURNING id",
+                        Long::class.java,
+                        providerUserId,
+                    )
                 val idToken = fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, providerUserId, Instant.now().plusSeconds(600))
 
                 // when
@@ -77,10 +80,16 @@ class AuthControllerTest : IntegrationTestSupport() {
 
                 // then
                 val data = body(response)["data"] as Map<*, *>
+                val accessClaims = SignedJWT.parse(data["accessToken"] as String).jwtClaimsSet
+                val refreshClaims = SignedJWT.parse(data["refreshToken"] as String).jwtClaimsSet
                 assertSoftly {
                     response.statusCode() shouldBe 200
                     data.keys shouldBe setOf("status", "accessToken", "refreshToken")
                     data["status"] shouldBe "AUTHENTICATED"
+                    accessClaims.subject shouldBe memberId.toString()
+                    accessClaims.getStringClaim("token_type") shouldBe "ACCESS"
+                    refreshClaims.subject shouldBe memberId.toString()
+                    refreshClaims.getStringClaim("token_type") shouldBe "REFRESH"
                 }
             }
 
