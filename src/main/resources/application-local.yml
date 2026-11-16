@@ -66,6 +66,13 @@ app:
   auth:
     jwt:
       secret: ${JWT_SECRET:YmlsbGl0LWxvY2FsLW9ubHktand0LXNpZ25pbmcta2V5LWRvLW5vdC11c2Utb24tZGV2LW9yLXByb2QtMDAwMA==}
+    social:
+      google:
+        client-id: ${GOOGLE_CLIENT_ID:local-google-client-id}
+        jwk-set-uri: https://www.googleapis.com/oauth2/v3/certs
+      kakao:
+        native-app-key: ${KAKAO_NATIVE_APP_KEY:local-kakao-native-app-key}
+        jwk-set-uri: https://kauth.kakao.com/.well-known/jwks.json
 
 logging:
   pattern:
