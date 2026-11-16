@@ -134,7 +134,7 @@ paths:
                       description: 정산 시 번거로운 점을 최대 2개 선택합니다. 전체 선택지 코드는 논의 중입니다.
                     otherSettlementPainPoint:
                       type: string
-                      description: settlementPainPoints에 OTHER가 있을 때만 보낼 수 있습니다.
+                      description: settlementPainPoints에 ETC가 있을 때만 보낼 수 있습니다.
             examples:
               request:
                 summary: 닉네임과 필수 약관 동의로 가입 완료
