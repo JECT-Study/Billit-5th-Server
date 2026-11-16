@@ -35,16 +35,21 @@ class AppleRefreshTokenRepositoryAdapterTest : IntegrationTestSupport() {
             val executor = Executors.newFixedThreadPool(tokens.size)
 
             // when
-            val futures =
-                tokens.map { token ->
-                    executor.submit {
-                        start.await()
-                        appleRefreshTokenRepository.save(memberId, token)
+            try {
+                val futures =
+                    tokens.map { token ->
+                        executor.submit {
+                            start.await()
+                            appleRefreshTokenRepository.save(memberId, token)
+                        }
                     }
-                }
-            start.countDown()
-            futures.forEach { it.get(10, TimeUnit.SECONDS) }
-            executor.shutdown()
+                start.countDown()
+                futures.forEach { it.get(10, TimeUnit.SECONDS) }
+            } finally {
+                // 실패해도 남은 저장이 afterEach의 회원 삭제와 겹치지 않게 끝날 때까지 기다립니다.
+                executor.shutdownNow()
+                executor.awaitTermination(10, TimeUnit.SECONDS)
+            }
 
             // then
             val stored = appleRefreshTokenRepository.find(memberId).shouldBeInstanceOf<StoredAppleRefreshToken.Decrypted>()

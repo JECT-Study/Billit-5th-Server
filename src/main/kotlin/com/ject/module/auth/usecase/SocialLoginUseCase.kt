@@ -94,30 +94,31 @@ class SocialLoginUseCase(
      * 소셜 계정의 회원을 찾고, 없으면 가입 중 회원으로 만듭니다.
      *
      * 가입 중 회원에게 저장된 표시 이름이 없고 이번에 받았으면 채웁니다. 이미 있으면 덮어쓰지 않습니다.
+     * 같은 소셜 계정의 최초 로그인이 동시에 들어오면 유니크 제약으로 한 건만 저장되고, 나머지는 저장된 회원을 다시 조회해 같은 방식으로 이름을 채웁니다.
      */
     private fun findOrCreateMember(
         provider: AuthProvider,
         identity: SocialIdentity,
     ): SocialMemberResult {
-        val member = memberRepository.findBySocialAccount(provider, identity.subject) ?: return createPendingMember(provider, identity)
+        val member =
+            memberRepository.findBySocialAccount(provider, identity.subject)
+                ?: createPendingMember(provider, identity)?.let { return it }
+                ?: checkNotNull(memberRepository.findBySocialAccount(provider, identity.subject)) {
+                    "소셜 계정 중복으로 저장하지 못했지만 회원을 찾지 못했습니다."
+                }
         if (member.status == MemberStatus.PENDING && member.socialDisplayName == null && identity.displayName != null) {
             memberRepository.fillSocialDisplayNameIfAbsent(member.memberId, identity.displayName)
         }
         return member
     }
 
-    /** 같은 소셜 계정의 최초 로그인이 동시에 들어오면 유니크 제약으로 한 건만 저장되고, 나머지는 저장된 회원을 다시 조회합니다. */
+    /** 가입 중 회원을 저장합니다. 같은 소셜 계정이 이미 저장돼 있으면 `null`을 반환합니다. */
     private fun createPendingMember(
         provider: AuthProvider,
         identity: SocialIdentity,
-    ): SocialMemberResult {
-        val memberId = memberRepository.createPendingMember(provider, identity.subject, identity.displayName)
-        if (memberId != null) {
-            return SocialMemberResult(memberId = memberId, status = MemberStatus.PENDING, socialDisplayName = identity.displayName)
-        }
-        return checkNotNull(memberRepository.findBySocialAccount(provider, identity.subject)) {
-            "소셜 계정 중복으로 저장하지 못했지만 회원을 찾지 못했습니다."
-        }
+    ): SocialMemberResult? {
+        val memberId = memberRepository.createPendingMember(provider, identity.subject, identity.displayName) ?: return null
+        return SocialMemberResult(memberId = memberId, status = MemberStatus.PENDING, socialDisplayName = identity.displayName)
     }
 
     companion object {
