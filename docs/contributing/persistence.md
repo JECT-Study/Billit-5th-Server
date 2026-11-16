@@ -167,6 +167,15 @@ JPA는 SQL 실행과 제약 위반이 flush나 commit 시점에 발생할 수 �
 
 DB 롤백이 외부 API 호출이나 다른 저장소의 변경까지 되돌리지는 않습니다. 트랜잭션 완료 전후의 부수 효과와 실패 결과를 구분합니다. 외부 부수 효과가 있는 유스케이스 전체를 멱등성 검토 없이 자동 재시도하지 않습니다.
 
+### 예외: 실패 응답과 함께 남겨야 하는 변경
+
+업무 실패로 응답하면서도 DB 변경은 반드시 남겨야 하는 경우에만 UseCase가 아닌 단일 조건부 UPDATE 메서드에 `@Transactional`을 둡니다. UseCase에 트랜잭션을 두면 실패 응답을 위해 던진 예외가 그 변경까지 롤백합니다. 이 경우 각 UPDATE는 조건부 UPDATE 한 번으로 끝나야 하며, 여러 변경을 하나로 묶어야 하는 흐름에는 쓰지 않습니다.
+
+| 위치 | 남겨야 하는 변경 | 이유 |
+| --- | --- | --- |
+| [AuthSessionJpaRepository](../../src/main/kotlin/com/ject/module/auth/infra/persistence/jpa/AuthSessionJpaRepository.kt)의 `revokeIfActive` | 이미 사용된 Refresh Token이 다시 제출됐을 때의 로그인 세션 종료 | 401로 응답하면서도 세션 종료는 반영돼야 탈취된 토큰을 막을 수 있습니다. |
+| 같은 파일의 `rotateRefreshToken` | Refresh Token 회전 | 위 이유로 [RefreshTokensUseCase](../../src/main/kotlin/com/ject/module/auth/usecase/RefreshTokensUseCase.kt)에 트랜잭션이 없어, 회전도 조건부 UPDATE 한 번을 자체 트랜잭션으로 커밋합니다. |
+
 ## 동시성과 제약조건
 
 사전 조회는 경쟁 요청 사이의 중복이나 상태 변경을 막지 못합니다. 업무 규칙에 따라 DB 제약조건, 조건부 UPDATE, 낙관적 잠금이나 비관적 잠금으로 변경을 보호합니다. 적용 방식은 충돌 시 업무 결과와 재시도 조건을 확인해 결정합니다.
