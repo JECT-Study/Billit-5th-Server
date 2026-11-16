@@ -2,40 +2,65 @@ package com.ject.module.auth.infra.client
 
 import com.ject.global.error.BusinessException
 import com.ject.module.auth.domain.AuthErrorCode
+import com.ject.module.auth.domain.SocialIdentity
 import com.ject.module.auth.infra.SocialLoginProperties
 import com.ject.module.member.domain.AuthProvider
 import com.ject.support.SocialIdTokenFixture
+import com.ject.support.SocialIdTokenFixture.Companion.APPLE_ISSUER
 import com.ject.support.SocialIdTokenFixture.Companion.GOOGLE_ISSUER
 import com.ject.support.SocialIdTokenFixture.Companion.KAKAO_ISSUER
+import com.nimbusds.jose.JWSAlgorithm
+import com.nimbusds.jose.JWSHeader
+import com.nimbusds.jose.crypto.MACSigner
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator
+import com.nimbusds.jwt.JWTClaimsSet
+import com.nimbusds.jwt.PlainJWT
+import com.nimbusds.jwt.SignedJWT
+import io.kotest.assertions.assertSoftly
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.FunSpec
 import io.kotest.matchers.shouldBe
 import java.net.ServerSocket
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
+import java.util.Date
 
 class SocialIdTokenAdapterTest :
     FunSpec({
         lateinit var fixture: SocialIdTokenFixture
         lateinit var adapter: SocialIdTokenAdapter
-        val clock = Clock.fixed(Instant.parse("2026-11-15T00:00:00Z"), ZoneOffset.UTC)
-        val now = clock.instant()
+        val fixedClock = Clock.fixed(Instant.parse("2026-11-15T00:00:00Z"), ZoneOffset.UTC)
+        val now = fixedClock.instant()
 
         fun adapter(
             googleJwkSetUri: String,
             kakaoJwkSetUri: String,
+            clock: Clock = fixedClock,
         ) = SocialIdTokenAdapter(
             SocialLoginProperties(
                 google = SocialLoginProperties.Google(clientId = GOOGLE_CLIENT_ID, jwkSetUri = googleJwkSetUri),
                 kakao = SocialLoginProperties.Kakao(nativeAppKey = KAKAO_APP_KEY, jwkSetUri = kakaoJwkSetUri),
+                apple =
+                    SocialLoginProperties.Apple(
+                        clientId = APPLE_CLIENT_ID,
+                        teamId = "test-apple-team-id",
+                        keyId = "test-apple-key-id",
+                        privateKeyBase64 = "",
+                        privateKeyRequired = false,
+                        jwkSetUri = fixture.appleJwkSetUri,
+                        tokenUri = "http://127.0.0.1/apple/token",
+                        revokeUri = "http://127.0.0.1/apple/revoke",
+                        appleEndpointRequired = false,
+                    ),
             ),
             clock,
         )
 
         beforeEach {
-            fixture = SocialIdTokenFixture(clock)
+            fixture = SocialIdTokenFixture(fixedClock)
             adapter = adapter(fixture.googleJwkSetUri, fixture.kakaoJwkSetUri)
         }
 
@@ -46,10 +71,66 @@ class SocialIdTokenAdapterTest :
             val idToken = fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "google-user-1", now.plusSeconds(600))
 
             // when
-            val subject = adapter.verify(AuthProvider.GOOGLE, idToken)
+            val identity = adapter.verify(AuthProvider.GOOGLE, idToken)
 
             // then
-            subject shouldBe "google-user-1"
+            identity shouldBe SocialIdentity(subject = "google-user-1", displayName = null)
+        }
+
+        test("구글 ID 토큰의 name과 카카오 ID 토큰의 nickname을 표시 이름으로 반환한다") {
+            // given
+            val googleIdToken =
+                fixture.idToken(
+                    GOOGLE_ISSUER,
+                    GOOGLE_CLIENT_ID,
+                    "google-user-1",
+                    now.plusSeconds(600),
+                    extraClaims = mapOf("name" to "홍길동"),
+                )
+            val kakaoIdToken =
+                fixture.idToken(KAKAO_ISSUER, KAKAO_APP_KEY, "1234567890", now.plusSeconds(600), extraClaims = mapOf("nickname" to "길동"))
+
+            // when
+            val identities = listOf(adapter.verify(AuthProvider.GOOGLE, googleIdToken), adapter.verify(AuthProvider.KAKAO, kakaoIdToken))
+
+            // then
+            identities.map { it.displayName } shouldBe listOf("홍길동", "길동")
+        }
+
+        test("표시 이름 클레임이 공백이면 표시 이름 없이 반환한다") {
+            // given
+            val idToken =
+                fixture.idToken(
+                    GOOGLE_ISSUER,
+                    GOOGLE_CLIENT_ID,
+                    "google-user-1",
+                    now.plusSeconds(600),
+                    extraClaims =
+                        mapOf("name" to "  "),
+                )
+
+            // when
+            val identity = adapter.verify(AuthProvider.GOOGLE, idToken)
+
+            // then
+            identity.displayName shouldBe null
+        }
+
+        test("aud 배열에 클라이언트 ID가 포함되어 있으면 허용한다") {
+            // given
+            val idToken =
+                fixture.idTokenWithAudiences(
+                    GOOGLE_ISSUER,
+                    listOf("other-client-id", GOOGLE_CLIENT_ID),
+                    "google-user-1",
+                    now.plusSeconds(600),
+                )
+
+            // when
+            val identity = adapter.verify(AuthProvider.GOOGLE, idToken)
+
+            // then
+            identity.subject shouldBe "google-user-1"
         }
 
         test("구글 ID 토큰의 iss가 스킴 없는 accounts.google.com이어도 허용한다") {
@@ -57,10 +138,10 @@ class SocialIdTokenAdapterTest :
             val idToken = fixture.idToken("accounts.google.com", GOOGLE_CLIENT_ID, "google-user-1", now.plusSeconds(600))
 
             // when
-            val subject = adapter.verify(AuthProvider.GOOGLE, idToken)
+            val identity = adapter.verify(AuthProvider.GOOGLE, idToken)
 
             // then
-            subject shouldBe "google-user-1"
+            identity.subject shouldBe "google-user-1"
         }
 
         test("카카오 ID 토큰의 서명, iss, aud, exp가 유효하면 외부 사용자 ID를 반환한다") {
@@ -68,10 +149,44 @@ class SocialIdTokenAdapterTest :
             val idToken = fixture.idToken(KAKAO_ISSUER, KAKAO_APP_KEY, "1234567890", now.plusSeconds(600))
 
             // when
-            val subject = adapter.verify(AuthProvider.KAKAO, idToken)
+            val identity = adapter.verify(AuthProvider.KAKAO, idToken)
 
             // then
-            subject shouldBe "1234567890"
+            identity shouldBe SocialIdentity(subject = "1234567890", displayName = null)
+        }
+
+        test("애플 ID 토큰의 서명, iss, aud, exp가 유효하면 표시 이름 없이 외부 사용자 ID를 반환한다") {
+            // given
+            val idToken =
+                fixture.idToken(
+                    APPLE_ISSUER,
+                    APPLE_CLIENT_ID,
+                    "001234.apple.user",
+                    now.plusSeconds(600),
+                    extraClaims =
+                        mapOf("name" to "무시할 이름"),
+                )
+
+            // when
+            val identity = adapter.verify(AuthProvider.APPLE, idToken)
+
+            // then
+            identity shouldBe SocialIdentity(subject = "001234.apple.user", displayName = null)
+        }
+
+        test("애플 ID 토큰의 aud가 앱 번들 ID가 아니거나 다른 제공자의 토큰이면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED로 실패한다") {
+            // given
+            val idTokens =
+                listOf(
+                    fixture.idToken(APPLE_ISSUER, "other.bundle.id", "u", now.plusSeconds(600)),
+                    fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "u", now.plusSeconds(600)),
+                )
+
+            // when
+            val errorCodes = idTokens.map { shouldThrow<BusinessException> { adapter.verify(AuthProvider.APPLE, it) }.errorCode }
+
+            // then
+            errorCodes shouldBe List(2) { AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED }
         }
 
         context("ID 토큰이 유효하지 않으면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED로 실패한다") {
@@ -85,6 +200,17 @@ class SocialIdTokenAdapterTest :
                     "exp 없음" to { fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "u", null) },
                     "sub 없음" to { fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, null, now.plusSeconds(600)) },
                     "JWT 형식이 아님" to { "not-a-jwt" },
+                    "HS256으로 서명" to { hs256IdToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "u", now.plusSeconds(600)) },
+                    "alg가 none인 서명 없는 토큰" to { unsignedIdToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "u", now.plusSeconds(600)) },
+                    "aud 배열에 클라이언트 ID가 없음" to {
+                        fixture.idTokenWithAudiences(
+                            GOOGLE_ISSUER,
+                            listOf("other-client-id", "another-client-id"),
+                            "u",
+                            now.plusSeconds(600),
+                        )
+                    },
+                    "iss 끝에 /가 붙음" to { fixture.idToken("$GOOGLE_ISSUER/", GOOGLE_CLIENT_ID, "u", now.plusSeconds(600)) },
                 )
             for ((case, idToken) in invalidTokens) {
                 test(case) {
@@ -103,6 +229,28 @@ class SocialIdTokenAdapterTest :
         test("구글 ID 토큰을 카카오 로그인으로 보내면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED로 실패한다") {
             // given
             val idToken = fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "google-user-1", now.plusSeconds(600))
+
+            // when
+            val failure = shouldThrow<BusinessException> { adapter.verify(AuthProvider.KAKAO, idToken) }
+
+            // then
+            failure.errorCode shouldBe AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED
+        }
+
+        test("카카오 ID 토큰을 구글 로그인으로 보내면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED로 실패한다") {
+            // given
+            val idToken = fixture.idToken(KAKAO_ISSUER, KAKAO_APP_KEY, "1234567890", now.plusSeconds(600))
+
+            // when
+            val failure = shouldThrow<BusinessException> { adapter.verify(AuthProvider.GOOGLE, idToken) }
+
+            // then
+            failure.errorCode shouldBe AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED
+        }
+
+        test("카카오 ID 토큰의 iss 끝에 /가 붙으면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED로 실패한다") {
+            // given
+            val idToken = fixture.idToken("$KAKAO_ISSUER/", KAKAO_APP_KEY, "1234567890", now.plusSeconds(600))
 
             // when
             val failure = shouldThrow<BusinessException> { adapter.verify(AuthProvider.KAKAO, idToken) }
@@ -144,7 +292,7 @@ class SocialIdTokenAdapterTest :
             val subjects = idTokens.map { adapter.verify(AuthProvider.GOOGLE, it) }
 
             // then
-            subjects shouldBe listOf("user-1", "user-2", "user-3")
+            subjects.map { it.subject } shouldBe listOf("user-1", "user-2", "user-3")
             fixture.jwksRequestCount.get() shouldBe 1
         }
 
@@ -160,9 +308,191 @@ class SocialIdTokenAdapterTest :
             errorCodes.toSet() shouldBe setOf(AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED)
             fixture.jwksRequestCount.get() shouldBe 2
         }
+
+        test("키를 받은 적 없이 제공자 JWKS 장애가 이어지면 재조회 제한에 걸려도 모든 요청이 503 AUTH_SOCIAL_PROVIDER_UNAVAILABLE로 실패한다") {
+            // given
+            fixture.jwksUnavailable.set(true)
+            val idTokens = (1..5).map { fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-$it", now.plusSeconds(600)) }
+
+            // when
+            val errorCodes = idTokens.map { shouldThrow<BusinessException> { adapter.verify(AuthProvider.GOOGLE, it) }.errorCode }
+
+            // then
+            errorCodes shouldBe List(5) { AuthErrorCode.SOCIAL_PROVIDER_UNAVAILABLE }
+        }
+
+        test("키를 받아 둔 뒤 제공자 JWKS 장애가 나도 받아 둔 키의 유효한 토큰은 통과하고 키를 확인할 수 없는 토큰은 503으로 실패한다") {
+            // given
+            adapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-0", now.plusSeconds(600)))
+            fixture.jwksUnavailable.set(true)
+            val unknownKey = RSAKeyGenerator(2048).keyID("rotated-key").generate()
+            val rotatedKeyTokens = (1..4).map { fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "u", now.plusSeconds(600), unknownKey) }
+            val validTokens = (1..4).map { fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-$it", now.plusSeconds(600)) }
+
+            // when
+            val rotatedKeyErrorCodes =
+                rotatedKeyTokens.map { shouldThrow<BusinessException> { adapter.verify(AuthProvider.GOOGLE, it) }.errorCode }
+            val subjects = validTokens.map { adapter.verify(AuthProvider.GOOGLE, it).subject }
+
+            // then
+            assertSoftly {
+                rotatedKeyErrorCodes shouldBe List(4) { AuthErrorCode.SOCIAL_PROVIDER_UNAVAILABLE }
+                subjects shouldBe listOf("user-1", "user-2", "user-3", "user-4")
+            }
+        }
+
+        test("모르는 kid의 토큰이 재조회 한도를 채워도 캐시 만료 전후로 받아 둔 키의 토큰은 통과하고 JWKS 요청은 30초에 두 번으로 제한된다") {
+            // given
+            val clock = MutableClock(now)
+            val clockedAdapter = adapter(fixture.googleJwkSetUri, fixture.kakaoJwkSetUri, clock)
+            val unknownKey = RSAKeyGenerator(2048).keyID("attacker-key").generate()
+            val expiresAt = now.plus(Duration.ofHours(1))
+            clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-0", expiresAt))
+
+            // when
+            val results =
+                listOf(Duration.ZERO, Duration.ofMinutes(10).plusSeconds(1)).map { elapsed ->
+                    clock.advance(elapsed)
+                    val requestCountBefore = fixture.jwksRequestCount.get()
+                    val unknownKeyErrorCodes =
+                        (1..5).map {
+                            shouldThrow<BusinessException> {
+                                clockedAdapter.verify(
+                                    AuthProvider.GOOGLE,
+                                    fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "u", expiresAt, unknownKey),
+                                )
+                            }.errorCode
+                        }
+                    val subject =
+                        clockedAdapter
+                            .verify(
+                                AuthProvider.GOOGLE,
+                                fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-1", expiresAt),
+                            ).subject
+                    Triple(unknownKeyErrorCodes, subject, fixture.jwksRequestCount.get() - requestCountBefore)
+                }
+
+            // then
+            assertSoftly {
+                results.map { it.first } shouldBe List(2) { List(5) { AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED } }
+                results.map { it.second } shouldBe List(2) { "user-1" }
+                // 첫 구간은 처음 키를 받은 요청과 같은 30초 안이라 한 번, 캐시 만료 뒤에는 새 30초 구간이라 두 번까지만 가져온다.
+                results.map { it.third } shouldBe listOf(1, 2)
+            }
+        }
+
+        test("제공자 JWKS 장애가 이어지면 마지막으로 받은 키는 마지막 조회 성공 후 1시간 안에서만 쓰고 그 뒤에는 503으로 실패한다") {
+            // given
+            val clock = MutableClock(now)
+            val clockedAdapter = adapter(fixture.googleJwkSetUri, fixture.kakaoJwkSetUri, clock)
+            val expiresAt = now.plus(Duration.ofHours(2))
+            clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-0", expiresAt))
+            fixture.jwksUnavailable.set(true)
+
+            // when
+            clock.advance(Duration.ofMinutes(49))
+            val subjectWithinWindow =
+                clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-1", expiresAt)).subject
+            clock.advance(Duration.ofMinutes(11).plusSeconds(1))
+            val failure =
+                shouldThrow<BusinessException> {
+                    clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-2", expiresAt))
+                }
+
+            // then
+            assertSoftly {
+                subjectWithinWindow shouldBe "user-1"
+                failure.errorCode shouldBe AuthErrorCode.SOCIAL_PROVIDER_UNAVAILABLE
+            }
+        }
+
+        test("제공자 JWKS 장애가 끝나고 재조회 간격이 지나면 받은 키의 토큰은 통과하고 모르는 kid의 토큰은 다시 401로 실패한다") {
+            // given
+            val clock = MutableClock(now)
+            val clockedAdapter = adapter(fixture.googleJwkSetUri, fixture.kakaoJwkSetUri, clock)
+            val expiresAt = now.plus(Duration.ofHours(1))
+            val unknownKey = RSAKeyGenerator(2048).keyID("unknown-key").generate()
+            fixture.jwksUnavailable.set(true)
+            val outageErrorCodes =
+                (1..3).map {
+                    shouldThrow<BusinessException> {
+                        clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-$it", expiresAt))
+                    }.errorCode
+                }
+            fixture.jwksUnavailable.set(false)
+            clock.advance(Duration.ofSeconds(31))
+
+            // when
+            val subject =
+                clockedAdapter
+                    .verify(
+                        AuthProvider.GOOGLE,
+                        fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-4", expiresAt),
+                    ).subject
+            val unknownKeyFailure =
+                shouldThrow<BusinessException> {
+                    clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "u", expiresAt, unknownKey))
+                }
+
+            // then
+            assertSoftly {
+                outageErrorCodes shouldBe List(3) { AuthErrorCode.SOCIAL_PROVIDER_UNAVAILABLE }
+                subject shouldBe "user-4"
+                unknownKeyFailure.errorCode shouldBe AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED
+            }
+        }
     }) {
+    /** 캐시 만료와 재조회 간격을 시험하려고 테스트에서 앞으로 돌리는 시계입니다. */
+    private class MutableClock(
+        private var instant: Instant,
+    ) : Clock() {
+        fun advance(duration: Duration) {
+            instant = instant.plus(duration)
+        }
+
+        override fun instant(): Instant = instant
+
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+
+        override fun withZone(zone: ZoneId): Clock = this
+    }
+
     companion object {
+        private fun hs256IdToken(
+            issuer: String,
+            audience: String,
+            subject: String,
+            expiresAt: Instant,
+        ): String {
+            val token =
+                SignedJWT(JWSHeader.Builder(JWSAlgorithm.HS256).keyID("test-key").build(), claims(issuer, audience, subject, expiresAt))
+            token.sign(MACSigner(ByteArray(32) { it.toByte() }))
+            return token.serialize()
+        }
+
+        private fun unsignedIdToken(
+            issuer: String,
+            audience: String,
+            subject: String,
+            expiresAt: Instant,
+        ): String = PlainJWT(claims(issuer, audience, subject, expiresAt)).serialize()
+
+        private fun claims(
+            issuer: String,
+            audience: String,
+            subject: String,
+            expiresAt: Instant,
+        ): JWTClaimsSet =
+            JWTClaimsSet
+                .Builder()
+                .issuer(issuer)
+                .audience(audience)
+                .subject(subject)
+                .expirationTime(Date.from(expiresAt))
+                .build()
+
         private const val GOOGLE_CLIENT_ID = "test-google-client-id"
         private const val KAKAO_APP_KEY = "test-kakao-native-app-key"
+        private const val APPLE_CLIENT_ID = "app.billit.mobile.test"
     }
 }

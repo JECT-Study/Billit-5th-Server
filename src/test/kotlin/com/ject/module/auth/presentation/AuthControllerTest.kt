@@ -1,6 +1,7 @@
 package com.ject.module.auth.presentation
 
 import com.ject.module.auth.implement.AuthTokenCreator
+import com.ject.support.AppleAuthServerFixture
 import com.ject.support.IntegrationTestSupport
 import com.ject.support.SocialIdTokenFixture
 import com.ject.support.SocialIdTokenFixture.Companion.GOOGLE_ISSUER
@@ -42,6 +43,10 @@ class AuthControllerTest : IntegrationTestSupport() {
             providerUserIds.forEach { providerUserId ->
                 jdbc.update(
                     "DELETE FROM auth_session WHERE member_id IN (SELECT id FROM member WHERE social_provider_user_id = ?)",
+                    providerUserId,
+                )
+                jdbc.update(
+                    "DELETE FROM apple_refresh_token WHERE member_id IN (SELECT id FROM member WHERE social_provider_user_id = ?)",
                     providerUserId,
                 )
                 jdbc.update("DELETE FROM member WHERE social_provider_user_id = ?", providerUserId)
@@ -134,6 +139,67 @@ class AuthControllerTest : IntegrationTestSupport() {
                 }
             }
 
+            test("처음 로그인한 애플 계정은 인가 코드를 교환하고 200과 REGISTRATION_REQUIRED, 가입 전용 토큰만 반환한다") {
+                // given
+                val providerUserId = newProviderUserId()
+                val idToken = fixture.idToken(APPLE_ISSUER, APPLE_CLIENT_ID, providerUserId, Instant.now().plusSeconds(600))
+                appleServer.respond(200, appleServer.tokenResponse(refreshToken = "apple-refresh-token", idToken = idToken))
+                appleServer.requests.clear()
+
+                // when
+                val response =
+                    post(
+                        SOCIAL_LOGIN_PATH,
+                        """{"provider":"APPLE","idToken":"$idToken","authorizationCode":"authorization-code","fullName":"홍길동"}""",
+                    )
+
+                // then
+                val data = body(response)["data"] as Map<*, *>
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    data.keys shouldBe setOf("status", "registrationToken")
+                    data["status"] shouldBe "REGISTRATION_REQUIRED"
+                    appleServer.requests.map { it.form["code"] } shouldBe listOf("authorization-code")
+                    countAppleRefreshTokens(providerUserId) shouldBe 1
+                }
+            }
+
+            test("이미 사용한 애플 인가 코드로 다시 요청하면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED를 반환하고 회원을 만들지 않는다") {
+                // given
+                val providerUserId = newProviderUserId()
+                val idToken = fixture.idToken(APPLE_ISSUER, APPLE_CLIENT_ID, providerUserId, Instant.now().plusSeconds(600))
+                appleServer.respond(400, """{"error":"invalid_grant","error_description":"The code has already been used."}""")
+
+                // when
+                val response =
+                    post(SOCIAL_LOGIN_PATH, """{"provider":"APPLE","idToken":"$idToken","authorizationCode":"used-code"}""")
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 401
+                    body(response)["code"] shouldBe "AUTH_SOCIAL_AUTHENTICATION_FAILED"
+                    countMembers(providerUserId) shouldBe 0
+                }
+            }
+
+            test("애플 토큰 API가 장애이면 503 AUTH_SOCIAL_PROVIDER_UNAVAILABLE을 반환하고 회원을 만들지 않는다") {
+                // given
+                val providerUserId = newProviderUserId()
+                val idToken = fixture.idToken(APPLE_ISSUER, APPLE_CLIENT_ID, providerUserId, Instant.now().plusSeconds(600))
+                appleServer.respond(500, "")
+
+                // when
+                val response =
+                    post(SOCIAL_LOGIN_PATH, """{"provider":"APPLE","idToken":"$idToken","authorizationCode":"authorization-code"}""")
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 503
+                    body(response)["code"] shouldBe "AUTH_SOCIAL_PROVIDER_UNAVAILABLE"
+                    countMembers(providerUserId) shouldBe 0
+                }
+            }
+
             val invalidBodies =
                 mapOf(
                     "provider 누락" to """{"idToken":"token"}""",
@@ -142,7 +208,14 @@ class AuthControllerTest : IntegrationTestSupport() {
                     "provider가 null" to """{"provider":null,"idToken":"token"}""",
                     "지원하지 않는 provider" to """{"provider":"NAVER","idToken":"token"}""",
                     "provider가 숫자" to """{"provider":0,"idToken":"token"}""",
-                    "인가 코드가 필요한 APPLE" to """{"provider":"APPLE","idToken":"token"}""",
+                    "APPLE인데 authorizationCode 누락" to """{"provider":"APPLE","idToken":"token"}""",
+                    "APPLE인데 authorizationCode가 null" to """{"provider":"APPLE","idToken":"token","authorizationCode":null}""",
+                    "APPLE의 authorizationCode가 공백" to """{"provider":"APPLE","idToken":"token","authorizationCode":" "}""",
+                    "APPLE의 fullName이 공백" to """{"provider":"APPLE","idToken":"token","authorizationCode":"code","fullName":" "}""",
+                    "APPLE의 fullName이 100자 초과" to
+                        """{"provider":"APPLE","idToken":"token","authorizationCode":"code","fullName":"${"가".repeat(101)}"}""",
+                    "GOOGLE에 authorizationCode" to """{"provider":"GOOGLE","idToken":"token","authorizationCode":"code"}""",
+                    "KAKAO에 fullName" to """{"provider":"KAKAO","idToken":"token","fullName":"name"}""",
                     "정의하지 않은 필드" to """{"provider":"GOOGLE","idToken":"token","nonce":"n"}""",
                     "JSON이 아님" to "provider=GOOGLE",
                 )
@@ -249,6 +322,26 @@ class AuthControllerTest : IntegrationTestSupport() {
                 }
             }
 
+            test("헤더의 Access Token과 본문의 Refresh Token이 함께 오면 헤더의 세션만 종료한다") {
+                // given
+                val memberId = createActiveMember()
+                val headerSession = authTokenCreator.createMemberTokens(memberId)
+                val bodySession = authTokenCreator.createMemberTokens(memberId)
+
+                // when
+                val response =
+                    post(LOGOUT_PATH, """{"refreshToken":"${bodySession.refreshToken}"}""", accessToken = headerSession.accessToken)
+
+                // then
+                val headerRefresh = post(TOKEN_REFRESH_PATH, """{"refreshToken":"${headerSession.refreshToken}"}""")
+                val bodyRefresh = post(TOKEN_REFRESH_PATH, """{"refreshToken":"${bodySession.refreshToken}"}""")
+                assertSoftly {
+                    response.statusCode() shouldBe 204
+                    headerRefresh.statusCode() shouldBe 401
+                    bodyRefresh.statusCode() shouldBe 200
+                }
+            }
+
             test("로그아웃해도 같은 회원의 다른 세션은 유지한다") {
                 // given
                 val memberId = createActiveMember()
@@ -324,6 +417,15 @@ class AuthControllerTest : IntegrationTestSupport() {
             ),
         )
 
+    private fun countAppleRefreshTokens(providerUserId: String): Int =
+        checkNotNull(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM apple_refresh_token WHERE member_id IN (SELECT id FROM member WHERE social_provider_user_id = ?)",
+                Int::class.java,
+                providerUserId,
+            ),
+        )
+
     private fun countMembers(providerUserId: String): Int =
         checkNotNull(jdbc.queryForObject("SELECT count(*) FROM member WHERE social_provider_user_id = ?", Int::class.java, providerUserId))
 
@@ -355,8 +457,11 @@ class AuthControllerTest : IntegrationTestSupport() {
         private const val GOOGLE_CLIENT_ID = "test-google-client-id"
         private const val KAKAO_APP_KEY = "test-kakao-native-app-key"
         private const val KAKAO_ISSUER = SocialIdTokenFixture.KAKAO_ISSUER
+        private const val APPLE_ISSUER = SocialIdTokenFixture.APPLE_ISSUER
+        private const val APPLE_CLIENT_ID = "test-apple-client-id"
 
         private val fixture = SocialIdTokenFixture()
+        private val appleServer = AppleAuthServerFixture()
 
         @DynamicPropertySource
         @JvmStatic
@@ -365,6 +470,10 @@ class AuthControllerTest : IntegrationTestSupport() {
             // 카카오는 JWKS에 연결할 수 없는 제공자 장애 상황을 검증하는 데 사용합니다.
             val closedPort = ServerSocket(0).use { it.localPort }
             registry.add("app.auth.social.kakao.jwk-set-uri") { "http://127.0.0.1:$closedPort/jwks" }
+            registry.add("app.auth.social.apple.jwk-set-uri") { fixture.appleJwkSetUri }
+            registry.add("app.auth.social.apple.token-uri") { appleServer.tokenUri }
+            registry.add("app.auth.social.apple.revoke-uri") { appleServer.revokeUri }
+            registry.add("app.auth.social.apple.private-key-base64") { appleServer.privateKeyBase64 }
         }
     }
 }

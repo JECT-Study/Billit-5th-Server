@@ -9,22 +9,25 @@ import com.ject.module.member.infra.persistence.jpa.MemberJpaRepository
 import org.hibernate.exception.ConstraintViolationException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Repository
+import java.time.Clock
 
 @Repository
 class MemberRepositoryAdapter(
     private val memberJpaRepository: MemberJpaRepository,
+    private val clock: Clock,
 ) : MemberRepository {
     override fun findBySocialAccount(
         socialProvider: AuthProvider,
         socialProviderUserId: String,
     ): SocialMemberResult? {
         val member = memberJpaRepository.findBySocialProviderAndSocialProviderUserId(socialProvider, socialProviderUserId) ?: return null
-        return SocialMemberResult(memberId = checkNotNull(member.id), status = member.status)
+        return SocialMemberResult(memberId = checkNotNull(member.id), status = member.status, socialDisplayName = member.socialDisplayName)
     }
 
     override fun createPendingMember(
         socialProvider: AuthProvider,
         socialProviderUserId: String,
+        socialDisplayName: String?,
     ): Long? {
         val member =
             Member(
@@ -40,6 +43,7 @@ class MemberRepositoryAdapter(
                 ocrAgreedAt = null,
                 status = MemberStatus.PENDING,
                 withdrawnAt = null,
+                socialDisplayName = socialDisplayName?.let(::truncateSocialDisplayName),
             )
         return try {
             checkNotNull(memberJpaRepository.saveAndFlush(member).id)
@@ -49,6 +53,25 @@ class MemberRepositoryAdapter(
             }
             null
         }
+    }
+
+    override fun fillSocialDisplayNameIfAbsent(
+        memberId: Long,
+        socialDisplayName: String,
+    ): Boolean =
+        memberJpaRepository.fillSocialDisplayNameIfAbsent(
+            id = memberId,
+            status = MemberStatus.PENDING,
+            socialDisplayName = truncateSocialDisplayName(socialDisplayName),
+            updatedAt = clock.instant(),
+        ) == 1
+
+    /** PostgreSQL `VARCHAR` 길이는 문자(코드 포인트) 수이므로 서로게이트 쌍을 나누지 않고 자릅니다. */
+    private fun truncateSocialDisplayName(socialDisplayName: String): String {
+        if (socialDisplayName.codePointCount(0, socialDisplayName.length) <= MemberRepository.SOCIAL_DISPLAY_NAME_MAX_LENGTH) {
+            return socialDisplayName
+        }
+        return socialDisplayName.substring(0, socialDisplayName.offsetByCodePoints(0, MemberRepository.SOCIAL_DISPLAY_NAME_MAX_LENGTH))
     }
 
     private fun isSocialAccountUniqueViolation(exception: DataIntegrityViolationException): Boolean {

@@ -75,6 +75,18 @@ app:
       kakao:
         native-app-key: ${KAKAO_NATIVE_APP_KEY:local-kakao-native-app-key}
         jwk-set-uri: https://kauth.kakao.com/.well-known/jwks.json
+      apple:
+        client-id: ${APPLE_CLIENT_ID:local-apple-client-id}
+        team-id: ${APPLE_TEAM_ID:local-apple-team-id}
+        key-id: ${APPLE_KEY_ID:local-apple-key-id}
+        private-key-base64: "${APPLE_PRIVATE_KEY_BASE64:}"
+        private-key-required: false
+        jwk-set-uri: https://appleid.apple.com/auth/keys
+        token-uri: https://appleid.apple.com/auth/token
+        revoke-uri: https://appleid.apple.com/auth/revoke
+        apple-endpoint-required: true
+    token-encryption:
+      key: ${AUTH_TOKEN_ENCRYPTION_KEY:YmlsbGl0LWxvY2FsLW9ubHktdG9rZW4tZW5jLWtleSE=}
 
 logging:
   pattern:

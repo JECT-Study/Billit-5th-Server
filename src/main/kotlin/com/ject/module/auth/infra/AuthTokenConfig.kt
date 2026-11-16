@@ -22,7 +22,12 @@ import java.time.Clock
 import java.time.Duration
 
 @Configuration
-@EnableConfigurationProperties(AuthTokenProperties::class, RefreshTokenProperties::class, SocialLoginProperties::class)
+@EnableConfigurationProperties(
+    AuthTokenProperties::class,
+    RefreshTokenProperties::class,
+    SocialLoginProperties::class,
+    TokenEncryptionProperties::class,
+)
 class AuthTokenConfig {
     @Bean
     fun jwtEncoder(properties: AuthTokenProperties): JwtEncoder =

@@ -92,7 +92,7 @@ class LogoutUseCaseTest : IntegrationTestSupport() {
             failures.map { it.errorCode } shouldBe List(2) { CommonErrorCode.UNAUTHORIZED }
         }
 
-        test("이미 회전해 폐기된 Refresh Token으로는 로그아웃할 수 없고 세션은 유지된다") {
+        test("회전 직후 재시도 허용 시간 안의 직전 Refresh Token으로도 로그아웃할 수 없고 세션은 유지된다") {
             // given
             val memberId = createMember()
             val issued = authTokenCreator.createMemberTokens(memberId)
