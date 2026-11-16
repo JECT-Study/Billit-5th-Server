@@ -381,6 +381,31 @@ class SocialIdTokenAdapterTest :
             }
         }
 
+        test("제공자 JWKS 장애가 이어지면 마지막으로 받은 키는 마지막 조회 성공 후 1시간 안에서만 쓰고 그 뒤에는 503으로 실패한다") {
+            // given
+            val clock = MutableClock(now)
+            val clockedAdapter = adapter(fixture.googleJwkSetUri, fixture.kakaoJwkSetUri, clock)
+            val expiresAt = now.plus(Duration.ofHours(2))
+            clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-0", expiresAt))
+            fixture.jwksUnavailable.set(true)
+
+            // when
+            clock.advance(Duration.ofMinutes(49))
+            val subjectWithinWindow =
+                clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-1", expiresAt)).subject
+            clock.advance(Duration.ofMinutes(11).plusSeconds(1))
+            val failure =
+                shouldThrow<BusinessException> {
+                    clockedAdapter.verify(AuthProvider.GOOGLE, fixture.idToken(GOOGLE_ISSUER, GOOGLE_CLIENT_ID, "user-2", expiresAt))
+                }
+
+            // then
+            assertSoftly {
+                subjectWithinWindow shouldBe "user-1"
+                failure.errorCode shouldBe AuthErrorCode.SOCIAL_PROVIDER_UNAVAILABLE
+            }
+        }
+
         test("제공자 JWKS 장애가 끝나고 재조회 간격이 지나면 받은 키의 토큰은 통과하고 모르는 kid의 토큰은 다시 401로 실패한다") {
             // given
             val clock = MutableClock(now)

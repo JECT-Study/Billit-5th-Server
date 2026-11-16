@@ -34,7 +34,8 @@ import java.time.Duration
  * 제공자 하나(구글, 카카오, 애플 등)의 ID 토큰을 그 제공자의 JWKS로 검증합니다.
  *
  * - JWKS는 10분간 캐시합니다. 캐시 만료와 캐시에 없는 키(`kid`)의 토큰 때문에 다시 가져오는 요청은 합쳐서 30초에 두 번까지만 제공자에 보냅니다.
- * - 제공자 장애나 재조회 제한으로 JWKS를 가져오지 못하면 마지막으로 받은 키 목록을 [OUTAGE_TOLERANCE] 동안 계속 사용합니다.
+ * - 제공자 장애나 재조회 제한으로 JWKS를 가져오지 못하면 마지막으로 받은 키 목록을 계속 사용합니다. 바깥 캐시가 그 목록을 [JWK_SET_CACHE_TTL]만큼 다시 캐시하므로,
+ *   [OUTAGE_TOLERANCE]를 50분으로 두어 마지막 조회 성공 후 최대 1시간까지만 쓰게 합니다.
  *   그래서 모르는 `kid`의 토큰이 재조회 한도를 채워도, 마지막 키 목록에 있는 키의 토큰은 캐시가 만료된 순간에도 그 목록으로 검증됩니다.
  * - 서명, 형식과 클레임 오류는 [IdTokenFailureReason.INVALID_TOKEN]입니다. 키를 받은 적이 없거나 마지막 조회가 실패한 상태에서 토큰의 키를 확인하지 못하면
  *   [IdTokenFailureReason.KEY_SOURCE_UNAVAILABLE]입니다. 마지막 조회가 성공한 키 목록에 없는 키는 재조회 제한에 걸려도 유효하지 않은 토큰으로 봅니다.
@@ -195,7 +196,7 @@ class IdTokenVerifier(
         private val JWK_SET_REFETCH_INTERVAL: Duration = Duration.ofSeconds(30)
 
         /** 제공자 장애 중 마지막으로 받은 키 목록을 계속 사용하는 시간입니다. */
-        private val OUTAGE_TOLERANCE: Duration = Duration.ofHours(1)
+        private val OUTAGE_TOLERANCE: Duration = Duration.ofMinutes(50)
 
         /** 제공자와 서버의 시계 차이를 허용하는 범위입니다. */
         private val CLOCK_SKEW: Duration = Duration.ofSeconds(60)

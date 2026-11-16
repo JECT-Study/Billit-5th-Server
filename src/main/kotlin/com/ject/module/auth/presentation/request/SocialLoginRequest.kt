@@ -4,7 +4,6 @@ import com.ject.module.member.domain.AuthProvider
 import com.ject.module.member.domain.MemberRepository
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Pattern
-import jakarta.validation.constraints.Size
 
 /**
  * 소셜 로그인 요청입니다. 명세의 `SocialIdTokenRequest`(구글, 카카오)와 `AppleSocialLoginRequest`(애플)를 함께 받습니다.
@@ -17,12 +16,17 @@ data class SocialLoginRequest(
     val idToken: String,
     @field:Pattern(regexp = NOT_BLANK_PATTERN)
     val authorizationCode: String? = null,
-    @field:Pattern(regexp = NOT_BLANK_PATTERN)
-    @field:Size(max = MemberRepository.SOCIAL_DISPLAY_NAME_MAX_LENGTH)
+    @field:Pattern(regexp = FULL_NAME_PATTERN)
     val fullName: String? = null,
 ) {
     companion object {
         /** 공백이 아닌 문자를 하나 이상 포함합니다. 값이 없으면 검사하지 않습니다. */
         private const val NOT_BLANK_PATTERN = "(?s).*\\S.*"
+
+        /**
+         * 공백이 아닌 문자를 포함하고 [MemberRepository.SOCIAL_DISPLAY_NAME_MAX_LENGTH]자 이하입니다.
+         * 정규식의 `.`은 코드 포인트 하나에 맞으므로 이모지 같은 보조 평면 문자도 한 글자로 셉니다(명세 `maxLength`, DB `VARCHAR`와 같은 기준).
+         */
+        private const val FULL_NAME_PATTERN = "(?s)(?=.*\\S).{1,${MemberRepository.SOCIAL_DISPLAY_NAME_MAX_LENGTH}}"
     }
 }
