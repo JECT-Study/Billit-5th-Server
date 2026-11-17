@@ -72,8 +72,6 @@ class MemberRepositoryAdapter(
 
     override fun findRegistrationMember(memberId: Long): RegistrationMemberResult? = memberJpaRepository.findRegistrationMember(memberId)
 
-    override fun existsByNickname(nickname: String): Boolean = memberJpaRepository.existsByNickname(nickname)
-
     override fun completeRegistrationIfPending(
         memberId: Long,
         nickname: String,
@@ -82,23 +80,16 @@ class MemberRepositoryAdapter(
         marketingPushAgreedAt: Instant?,
     ): RegistrationCompletionResult {
         val updated =
-            try {
-                memberJpaRepository.completeRegistrationIfPending(
-                    id = memberId,
-                    pendingStatus = MemberStatus.PENDING,
-                    completedStatus = MemberStatus.ACTIVE,
-                    nickname = nickname,
-                    gender = gender,
-                    isTreasurer = isTreasurer,
-                    marketingPushAgreedAt = marketingPushAgreedAt,
-                    updatedAt = clock.instant(),
-                )
-            } catch (exception: DataIntegrityViolationException) {
-                if (!isUniqueViolation(exception, NICKNAME_UNIQUE_CONSTRAINT)) {
-                    throw exception
-                }
-                return RegistrationCompletionResult.NICKNAME_ALREADY_USED
-            }
+            memberJpaRepository.completeRegistrationIfPending(
+                id = memberId,
+                pendingStatus = MemberStatus.PENDING,
+                completedStatus = MemberStatus.ACTIVE,
+                nickname = nickname,
+                gender = gender,
+                isTreasurer = isTreasurer,
+                marketingPushAgreedAt = marketingPushAgreedAt,
+                updatedAt = clock.instant(),
+            )
         return if (updated == 1) RegistrationCompletionResult.COMPLETED else RegistrationCompletionResult.NOT_PENDING
     }
 
@@ -125,6 +116,5 @@ class MemberRepositoryAdapter(
     companion object {
         private const val UNIQUE_VIOLATION_SQL_STATE = "23505"
         private const val SOCIAL_ACCOUNT_UNIQUE_CONSTRAINT = "uq_member_social_provider_social_provider_user_id"
-        private const val NICKNAME_UNIQUE_CONSTRAINT = "uq_member_nickname"
     }
 }

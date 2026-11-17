@@ -7,7 +7,4 @@ enum class RegistrationCompletionResult {
 
     /** 회원이 없거나 가입 중이 아니어서 바꾸지 않았습니다. */
     NOT_PENDING,
-
-    /** 다른 회원이 같은 닉네임을 쓰고 있어 바꾸지 않았습니다. 현재 트랜잭션은 더 사용할 수 없습니다. */
-    NICKNAME_ALREADY_USED,
 }

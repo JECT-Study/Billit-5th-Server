@@ -8,7 +8,6 @@ enum class MemberErrorCode(
     override val message: String,
 ) : ErrorCode {
     REQUIRED_AGREEMENT_MISSING(400, "필수 약관에 동의해주세요."),
-    NICKNAME_ALREADY_USED(409, "이미 사용 중인 닉네임입니다."),
     ;
 
     override val code: String = "USER_$name"

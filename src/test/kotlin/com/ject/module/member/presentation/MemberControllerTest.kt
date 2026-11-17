@@ -12,12 +12,9 @@ import org.springframework.core.env.Environment
 import org.springframework.security.oauth2.jwt.JwtDecoder
 import tools.jackson.databind.json.JsonMapper
 import java.net.URI
-import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.nio.charset.StandardCharsets
-import java.util.UUID
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class MemberControllerTest : IntegrationTestSupport() {
@@ -122,111 +119,14 @@ class MemberControllerTest : IntegrationTestSupport() {
             }
         }
 
-        context("GET /api/v1/nickname-availability") {
-            test("아무도 쓰지 않는 닉네임은 200과 isAvailable true를 반환한다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
-                val nickname = newNickname()
-
-                // when
-                val response = get(nicknamePath(nickname), registrationToken)
-
-                // then
-                assertSoftly {
-                    response.statusCode() shouldBe 200
-                    body(response) shouldBe mapOf("data" to mapOf("nickname" to nickname, "isAvailable" to true))
-                }
-            }
-
-            test("다른 회원이 쓰는 닉네임은 200과 isAvailable false를 반환한다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
-                val nickname = newNickname()
-                createMember("ACTIVE", nickname = nickname)
-
-                // when
-                val response = get(nicknamePath(nickname), registrationToken)
-
-                // then
-                assertSoftly {
-                    response.statusCode() shouldBe 200
-                    body(response) shouldBe mapOf("data" to mapOf("nickname" to nickname, "isAvailable" to false))
-                }
-            }
-
-            test("11자, 공백 포함, 한글 자모, 빈 닉네임과 닉네임 누락은 400 COMMON_INVALID_REQUEST를 반환한다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
-                val paths =
-                    listOf(
-                        nicknamePath("가나다라마바사아자차카"),
-                        nicknamePath("빌릿 "),
-                        nicknamePath("ㅂㅣㄹ"),
-                        nicknamePath(""),
-                        NICKNAME_AVAILABILITY_PATH,
-                    )
-
-                // when
-                val responses = paths.map { get(it, registrationToken) }
-
-                // then
-                assertSoftly {
-                    responses.map { it.statusCode() } shouldBe listOf(400, 400, 400, 400, 400)
-                    responses.map { body(it)["code"] }.toSet() shouldBe setOf("COMMON_INVALID_REQUEST")
-                }
-            }
-
-            test("가입을 마친 회원의 가입 전용 토큰이면 403 COMMON_FORBIDDEN을 반환한다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("ACTIVE"))
-
-                // when
-                val response = get(nicknamePath(newNickname()), registrationToken)
-
-                // then
-                assertSoftly {
-                    response.statusCode() shouldBe 403
-                    body(response)["code"] shouldBe "COMMON_FORBIDDEN"
-                }
-            }
-
-            test("형식이 틀린 닉네임은 오류 필드로 nickname을 알려준다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
-
-                // when
-                val response = get(nicknamePath("빌릿!"), registrationToken)
-
-                // then
-                val errors = body(response)["errors"] as List<*>
-                assertSoftly {
-                    response.statusCode() shouldBe 400
-                    errors.map { (it as Map<*, *>)["field"] } shouldBe listOf("nickname")
-                }
-            }
-
-            test("한글 완성형, 영문과 숫자를 섞은 10자 닉네임은 200을 반환한다") {
-                // given
-                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
-
-                // when
-                val response = get(nicknamePath("빌릿Abc12345"), registrationToken)
-
-                // then
-                response.statusCode() shouldBe 200
-            }
-        }
-
         context("POST /api/v1/me/registration") {
             test("필수 약관에 동의한 가입 완료 요청은 200과 회원용 Access Token, Refresh Token만 반환한다") {
                 // given
                 val memberId = createMember("PENDING")
                 val termsId = createPolicy("TERMS", "v1", isRequired = true, effectiveAt = "now() - interval '1 day'")
-                val nickname = newNickname()
                 val requestBody =
                     """
                     {
-                      "nickname": "$nickname",
                       "agreements": [{"termsId": "$termsId", "isAgreed": true}],
                       "platform": "IOS",
                       "appVersion": "1.0.0",
@@ -259,8 +159,8 @@ class MemberControllerTest : IntegrationTestSupport() {
                 val memberId = createMember("PENDING")
                 val requestBodies =
                     listOf(
-                        """{"nickname":"${newNickname()}","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"survey":{"gender":"MALE"}}""",
-                        """{"nickname":"${newNickname()}","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"survey":{}}""",
+                        """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"survey":{"gender":"MALE"}}""",
+                        """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"survey":{}}""",
                     )
                 val otherMemberId = createMember("PENDING")
 
@@ -284,7 +184,7 @@ class MemberControllerTest : IntegrationTestSupport() {
                 val memberId = createMember("PENDING")
                 val termsId = createPolicy("TERMS", "v1", isRequired = true, effectiveAt = "now() - interval '1 day'")
                 val requestBody =
-                    """{"nickname":"${newNickname()}","agreements":[{"termsId":"$termsId","isAgreed":false}],"platform":"ANDROID","appVersion":"1.0.0","isAgeEligible":true}"""
+                    """{"agreements":[{"termsId":"$termsId","isAgreed":false}],"platform":"ANDROID","appVersion":"1.0.0","isAgeEligible":true}"""
 
                 // when
                 val response = post(REGISTRATION_PATH, requestBody, authTokenCreator.createRegistrationToken(memberId))
@@ -298,23 +198,18 @@ class MemberControllerTest : IntegrationTestSupport() {
                 }
             }
 
-            test("다른 회원이 쓰는 닉네임이면 409 USER_NICKNAME_ALREADY_USED를 반환한다") {
+            test("닉네임 없이 보내도 200으로 가입을 완료한다") {
                 // given
-                val nickname = newNickname()
-                createMember("ACTIVE", nickname = nickname)
                 val memberId = createMember("PENDING")
-                val requestBody =
-                    """{"nickname":"$nickname","agreements":[],"platform":"ANDROID","appVersion":"1.0.0","isAgeEligible":true}"""
+                val requestBody = """{"agreements":[],"platform":"ANDROID","appVersion":"1.0.0","isAgeEligible":true}"""
 
                 // when
                 val response = post(REGISTRATION_PATH, requestBody, authTokenCreator.createRegistrationToken(memberId))
 
                 // then
                 assertSoftly {
-                    response.statusCode() shouldBe 409
-                    body(response) shouldBe
-                        mapOf("code" to "USER_NICKNAME_ALREADY_USED", "message" to "이미 사용 중인 닉네임입니다.", "errors" to null)
-                    findStatus(memberId) shouldBe "PENDING"
+                    response.statusCode() shouldBe 200
+                    findStatus(memberId) shouldBe "ACTIVE"
                 }
             }
 
@@ -322,52 +217,48 @@ class MemberControllerTest : IntegrationTestSupport() {
                 // given
                 val memberId = createMember("PENDING")
                 val registrationToken = authTokenCreator.createRegistrationToken(memberId)
-                val nickname = newNickname()
                 val requestBodies =
                     mapOf(
-                        "닉네임에 공백" to """{"nickname":"빌릿 ","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
-                        "닉네임 11자" to
-                            """{"nickname":"가나다라마바사아자차카","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
-                        "닉네임 누락" to """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
-                        "약관 동의 목록 누락" to """{"nickname":"$nickname","platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
-                        "동의 기기 누락" to """{"nickname":"$nickname","agreements":[],"appVersion":"1.0.0","isAgeEligible":true}""",
+                        "가입 때 받지 않는 닉네임" to
+                            """{"nickname":"빌릿","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                        "약관 동의 목록 누락" to """{"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                        "동의 기기 누락" to """{"agreements":[],"appVersion":"1.0.0","isAgeEligible":true}""",
                         "허용하지 않는 동의 기기" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"WEB","appVersion":"1.0.0","isAgeEligible":true}""",
+                            """{"agreements":[],"platform":"WEB","appVersion":"1.0.0","isAgeEligible":true}""",
                         "동의 여부 누락" to
-                            """{"nickname":"$nickname","agreements":[{"termsId":"1"}],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                            """{"agreements":[{"termsId":"1"}],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "숫자가 아닌 약관 식별자" to
-                            """{"nickname":"$nickname","agreements":[{"termsId":"terms","isAgreed":true}],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                            """{"agreements":[{"termsId":"terms","isAgreed":true}],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "허용하지 않는 성별" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"survey":{"gender":"OTHER"}}""",
+                            """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"survey":{"gender":"OTHER"}}""",
                         "불편 사항 3개" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
+                            """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
                             """"survey":{"settlementPainPoints":["SHARE_CALCULATION","PAYMENT_HISTORY","ETC"]}}""",
                         "불편 사항 중복" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
+                            """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
                             """"survey":{"settlementPainPoints":["ETC","ETC"]}}""",
-                        "닉네임 null" to """{"nickname":null,"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "약관 동의 목록에 null" to
-                            """{"nickname":"$nickname","agreements":[null],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
+                            """{"agreements":[null],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true}""",
                         "공백뿐인 기타 입력" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
+                            """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
                             """"survey":{"settlementPainPoints":["ETC"],"otherSettlementPainPoint":" "}}""",
                         "기타 없이 기타 입력" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
+                            """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,""" +
                             """"survey":{"settlementPainPoints":["PAYMENT_HISTORY"],"otherSettlementPainPoint":"환율 계산"}}""",
                         "앱 버전 누락" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","isAgeEligible":true}""",
+                            """{"agreements":[],"platform":"IOS","isAgeEligible":true}""",
                         "공백뿐인 앱 버전" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":" ","isAgeEligible":true}""",
+                            """{"agreements":[],"platform":"IOS","appVersion":" ","isAgeEligible":true}""",
                         "앱 버전 21자" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"${"1".repeat(
+                            """{"agreements":[],"platform":"IOS","appVersion":"${"1".repeat(
                                 21,
                             )}","isAgeEligible":true}""",
                         "만 18세 이상 확인 누락" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0"}""",
+                            """{"agreements":[],"platform":"IOS","appVersion":"1.0.0"}""",
                         "만 18세 미만" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":false}""",
+                            """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":false}""",
                         "명세에 없는 필드" to
-                            """{"nickname":"$nickname","agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"name":"김빌릿"}""",
+                            """{"agreements":[],"platform":"IOS","appVersion":"1.0.0","isAgeEligible":true,"name":"김빌릿"}""",
                     )
 
                 // when
@@ -382,16 +273,6 @@ class MemberControllerTest : IntegrationTestSupport() {
             }
         }
     }
-
-    private fun newNickname(): String =
-        UUID
-            .randomUUID()
-            .toString()
-            .replace("-", "")
-            .take(10)
-
-    private fun nicknamePath(nickname: String): String =
-        "$NICKNAME_AVAILABILITY_PATH?nickname=${URLEncoder.encode(nickname, StandardCharsets.UTF_8)}"
 
     private fun createMember(
         status: String,
@@ -465,6 +346,5 @@ class MemberControllerTest : IntegrationTestSupport() {
 
     companion object {
         private const val REGISTRATION_PATH = "/api/v1/me/registration"
-        private const val NICKNAME_AVAILABILITY_PATH = "/api/v1/nickname-availability"
     }
 }

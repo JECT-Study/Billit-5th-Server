@@ -6,7 +6,6 @@ package com.ject.module.member.domain
  * [painPoints]는 선택한 순서대로 최대 2개이며 중복이 없어야 합니다. [otherPainPointText]는 [painPoints]에 [PainPoint.ETC]가 있을 때만 보낼 수 있습니다.
  */
 data class CompleteRegistrationCommand(
-    val nickname: String,
     val agreements: List<PolicyAgreement>,
     val platform: PlatformType,
     val appVersion: String,
