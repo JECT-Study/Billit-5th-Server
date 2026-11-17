@@ -48,7 +48,7 @@ paths:
       operationId: 'completeRegistration'
       summary: 가입 완료
       description: |
-        약관 동의와 만 18세 이상 확인을 제출해 회원 가입을 완료합니다. 닉네임은 선택 입력이며 생략하면 임의 닉네임을 부여합니다.
+        약관 동의와 만 18세 이상 확인을 제출해 회원 가입을 완료합니다. 닉네임은 받지 않고 임의 닉네임을 부여하며, 회원은 가입 후 닉네임을 바꿀 수 있습니다. 닉네임은 다른 회원과 겹쳐도 됩니다.
 
         ### 처리 조건
         만 18세 이상만 가입할 수 있습니다. 이름과 나이는 받지 않고 만 18세 이상인지만 확인합니다.
@@ -74,12 +74,6 @@ paths:
               - agreements
               additionalProperties: false
               properties:
-                nickname:
-                  type: string
-                  minLength: 1
-                  maxLength: 10
-                  pattern: ^[가-힣A-Za-z0-9]+(?![\s\S])
-                  description: 계정 닉네임입니다. 한글 완성형, 영문과 숫자를 사용하며 공백과 특수문자는 허용하지 않습니다. 생략하면 임의 닉네임을 부여하며, 다른 회원과 겹쳐도 됩니다.
                 platform:
                   type: string
                   enum:
@@ -136,9 +130,8 @@ paths:
                       description: settlementPainPoints에 ETC가 있을 때만 보낼 수 있습니다.
             examples:
               request:
-                summary: 닉네임과 필수 약관 동의로 가입 완료
+                summary: 필수 약관 동의로 가입 완료
                 value:
-                  nickname: 김빌릿
                   platform: IOS
                   appVersion: 1.0.0
                   isAgeEligible: true

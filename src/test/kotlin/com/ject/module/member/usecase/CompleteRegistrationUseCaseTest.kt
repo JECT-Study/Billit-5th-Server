@@ -21,7 +21,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.security.oauth2.jwt.JwtDecoder
-import java.util.UUID
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -48,16 +47,14 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
             jdbc.update("DELETE FROM policy")
         }
 
-        test("필수 약관에 동의하고 가입을 완료하면 회원을 가입 완료로 바꾸고 닉네임, 설문, 동의 이력과 세션을 저장한다") {
+        test("필수 약관에 동의하고 가입을 완료하면 회원을 가입 완료로 바꾸고 임의 닉네임, 설문, 동의 이력과 세션을 저장한다") {
             // given
             val memberId = createMember("PENDING")
             val termsId = createPolicy("TERMS", "v1", isRequired = true)
             val privacyId = createPolicy("PRIVACY", "v1", isRequired = true)
             val marketingId = createPolicy("MARKETING", "v1", isRequired = false)
-            val nickname = newNickname()
             val command =
                 CompleteRegistrationCommand(
-                    nickname = nickname,
                     agreements =
                         listOf(
                             PolicyAgreement(termsId, agreed = true),
@@ -96,7 +93,7 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
                 )
             assertSoftly {
                 member["status"] shouldBe "ACTIVE"
-                member["nickname"] shouldBe nickname
+                (member["nickname"] as String) shouldMatch Regex("[가-힣]{1,10}")
                 member["gender"] shouldBe "FEMALE"
                 member["is_treasurer"] shouldBe true
                 member["marketing_push_agreed_at"].shouldNotBeNull()
@@ -233,37 +230,18 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
             }
         }
 
-        test("다른 회원이 쓰는 닉네임으로도 가입을 완료한다") {
-            // given
-            val nickname = newNickname()
-            createMember("ACTIVE", nickname)
-            val memberId = createMember("PENDING")
-            val termsId = createPolicy("TERMS", "v1", isRequired = true)
-            val command = command(nickname = nickname, agreements = listOf(PolicyAgreement(termsId, agreed = true)))
-
-            // when
-            completeRegistrationUseCase.complete(memberId, command)
-
-            // then
-            val member = findMember(memberId)
-            assertSoftly {
-                member["status"] shouldBe "ACTIVE"
-                member["nickname"] shouldBe nickname
-            }
-        }
-
-        test("닉네임을 비우면 닉네임 규칙을 지키는 임의 닉네임으로 가입을 완료한다") {
+        test("임의 닉네임이 다른 회원의 닉네임과 같아도 가입을 완료한다") {
             // given
             val memberId = createMember("PENDING")
             val termsId = createPolicy("TERMS", "v1", isRequired = true)
-            val command = command(nickname = null, agreements = listOf(PolicyAgreement(termsId, agreed = true)))
-
-            // when
-            completeRegistrationUseCase.complete(memberId, command)
-
-            // then
+            completeRegistrationUseCase.complete(memberId, command(listOf(PolicyAgreement(termsId, agreed = true))))
             val nickname = findMember(memberId)["nickname"] as String
-            nickname shouldMatch Regex("[가-힣]{1,10}")
+
+            // when
+            val otherMemberId = createMember("ACTIVE", nickname)
+
+            // then
+            findMember(otherMemberId)["nickname"] shouldBe nickname
         }
 
         test("회원을 가입 완료로 바꾼 뒤 설문 저장이 실패하면 회원 변경과 동의 이력까지 롤백하고 세션을 남기지 않는다") {
@@ -294,9 +272,9 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
             // given
             val memberId = createMember("PENDING")
             val termsId = createPolicy("TERMS", "v1", isRequired = true)
-            val nickname = newNickname()
-            val first = completeRegistrationUseCase.complete(memberId, command(nickname, listOf(PolicyAgreement(termsId, agreed = true))))
-            val retry = command(nickname = newNickname(), agreements = listOf(PolicyAgreement(termsId, agreed = true)))
+            val first = completeRegistrationUseCase.complete(memberId, command(listOf(PolicyAgreement(termsId, agreed = true))))
+            val nickname = findMember(memberId)["nickname"]
+            val retry = command(agreements = listOf(PolicyAgreement(termsId, agreed = true)))
 
             // when
             val second = completeRegistrationUseCase.complete(memberId, retry)
@@ -360,13 +338,11 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
     }
 
     private fun command(
-        nickname: String? = newNickname(),
         agreements: List<PolicyAgreement> = emptyList(),
         painPoints: List<PainPoint> = emptyList(),
         otherPainPointText: String? = null,
     ): CompleteRegistrationCommand =
         CompleteRegistrationCommand(
-            nickname = nickname,
             agreements = agreements,
             platform = PlatformType.ANDROID,
             appVersion = "1.0.0",
@@ -375,13 +351,6 @@ class CompleteRegistrationUseCaseTest : IntegrationTestSupport() {
             painPoints = painPoints,
             otherPainPointText = otherPainPointText,
         )
-
-    private fun newNickname(): String =
-        UUID
-            .randomUUID()
-            .toString()
-            .replace("-", "")
-            .take(10)
 
     private fun createMember(
         status: String,

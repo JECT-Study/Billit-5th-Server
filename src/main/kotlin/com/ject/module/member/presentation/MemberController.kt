@@ -54,7 +54,6 @@ class MemberController(
     ): ApiResponse<RegistrationCompletedResponse> {
         val command =
             CompleteRegistrationCommand(
-                nickname = request.nickname,
                 agreements =
                     request.agreements.map {
                         CompleteRegistrationCommand.PolicyAgreement(policyId = it.termsId.toLong(), agreed = checkNotNull(it.isAgreed))

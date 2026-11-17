@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 
 /**
- * 닉네임과 약관 동의, 설문 응답을 저장하고 가입을 완료한 뒤 회원용 토큰을 발급합니다.
+ * 임의 닉네임을 부여하고 약관 동의, 설문 응답을 저장해 가입을 완료한 뒤 회원용 토큰을 발급합니다.
  *
  * 회원 상태 변경, 동의 이력, 설문 응답과 세션 저장을 한 트랜잭션에서 커밋합니다. 실패하면 모두 롤백하고 회원은 가입 중으로 남습니다.
  */
@@ -39,7 +39,7 @@ class CompleteRegistrationUseCase(
      * 1. 이미 가입을 마친 회원이면 응답을 받지 못한 재시도로 보고 요청 내용을 다시 저장하지 않고 새 세션의 토큰을 발급합니다. 가입 전용 토큰의 유효 시간 안에서만 가능합니다.
      * 2. 동의한 약관이 현재 버전인지와 필수 약관에 모두 동의했는지 확인합니다.
      * 3. 가입 중 회원만 가입 완료로 바꿉니다. 같은 회원의 요청이 동시에 오면 한 건만 저장하고 나머지는 1번처럼 토큰만 발급합니다.
-     * 4. 닉네임을 비우면 임의 닉네임을 부여합니다. 닉네임은 다른 회원과 겹쳐도 됩니다.
+     * 4. 닉네임은 입력받지 않고 임의 닉네임을 부여합니다. 회원은 가입 후 닉네임을 바꿀 수 있고, 다른 회원과 겹쳐도 됩니다.
      * 5. 마케팅 수신 동의는 일반 푸시 채널의 동의로 저장합니다. 야간 푸시 동의는 가입 때 받지 않습니다.
      */
     @Transactional
@@ -64,7 +64,7 @@ class CompleteRegistrationUseCase(
         val completion =
             memberRepository.completeRegistrationIfPending(
                 memberId = memberId,
-                nickname = command.nickname ?: randomNicknameGenerator.generate(),
+                nickname = randomNicknameGenerator.generate(),
                 gender = command.gender,
                 isTreasurer = command.isTreasurer,
                 marketingPushAgreedAt = if (isMarketingAgreed) now else null,
