@@ -20,6 +20,7 @@ import org.mockito.Mockito.doThrow
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
 import java.util.Base64
@@ -50,6 +51,10 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
     init {
         afterEach {
             providerUserIds.forEach { providerUserId ->
+                jdbc.update(
+                    "DELETE FROM login_history WHERE member_id IN (SELECT id FROM member WHERE social_provider_user_id = ?)",
+                    providerUserId,
+                )
                 jdbc.update(
                     "DELETE FROM auth_session WHERE member_id IN (SELECT id FROM member WHERE social_provider_user_id = ?)",
                     providerUserId,
@@ -148,6 +153,24 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
                 claims(authenticated.tokens.refreshToken) shouldBe mapOf("sub" to memberId.toString(), "token_type" to "REFRESH")
                 countSessions(memberId) shouldBe 1
             }
+        }
+
+        test("가입을 마친 회원의 로그인 기록 저장이 실패하면 세션도 만들지 않는다") {
+            // given
+            val providerUserId = givenVerifiedIdToken(AuthProvider.GOOGLE, "google-id-token")
+            val memberId = insertMember(AuthProvider.GOOGLE, providerUserId, "ACTIVE")
+            // 이 회원의 로그인 기록 저장만 DB가 거절하게 합니다.
+            jdbc.execute("ALTER TABLE login_history ADD CONSTRAINT ck_login_history_test_reject CHECK (member_id <> $memberId) NOT VALID")
+
+            // when
+            try {
+                shouldThrow<DataIntegrityViolationException> { socialLoginUseCase.login(AuthProvider.GOOGLE, "google-id-token") }
+            } finally {
+                jdbc.execute("ALTER TABLE login_history DROP CONSTRAINT ck_login_history_test_reject")
+            }
+
+            // then
+            countSessions(memberId) shouldBe 0
         }
 
         test("같은 외부 사용자 ID라도 제공자가 다르면 다른 회원으로 처리한다") {
