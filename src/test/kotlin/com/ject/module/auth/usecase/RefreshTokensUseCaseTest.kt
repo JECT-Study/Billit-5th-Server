@@ -9,7 +9,6 @@ import com.ject.module.auth.implement.AuthTokenCreator
 import com.ject.module.auth.implement.LoginHistoryCreator
 import com.ject.module.auth.implement.RefreshTokenHasher
 import com.ject.module.auth.implement.RefreshTokenReader
-import com.ject.module.auth.implement.RefreshTokenRotator
 import com.ject.support.IntegrationTestSupport
 import com.nimbusds.jwt.SignedJWT
 import io.kotest.assertions.assertSoftly
@@ -27,6 +26,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.jwt.JwtEncoder
 import org.springframework.security.oauth2.jwt.JwtException
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
@@ -56,7 +56,7 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
     private lateinit var loginHistoryCreator: LoginHistoryCreator
 
     @Autowired
-    private lateinit var refreshTokenRotator: RefreshTokenRotator
+    private lateinit var transactionTemplate: TransactionTemplate
 
     @Autowired
     @Qualifier("memberJwtDecoder")
@@ -77,7 +77,8 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
             refreshTokenHasher,
             authTokenCreator,
             refreshTokenRetryPolicy,
-            refreshTokenRotator,
+            loginHistoryCreator,
+            transactionTemplate,
             clock,
         )
     }

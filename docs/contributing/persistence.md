@@ -174,7 +174,7 @@ DB 롤백이 외부 API 호출이나 다른 저장소의 변경까지 되돌리�
 | 위치 | 변경 | 이유 |
 | --- | --- | --- |
 | [AuthSessionJpaRepository](../../src/main/kotlin/com/ject/module/auth/infra/persistence/jpa/AuthSessionJpaRepository.kt)의 `revokeIfActive` | 이미 사용된 Refresh Token이 다시 제출됐을 때의 로그인 세션 종료 | 401로 응답하면서도 세션 종료는 반영돼야 탈취된 토큰을 막을 수 있습니다. |
-| 같은 파일의 `rotateRefreshToken` | Refresh Token 회전 | 위 이유로 [RefreshTokensUseCase](../../src/main/kotlin/com/ject/module/auth/usecase/RefreshTokensUseCase.kt)에는 트랜잭션이 없습니다. 회전은 갱신 기록 저장과 함께 [RefreshTokenRotator](../../src/main/kotlin/com/ject/module/auth/implement/RefreshTokenRotator.kt)의 트랜잭션에 참여해, 기록 저장이 실패하면 회전도 되돌립니다. 다른 곳에서 단독으로 호출하면 자체 트랜잭션으로 커밋합니다. |
+| 같은 파일의 `rotateRefreshToken` | Refresh Token 회전 | 위 이유로 [RefreshTokensUseCase](../../src/main/kotlin/com/ject/module/auth/usecase/RefreshTokensUseCase.kt) 전체에는 트랜잭션을 두지 않습니다. UseCase가 회전 구간만 `TransactionTemplate`으로 열어 갱신 기록 저장과 함께 커밋하고, 이 메서드는 그 트랜잭션에 참여합니다. |
 | [AppleRefreshTokenJpaRepository](../../src/main/kotlin/com/ject/module/auth/infra/persistence/jpa/AppleRefreshTokenJpaRepository.kt)의 `upsert`, `deleteByMemberIdAndEncryptedRefreshToken`과 [MemberJpaRepository](../../src/main/kotlin/com/ject/module/member/infra/persistence/jpa/MemberJpaRepository.kt)의 `fillSocialDisplayNameIfAbsent` | 애플 Refresh Token 저장·삭제, 소셜 표시 이름 채우기 | [SocialLoginUseCase](../../src/main/kotlin/com/ject/module/auth/usecase/SocialLoginUseCase.kt)와 애플 연결 해제는 애플 토큰 API 호출을 사이에 두므로 DB 트랜잭션을 외부 호출 동안 열어 두지 않습니다. 각 쓰기는 조건부 쿼리 한 번이고, 하나가 실패해도 앞의 쓰기를 되돌릴 필요가 없습니다(다음 로그인에서 다시 저장하거나 채웁니다). |
 
 ## 동시성과 제약조건

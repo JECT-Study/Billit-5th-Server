@@ -4,11 +4,9 @@ import com.ject.module.auth.domain.AuthSessionRepository
 import com.ject.support.IntegrationTestSupport
 import com.nimbusds.jwt.SignedJWT
 import io.kotest.assertions.assertSoftly
-import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.security.oauth2.jwt.JwtEncoder
 import org.springframework.web.context.request.RequestContextHolder
@@ -30,9 +28,6 @@ class AuthTokenCreatorTest : IntegrationTestSupport() {
 
     @Autowired
     private lateinit var loginHistoryCreator: LoginHistoryCreator
-
-    @Autowired
-    private lateinit var authTokenCreator: AuthTokenCreator
 
     private val memberIds = mutableListOf<Long>()
 
@@ -111,23 +106,6 @@ class AuthTokenCreatorTest : IntegrationTestSupport() {
                 history["ip_address"] shouldBe "203.0.113.7"
                 (history["occurred_at"] as Timestamp).toInstant() shouldBe now
             }
-        }
-
-        test("로그인 기록 저장이 실패하면 세션도 저장하지 않는다") {
-            // given
-            val memberId = createMember()
-            // 이 회원의 로그인 기록 저장만 DB가 거절하게 합니다.
-            jdbc.execute("ALTER TABLE login_history ADD CONSTRAINT ck_login_history_test_reject CHECK (member_id <> $memberId) NOT VALID")
-
-            // when
-            try {
-                shouldThrow<DataIntegrityViolationException> { authTokenCreator.createMemberTokens(memberId) }
-            } finally {
-                jdbc.execute("ALTER TABLE login_history DROP CONSTRAINT ck_login_history_test_reject")
-            }
-
-            // then
-            jdbc.queryForObject("SELECT COUNT(*) FROM auth_session WHERE member_id = ?", Int::class.java, memberId) shouldBe 0
         }
 
         test("회원용 Access Token은 15분, Refresh Token은 30일 동안 유효하고 토큰 종류와 회원을 담는다") {
