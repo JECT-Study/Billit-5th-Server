@@ -5,12 +5,11 @@ import com.ject.module.auth.domain.AuthErrorCode
 import com.ject.module.auth.domain.AuthSession
 import com.ject.module.auth.domain.AuthSessionRepository
 import com.ject.module.auth.domain.AuthTokenResult
-import com.ject.module.auth.domain.LoginHistoryType
 import com.ject.module.auth.domain.RefreshTokenRetryPolicy
 import com.ject.module.auth.implement.AuthTokenCreator
-import com.ject.module.auth.implement.LoginHistoryCreator
 import com.ject.module.auth.implement.RefreshTokenHasher
 import com.ject.module.auth.implement.RefreshTokenReader
+import com.ject.module.auth.implement.RefreshTokenRotator
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
 import java.time.Clock
@@ -24,9 +23,9 @@ import java.time.Instant
  *   이때 처음 토큰은 직전 토큰 자리에서 밀려나므로 같은 토큰의 두 번째 재시도는 재사용으로 처리됩니다.
  * - 그 밖의 이미 회전된 토큰은 재사용으로 보고 세션을 종료합니다. 같은 세션의 Access Token도 함께 401이 됩니다.
  *
- * 회전에 성공하면 접속 IP 주소를 로그인 기록에 남깁니다. 로그인을 로그아웃할 때까지 유지하므로 갱신 기록으로 이후 접속 주소를 추적합니다.
+ * 회전하면 접속 IP 주소를 로그인 기록에 남깁니다. 로그인을 로그아웃할 때까지 유지하므로 갱신 기록으로 이후 접속 주소를 추적합니다.
  *
- * 회전과 종료는 각각 한 번의 조건부 UPDATE이며 자체 트랜잭션으로 커밋합니다. 재사용으로 세션을 종료한 뒤 401로 응답해야 하므로 UseCase 전체를 트랜잭션으로 묶지 않습니다.
+ * 회전은 조건부 UPDATE 한 번과 기록 저장을 [RefreshTokenRotator]의 한 트랜잭션으로, 종료는 조건부 UPDATE 한 번을 자체 트랜잭션으로 커밋합니다. 재사용으로 세션을 종료한 뒤 401로 응답해야 하므로 UseCase 전체를 트랜잭션으로 묶지 않습니다.
  * 동시에 들어온 갱신은 세션 버전 조건으로 한 건만 회전하고 나머지는 401로 거절합니다. 거절된 요청은 재시도로 구분하지 않으므로,
  * 클라이언트는 한 세션의 갱신 요청을 한 번에 하나만 보내고 응답을 받은 뒤 다음 요청을 보내야 합니다.
  */
@@ -37,7 +36,7 @@ class RefreshTokensUseCase(
     private val refreshTokenHasher: RefreshTokenHasher,
     private val authTokenCreator: AuthTokenCreator,
     private val refreshTokenRetryPolicy: RefreshTokenRetryPolicy,
-    private val loginHistoryCreator: LoginHistoryCreator,
+    private val refreshTokenRotator: RefreshTokenRotator,
     private val clock: Clock,
 ) {
     fun refresh(refreshToken: String): AuthTokenResult {
@@ -60,19 +59,11 @@ class RefreshTokensUseCase(
         }
 
         val tokens = authTokenCreator.createSessionTokens(session.memberId, session.id, now)
-        val rotated =
-            authSessionRepository.rotateRefreshToken(
-                id = session.id,
-                expectedVersion = checkNotNull(session.version),
-                newRefreshTokenHash = refreshTokenHasher.hash(tokens.refreshToken),
-                newRefreshTokenExpiresAt = now.plus(AuthTokenCreator.REFRESH_TOKEN_TTL),
-                rotatedAt = now,
-            )
+        val rotated = refreshTokenRotator.rotate(session, refreshTokenHasher.hash(tokens.refreshToken), now)
         if (!rotated) {
             // 조회 후 다른 갱신이나 로그아웃이 먼저 반영됐습니다. 재사용 공격으로 단정할 수 없어 세션은 그대로 둡니다.
             throw invalidRefreshToken()
         }
-        loginHistoryCreator.create(session.memberId, LoginHistoryType.TOKEN_REFRESH, now)
         return tokens
     }
 
