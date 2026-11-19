@@ -90,6 +90,9 @@ app:
   member:
     policy:
       content-base-url: ${POLICY_CONTENT_BASE_URL}
+  trip:
+    invitation:
+      base-url: ${TRIP_INVITATION_BASE_URL}
 
 logging:
   structured:
