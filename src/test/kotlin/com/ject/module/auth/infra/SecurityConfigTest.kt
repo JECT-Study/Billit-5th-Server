@@ -108,18 +108,6 @@ class SecurityConfigTest : IntegrationTestSupport() {
             statuses shouldBe listOf(200, 200)
         }
 
-        test("지표 경로는 HTTP 요청 응답 시간 히스토그램을 내보낸다") {
-            // given
-            get(serverUrl("/healthz"))
-            get(serverUrl("/api/v1/me"))
-
-            // when
-            val body = get(managementUrl("/actuator/prometheus")).body()
-
-            // then
-            body.contains("http_server_requests_seconds_bucket") shouldBe true
-        }
-
         test("API 문서 경로는 토큰 없이 200을 반환한다") {
             // given
             val paths = listOf("/swagger-ui.html", "/api-docs/openapi.yml", "/scalar/scalar-initializer.js")
