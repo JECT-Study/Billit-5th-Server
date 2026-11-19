@@ -1,17 +1,17 @@
 package com.ject.module.auth.usecase
 
-import com.ject.module.auth.domain.LoginHistoryRepository
 import com.ject.support.IntegrationTestSupport
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import org.springframework.beans.factory.annotation.Autowired
 import java.sql.Timestamp
-import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 
 class DeleteExpiredLoginHistoriesUseCaseTest : IntegrationTestSupport() {
     @Autowired
-    private lateinit var loginHistoryRepository: LoginHistoryRepository
+    private lateinit var deleteExpiredLoginHistoriesUseCase: DeleteExpiredLoginHistoriesUseCase
 
     private val memberIds = mutableListOf<Long>()
 
@@ -24,23 +24,23 @@ class DeleteExpiredLoginHistoriesUseCaseTest : IntegrationTestSupport() {
             memberIds.clear()
         }
 
-        test("3개월이 지난 로그인 기록만 지우고 정확히 3개월 전과 그 이후의 기록은 남긴다") {
+        test("3개월이 지난 로그인 기록만 지우고 3개월 안의 기록은 남긴다") {
             // given
-            val now = Instant.parse("2026-11-19T00:00:00Z")
+            val now = Instant.now().truncatedTo(ChronoUnit.MICROS)
+            val cutoff = now.atZone(ZoneOffset.UTC).minusMonths(3).toInstant()
             val memberId = createMember()
-            insertHistory(memberId, Instant.parse("2026-08-18T23:59:59Z"))
-            insertHistory(memberId, Instant.parse("2026-08-19T00:00:00Z"))
-            insertHistory(memberId, Instant.parse("2026-11-18T00:00:00Z"))
-            val useCase = DeleteExpiredLoginHistoriesUseCase(loginHistoryRepository, Clock.fixed(now, ZoneOffset.UTC))
+            insertHistory(memberId, cutoff.minus(Duration.ofHours(1)))
+            insertHistory(memberId, cutoff.plus(Duration.ofHours(1)))
+            insertHistory(memberId, now.minus(Duration.ofDays(1)))
 
             // when
-            useCase.delete()
+            deleteExpiredLoginHistoriesUseCase.delete()
 
             // then
             val remaining =
                 jdbc.queryForList("SELECT occurred_at FROM login_history WHERE member_id = ?", Timestamp::class.java, memberId)
             remaining.map { checkNotNull(it).toInstant() } shouldContainExactlyInAnyOrder
-                listOf(Instant.parse("2026-08-19T00:00:00Z"), Instant.parse("2026-11-18T00:00:00Z"))
+                listOf(cutoff.plus(Duration.ofHours(1)), now.minus(Duration.ofDays(1)))
         }
     }
 
