@@ -98,41 +98,6 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
             }
         }
 
-        test("처음 로그인할 때 받은 표시 이름을 가입 중 회원에 저장한다") {
-            // given
-            val providerUserId = givenVerifiedIdToken(AuthProvider.GOOGLE, "google-id-token", displayName = "홍길동")
-
-            // when
-            socialLoginUseCase.login(AuthProvider.GOOGLE, "google-id-token")
-
-            // then
-            findMembers(AuthProvider.GOOGLE, providerUserId).map { it["social_display_name"] } shouldBe listOf("홍길동")
-        }
-
-        test("표시 이름이 없는 가입 중 회원이 다시 로그인하며 표시 이름을 받으면 채운다") {
-            // given
-            val providerUserId = givenVerifiedIdToken(AuthProvider.KAKAO, "kakao-id-token", displayName = "길동")
-            insertMember(AuthProvider.KAKAO, providerUserId, "PENDING")
-
-            // when
-            socialLoginUseCase.login(AuthProvider.KAKAO, "kakao-id-token")
-
-            // then
-            findMembers(AuthProvider.KAKAO, providerUserId).map { it["social_display_name"] } shouldBe listOf("길동")
-        }
-
-        test("가입 중 회원에게 저장된 표시 이름은 다시 로그인해 다른 값을 받아도 덮어쓰지 않는다") {
-            // given
-            val providerUserId = givenVerifiedIdToken(AuthProvider.GOOGLE, "google-id-token", displayName = "새 이름")
-            insertMember(AuthProvider.GOOGLE, providerUserId, "PENDING", socialDisplayName = "처음 이름")
-
-            // when
-            socialLoginUseCase.login(AuthProvider.GOOGLE, "google-id-token")
-
-            // then
-            findMembers(AuthProvider.GOOGLE, providerUserId).map { it["social_display_name"] } shouldBe listOf("처음 이름")
-        }
-
         test("가입을 마친 회원은 새 세션을 만들고 회원용 Access Token과 Refresh Token을 반환한다") {
             // given
             val providerUserId = givenVerifiedIdToken(AuthProvider.GOOGLE, "google-id-token")
@@ -227,13 +192,13 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
         }
 
         context("애플 로그인") {
-            test("처음 로그인한 애플 계정은 가입 중 회원을 만들고 fullName을 표시 이름으로, 애플 Refresh Token을 암호화해 저장한다") {
+            test("처음 로그인한 애플 계정은 가입 중 회원을 만들고 애플 Refresh Token을 암호화해 저장한다") {
                 // given
                 val providerUserId = givenVerifiedIdToken(AuthProvider.APPLE, "apple-id-token")
                 givenExchangedAuthorizationCode("authorization-code", subject = providerUserId, refreshToken = "apple-refresh-token-1")
 
                 // when
-                val result = socialLoginUseCase.loginWithApple("apple-id-token", "authorization-code", fullName = "홍길동")
+                val result = socialLoginUseCase.loginWithApple("apple-id-token", "authorization-code")
 
                 // then
                 val registrationRequired = result.shouldBeInstanceOf<SocialLoginResult.RegistrationRequired>()
@@ -242,7 +207,6 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
                 val encrypted = findEncryptedAppleRefreshToken(memberId)
                 assertSoftly {
                     member["status"] shouldBe "PENDING"
-                    member["social_display_name"] shouldBe "홍길동"
                     claims(registrationRequired.registrationToken)["sub"] shouldBe memberId.toString()
                     encrypted.contains("apple-refresh-token-1") shouldBe false
                     decryptAppleRefreshToken(encrypted, memberId) shouldBe "apple-refresh-token-1"
@@ -254,11 +218,11 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
                 val providerUserId = givenVerifiedIdToken(AuthProvider.APPLE, "apple-id-token")
                 val memberId = insertMember(AuthProvider.APPLE, providerUserId, "ACTIVE")
                 givenExchangedAuthorizationCode("first-code", subject = providerUserId, refreshToken = "apple-refresh-token-old")
-                socialLoginUseCase.loginWithApple("apple-id-token", "first-code", fullName = null)
+                socialLoginUseCase.loginWithApple("apple-id-token", "first-code")
                 givenExchangedAuthorizationCode("second-code", subject = providerUserId, refreshToken = "apple-refresh-token-new")
 
                 // when
-                val result = socialLoginUseCase.loginWithApple("apple-id-token", "second-code", fullName = null)
+                val result = socialLoginUseCase.loginWithApple("apple-id-token", "second-code")
 
                 // then
                 result.shouldBeInstanceOf<SocialLoginResult.Authenticated>()
@@ -269,19 +233,6 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
                 }
             }
 
-            test("가입 중 애플 회원에게 저장된 표시 이름은 다시 로그인해 fullName을 받아도 덮어쓰지 않는다") {
-                // given
-                val providerUserId = givenVerifiedIdToken(AuthProvider.APPLE, "apple-id-token")
-                insertMember(AuthProvider.APPLE, providerUserId, "PENDING", socialDisplayName = "처음 이름")
-                givenExchangedAuthorizationCode("authorization-code", subject = providerUserId, refreshToken = "apple-refresh-token")
-
-                // when
-                socialLoginUseCase.loginWithApple("apple-id-token", "authorization-code", fullName = "새 이름")
-
-                // then
-                findMembers(AuthProvider.APPLE, providerUserId).map { it["social_display_name"] } shouldBe listOf("처음 이름")
-            }
-
             test("교환 응답의 ID 토큰이 다른 사용자이면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED로 거절하고 회원과 토큰을 저장하지 않는다") {
                 // given
                 val providerUserId = givenVerifiedIdToken(AuthProvider.APPLE, "apple-id-token")
@@ -289,7 +240,7 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
 
                 // when
                 val failure =
-                    shouldThrow<BusinessException> { socialLoginUseCase.loginWithApple("apple-id-token", "authorization-code", null) }
+                    shouldThrow<BusinessException> { socialLoginUseCase.loginWithApple("apple-id-token", "authorization-code") }
 
                 // then
                 failure.errorCode shouldBe AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED
@@ -304,7 +255,7 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
 
                 // when
                 val failure =
-                    shouldThrow<BusinessException> { socialLoginUseCase.loginWithApple("invalid-id-token", "authorization-code", null) }
+                    shouldThrow<BusinessException> { socialLoginUseCase.loginWithApple("invalid-id-token", "authorization-code") }
 
                 // then
                 failure.errorCode shouldBe AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED
@@ -320,7 +271,7 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
                 val failures =
                     errorCodes.map { errorCode ->
                         doThrow(BusinessException(errorCode)).`when`(appleAuthorizationPort).exchangeAuthorizationCode("authorization-code")
-                        shouldThrow<BusinessException> { socialLoginUseCase.loginWithApple("apple-id-token", "authorization-code", null) }
+                        shouldThrow<BusinessException> { socialLoginUseCase.loginWithApple("apple-id-token", "authorization-code") }
                     }
 
                 // then
@@ -370,11 +321,10 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
     private fun givenVerifiedIdToken(
         provider: AuthProvider,
         idToken: String,
-        displayName: String? = null,
     ): String {
         val providerUserId = "test-${UUID.randomUUID()}"
         providerUserIds.add(providerUserId)
-        `when`(socialIdTokenPort.verify(provider, idToken)).thenReturn(SocialIdentity(subject = providerUserId, displayName = displayName))
+        `when`(socialIdTokenPort.verify(provider, idToken)).thenReturn(SocialIdentity(subject = providerUserId))
         return providerUserId
     }
 
@@ -382,17 +332,15 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
         provider: AuthProvider,
         providerUserId: String,
         status: String,
-        socialDisplayName: String? = null,
     ): Long =
         checkNotNull(
             jdbc.queryForObject(
-                "INSERT INTO member (social_provider, social_provider_user_id, status, social_display_name, created_at, updated_at) " +
-                    "VALUES (?::auth_provider, ?, ?::member_status, ?, now(), now()) RETURNING id",
+                "INSERT INTO member (social_provider, social_provider_user_id, status, created_at, updated_at) " +
+                    "VALUES (?::auth_provider, ?, ?::member_status, now(), now()) RETURNING id",
                 Long::class.java,
                 provider.name,
                 providerUserId,
                 status,
-                socialDisplayName,
             ),
         )
 
@@ -401,7 +349,7 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
         providerUserId: String,
     ): List<Map<String, Any?>> =
         jdbc.queryForList(
-            "SELECT id, status::text AS status, social_display_name FROM member WHERE social_provider = ?::auth_provider AND social_provider_user_id = ?",
+            "SELECT id, status::text AS status FROM member WHERE social_provider = ?::auth_provider AND social_provider_user_id = ?",
             provider.name,
             providerUserId,
         )

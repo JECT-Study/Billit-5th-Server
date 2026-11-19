@@ -36,7 +36,6 @@ paths:
                   provider: APPLE
                   idToken: example-apple-id-token
                   authorizationCode: example-apple-authorization-code
-                  fullName: 김빌릿
       responses:
         '200':
           description: 소셜 인증 성공
@@ -275,7 +274,8 @@ components:
           type: string
           pattern: \S
           maxLength: 100
-          description: 최초 권한 부여 시 Apple SDK가 반환한 표시 이름입니다. 생략하면 표시 이름을 전달하지 않습니다.
+          deprecated: true
+          description: 서버는 이 값을 저장하지 않습니다. 기존 앱과의 호환을 위해 받기만 하며, 앱이 보내지 않게 되면 필드를 제거합니다.
     AuthenticatedSocialLogin:
       type: object
       required:

@@ -46,8 +46,6 @@ class Member(
     val status: MemberStatus,
     @field:Column(name = "withdrawn_at", nullable = true)
     val withdrawnAt: Instant?,
-    @field:Column(name = "social_display_name", nullable = true)
-    val socialDisplayName: String?,
 ) : BaseEntity() {
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)

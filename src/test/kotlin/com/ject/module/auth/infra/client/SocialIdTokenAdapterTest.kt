@@ -74,30 +74,10 @@ class SocialIdTokenAdapterTest :
             val identity = adapter.verify(AuthProvider.GOOGLE, idToken)
 
             // then
-            identity shouldBe SocialIdentity(subject = "google-user-1", displayName = null)
+            identity shouldBe SocialIdentity(subject = "google-user-1")
         }
 
-        test("구글 ID 토큰의 name과 카카오 ID 토큰의 nickname을 표시 이름으로 반환한다") {
-            // given
-            val googleIdToken =
-                fixture.idToken(
-                    GOOGLE_ISSUER,
-                    GOOGLE_CLIENT_ID,
-                    "google-user-1",
-                    now.plusSeconds(600),
-                    extraClaims = mapOf("name" to "홍길동"),
-                )
-            val kakaoIdToken =
-                fixture.idToken(KAKAO_ISSUER, KAKAO_APP_KEY, "1234567890", now.plusSeconds(600), extraClaims = mapOf("nickname" to "길동"))
-
-            // when
-            val identities = listOf(adapter.verify(AuthProvider.GOOGLE, googleIdToken), adapter.verify(AuthProvider.KAKAO, kakaoIdToken))
-
-            // then
-            identities.map { it.displayName } shouldBe listOf("홍길동", "길동")
-        }
-
-        test("표시 이름 클레임이 공백이면 표시 이름 없이 반환한다") {
+        test("구글 ID 토큰에 name이 있어도 표시 이름을 읽지 않고 외부 사용자 ID만 반환한다") {
             // given
             val idToken =
                 fixture.idToken(
@@ -105,15 +85,14 @@ class SocialIdTokenAdapterTest :
                     GOOGLE_CLIENT_ID,
                     "google-user-1",
                     now.plusSeconds(600),
-                    extraClaims =
-                        mapOf("name" to "  "),
+                    extraClaims = mapOf("name" to "홍길동"),
                 )
 
             // when
             val identity = adapter.verify(AuthProvider.GOOGLE, idToken)
 
             // then
-            identity.displayName shouldBe null
+            identity shouldBe SocialIdentity(subject = "google-user-1")
         }
 
         test("aud 배열에 클라이언트 ID가 포함되어 있으면 허용한다") {
@@ -152,7 +131,7 @@ class SocialIdTokenAdapterTest :
             val identity = adapter.verify(AuthProvider.KAKAO, idToken)
 
             // then
-            identity shouldBe SocialIdentity(subject = "1234567890", displayName = null)
+            identity shouldBe SocialIdentity(subject = "1234567890")
         }
 
         test("애플 ID 토큰의 서명, iss, aud, exp가 유효하면 표시 이름 없이 외부 사용자 ID를 반환한다") {
@@ -171,7 +150,7 @@ class SocialIdTokenAdapterTest :
             val identity = adapter.verify(AuthProvider.APPLE, idToken)
 
             // then
-            identity shouldBe SocialIdentity(subject = "001234.apple.user", displayName = null)
+            identity shouldBe SocialIdentity(subject = "001234.apple.user")
         }
 
         test("애플 ID 토큰의 aud가 앱 번들 ID가 아니거나 다른 제공자의 토큰이면 401 AUTH_SOCIAL_AUTHENTICATION_FAILED로 실패한다") {
