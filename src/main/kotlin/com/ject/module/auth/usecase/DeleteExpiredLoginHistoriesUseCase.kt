@@ -3,6 +3,7 @@ package com.ject.module.auth.usecase
 import com.ject.module.auth.domain.LoginHistoryRepository
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.Period
 import java.time.ZoneOffset
@@ -13,6 +14,7 @@ class DeleteExpiredLoginHistoriesUseCase(
     private val loginHistoryRepository: LoginHistoryRepository,
     private val clock: Clock,
 ) {
+    @Transactional
     fun delete() {
         val cutoff =
             clock
