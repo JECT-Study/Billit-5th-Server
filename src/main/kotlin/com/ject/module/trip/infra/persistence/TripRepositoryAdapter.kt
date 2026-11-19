@@ -40,6 +40,10 @@ class TripRepositoryAdapter(
     override fun findByIdempotencyKey(idempotencyKey: UUID): IdempotentTripResult? =
         tripJpaRepository.findIdempotentTrip(idempotencyKey, TripMemberRole.ADMIN)
 
+    override fun findTrip(tripId: Long): Trip? = tripJpaRepository.findByIdAndDeletedAtIsNull(tripId)
+
+    override fun findTripByInviteCode(inviteCode: String): Trip? = tripJpaRepository.findByInviteCodeAndDeletedAtIsNull(inviteCode)
+
     override fun findTripByInviteCodeForUpdate(inviteCode: String): Trip? =
         tripJpaRepository.findByInviteCodeAndDeletedAtIsNullForUpdate(inviteCode)
 

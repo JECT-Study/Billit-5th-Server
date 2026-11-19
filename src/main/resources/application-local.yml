@@ -94,6 +94,9 @@ app:
   member:
     policy:
       content-base-url: ${POLICY_CONTENT_BASE_URL:http://localhost:8080/terms}
+  trip:
+    invitation:
+      base-url: ${TRIP_INVITATION_BASE_URL:http://localhost:3000/invitations}
 
 logging:
   pattern:

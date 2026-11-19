@@ -11,9 +11,11 @@ import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.core.env.Environment
 import tools.jackson.databind.json.JsonMapper
 import java.net.URI
+import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -44,6 +46,183 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                 jdbc.update("DELETE FROM member WHERE id = ?", id)
             }
             memberIds.clear()
+        }
+
+        context("GET /api/v1/trips/{tripId}/invitation") {
+            test("확정 전 여행의 관리자가 조회하면 200과 초대 코드, 초대 링크를 받는다") {
+                // given
+                val trip = createTrip(memberCapacity = 3)
+
+                // when
+                val response = get("/api/v1/trips/${trip.id}/invitation", accessToken(trip.adminMemberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    body(response) shouldBe
+                        mapOf(
+                            "data" to
+                                mapOf(
+                                    "inviteCode" to trip.inviteCode,
+                                    "inviteUrl" to "https://billit.test/invitations/${trip.inviteCode}",
+                                ),
+                        )
+                }
+            }
+
+            test("관리자가 아닌 참여자나 참여하지 않은 회원이 조회하면 403 COMMON_FORBIDDEN을 받는다") {
+                // given
+                val trip = createTrip(memberCapacity = 3)
+                val participantId = createMember("ACTIVE")
+                addMember(trip.id, participantId, "지훈")
+                val outsiderId = createMember("ACTIVE")
+
+                // when
+                val responses =
+                    mapOf(
+                        "일반 참여자" to get("/api/v1/trips/${trip.id}/invitation", accessToken(participantId)),
+                        "참여하지 않은 회원" to get("/api/v1/trips/${trip.id}/invitation", accessToken(outsiderId)),
+                    )
+
+                // then
+                assertSoftly {
+                    responses.mapValues { it.value.statusCode() } shouldBe responses.mapValues { 403 }
+                    responses.mapValues { body(it.value)["code"] } shouldBe responses.mapValues { "COMMON_FORBIDDEN" }
+                }
+            }
+
+            test("없거나 삭제된 여행이면 404 COMMON_NOT_FOUND를, 확정된 여행이면 409 TRIP_ALREADY_CONFIRMED를 받는다") {
+                // given
+                val deletedTrip = createTrip(memberCapacity = 3, deleted = true)
+                val confirmedTrip = createTrip(memberCapacity = 3, status = "CONFIRMED")
+                val missingTripId = Long.MAX_VALUE
+
+                // when
+                val missingResponse = get("/api/v1/trips/$missingTripId/invitation", accessToken(deletedTrip.adminMemberId))
+                val deletedResponse = get("/api/v1/trips/${deletedTrip.id}/invitation", accessToken(deletedTrip.adminMemberId))
+                val confirmedResponse = get("/api/v1/trips/${confirmedTrip.id}/invitation", accessToken(confirmedTrip.adminMemberId))
+
+                // then
+                assertSoftly {
+                    missingResponse.statusCode() shouldBe 404
+                    body(missingResponse)["code"] shouldBe "COMMON_NOT_FOUND"
+                    deletedResponse.statusCode() shouldBe 404
+                    body(deletedResponse)["code"] shouldBe "COMMON_NOT_FOUND"
+                    confirmedResponse.statusCode() shouldBe 409
+                    body(confirmedResponse)["code"] shouldBe "TRIP_ALREADY_CONFIRMED"
+                }
+            }
+        }
+
+        context("GET /api/v1/trip-invitations") {
+            test("초대 코드로 검색하면 여행 정보와 참여 여부를 받고 참여자는 늘지 않는다") {
+                // given
+                val trip = createTrip(memberCapacity = 3)
+                val joinedMemberId = createMember("ACTIVE")
+                addMember(trip.id, joinedMemberId, "지훈")
+                val newMemberId = createMember("ACTIVE")
+
+                // when
+                val newMemberResponse = search(trip.inviteCode, accessToken(newMemberId))
+                val joinedMemberResponse = search(trip.inviteCode, accessToken(joinedMemberId))
+
+                // then
+                assertSoftly {
+                    newMemberResponse.statusCode() shouldBe 200
+                    body(newMemberResponse) shouldBe
+                        mapOf(
+                            "data" to
+                                mapOf(
+                                    "tripId" to trip.id.toString(),
+                                    "name" to "도쿄 여행",
+                                    "startDate" to "2026-11-05",
+                                    "endDate" to "2026-11-07",
+                                    "registeredMemberCount" to 2,
+                                    "memberCapacity" to 3,
+                                    "status" to "UNCONFIRMED",
+                                    "isAlreadyJoined" to false,
+                                ),
+                        )
+                    (body(joinedMemberResponse)["data"] as Map<*, *>)["isAlreadyJoined"] shouldBe true
+                    countTripMembers(trip.id) shouldBe 2
+                }
+            }
+
+            test("앞뒤 공백과 소문자가 섞인 코드로도 같은 여행을 찾는다") {
+                // given
+                val trip = createTrip(memberCapacity = 3)
+                val memberId = createMember("ACTIVE")
+
+                // when
+                val response = search("  ${trip.inviteCode.lowercase()} ", accessToken(memberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    (body(response)["data"] as Map<*, *>)["tripId"] shouldBe trip.id.toString()
+                }
+            }
+
+            test("정원이 찼거나 확정된 여행도 검색 결과를 반환한다") {
+                // given
+                val fullTrip = createTrip(memberCapacity = 1)
+                val confirmedTrip = createTrip(memberCapacity = 1, status = "CONFIRMED")
+                val memberId = createMember("ACTIVE")
+
+                // when
+                val fullResponse = search(fullTrip.inviteCode, accessToken(memberId))
+                val confirmedResponse = search(confirmedTrip.inviteCode, accessToken(memberId))
+
+                // then
+                val fullData = body(fullResponse)["data"] as Map<*, *>
+                val confirmedData = body(confirmedResponse)["data"] as Map<*, *>
+                assertSoftly {
+                    fullResponse.statusCode() shouldBe 200
+                    fullData["registeredMemberCount"] shouldBe 1
+                    fullData["memberCapacity"] shouldBe 1
+                    confirmedResponse.statusCode() shouldBe 200
+                    confirmedData["status"] shouldBe "CONFIRMED"
+                }
+            }
+
+            test("없는 코드, 형식이 틀린 코드, 삭제된 여행의 코드는 404 TRIP_INVITATION_NOT_FOUND를 받는다") {
+                // given
+                val deletedTrip = createTrip(memberCapacity = 3, deleted = true)
+                val memberId = createMember("ACTIVE")
+                val codes =
+                    mapOf(
+                        "없는 코드" to newInviteCode(),
+                        "형식이 틀린 코드" to "AB-12",
+                        "삭제된 여행의 코드" to deletedTrip.inviteCode,
+                    )
+
+                // when
+                val responses = codes.mapValues { search(it.value, accessToken(memberId)) }
+
+                // then
+                assertSoftly {
+                    responses.mapValues { it.value.statusCode() } shouldBe responses.mapValues { 404 }
+                    responses.mapValues { body(it.value)["code"] } shouldBe responses.mapValues { "TRIP_INVITATION_NOT_FOUND" }
+                }
+            }
+
+            test("code가 없거나 공백뿐이면 400 COMMON_INVALID_REQUEST를 받는다") {
+                // given
+                val memberId = createMember("ACTIVE")
+
+                // when
+                val responses =
+                    mapOf(
+                        "code 없음" to get("/api/v1/trip-invitations", accessToken(memberId)),
+                        "공백뿐인 code" to search("   ", accessToken(memberId)),
+                    )
+
+                // then
+                assertSoftly {
+                    responses.mapValues { it.value.statusCode() } shouldBe responses.mapValues { 400 }
+                    responses.mapValues { body(it.value)["code"] } shouldBe responses.mapValues { "COMMON_INVALID_REQUEST" }
+                }
+            }
         }
 
         context("POST /api/v1/trip-memberships") {
@@ -223,6 +402,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
     private data class SavedTrip(
         val id: Long,
         val inviteCode: String,
+        val adminMemberId: Long,
     )
 
     /** 관리자 한 명이 참여한 여행을 저장합니다. 테스트가 끝나면 여행과 참여자를 지웁니다. */
@@ -249,14 +429,15 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                 ),
             )
         tripIds.add(tripId)
+        val adminMemberId = createMember("ACTIVE")
         jdbc.update(
             "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, created_at, updated_at) " +
                 "VALUES (?, ?, ?, 'ADMIN', now(), now())",
             tripId,
-            createMember("ACTIVE"),
+            adminMemberId,
             ADMIN_NICKNAME,
         )
-        return SavedTrip(tripId, inviteCode)
+        return SavedTrip(tripId, inviteCode, adminMemberId)
     }
 
     private fun addMember(
@@ -333,6 +514,26 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
         tripNickname: String,
         token: String?,
     ): HttpResponse<String> = post("""{"inviteCode": "$inviteCode", "tripNickname": "$tripNickname"}""", token)
+
+    private fun get(
+        path: String,
+        token: String?,
+    ): HttpResponse<String> {
+        val request =
+            HttpRequest
+                .newBuilder(
+                    URI.create("http://localhost:${environment.getRequiredProperty("local.server.port")}$path"),
+                ).GET()
+        if (token != null) {
+            request.header("Authorization", "Bearer $token")
+        }
+        return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString())
+    }
+
+    private fun search(
+        code: String,
+        token: String?,
+    ): HttpResponse<String> = get("/api/v1/trip-invitations?code=${URLEncoder.encode(code, StandardCharsets.UTF_8)}", token)
 
     private fun post(
         requestBody: String,
