@@ -2,18 +2,18 @@ package com.ject.module.auth.usecase
 
 import com.ject.support.IntegrationTestSupport
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
-import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.test.context.bean.override.mockito.MockitoBean
+import org.springframework.test.context.bean.override.convention.TestBean
 import java.sql.Timestamp
 import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 
 class DeleteExpiredLoginHistoriesUseCaseTest : IntegrationTestSupport() {
     @Autowired
     private lateinit var deleteExpiredLoginHistoriesUseCase: DeleteExpiredLoginHistoriesUseCase
 
-    @MockitoBean
+    @TestBean(methodName = "fixedClock")
     private lateinit var clock: Clock
 
     private val memberIds = mutableListOf<Long>()
@@ -27,13 +27,12 @@ class DeleteExpiredLoginHistoriesUseCaseTest : IntegrationTestSupport() {
             memberIds.clear()
         }
 
-        test("3개월이 지난 로그인 기록만 지우고 정확히 3개월 전과 그 이후의 기록은 남긴다") {
+        test("5월 29일에는 한국 시간으로 2월 28일의 보관 경계보다 앞선 기록만 지운다") {
             // given
-            `when`(clock.instant()).thenReturn(Instant.parse("2026-11-19T00:00:00Z"))
             val memberId = createMember()
-            insertHistory(memberId, Instant.parse("2026-08-18T23:59:59Z"))
-            insertHistory(memberId, Instant.parse("2026-08-19T00:00:00Z"))
-            insertHistory(memberId, Instant.parse("2026-11-18T00:00:00Z"))
+            insertHistory(memberId, Instant.parse("2026-02-28T03:29:59.999999+09:00"))
+            insertHistory(memberId, Instant.parse("2026-02-28T03:30:00+09:00"))
+            insertHistory(memberId, Instant.parse("2026-03-01T01:00:00+09:00"))
 
             // when
             deleteExpiredLoginHistoriesUseCase.delete()
@@ -42,7 +41,7 @@ class DeleteExpiredLoginHistoriesUseCaseTest : IntegrationTestSupport() {
             val remaining =
                 jdbc.queryForList("SELECT occurred_at FROM login_history WHERE member_id = ?", Timestamp::class.java, memberId)
             remaining.map { checkNotNull(it).toInstant() } shouldContainExactlyInAnyOrder
-                listOf(Instant.parse("2026-08-19T00:00:00Z"), Instant.parse("2026-11-18T00:00:00Z"))
+                listOf(Instant.parse("2026-02-28T03:30:00+09:00"), Instant.parse("2026-03-01T01:00:00+09:00"))
         }
     }
 
@@ -68,5 +67,10 @@ class DeleteExpiredLoginHistoriesUseCaseTest : IntegrationTestSupport() {
             )
         memberIds.add(id)
         return id
+    }
+
+    companion object {
+        @JvmStatic
+        fun fixedClock(): Clock = Clock.fixed(Instant.parse("2026-05-29T03:30:00+09:00"), ZoneOffset.UTC)
     }
 }

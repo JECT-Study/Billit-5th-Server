@@ -6,9 +6,9 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.Period
-import java.time.ZoneOffset
+import java.time.ZoneId
 
-/** 보관 기간 3개월이 지난 로그인 기록을 지웁니다. 보관 기간 안의 기록은 남깁니다. */
+/** 한국 시간 기준으로 보관 기간 3개월이 지난 로그인 기록을 지웁니다. */
 @Service
 class DeleteExpiredLoginHistoriesUseCase(
     private val loginHistoryRepository: LoginHistoryRepository,
@@ -19,7 +19,7 @@ class DeleteExpiredLoginHistoriesUseCase(
         val cutoff =
             clock
                 .instant()
-                .atZone(ZoneOffset.UTC)
+                .atZone(ZoneId.of("Asia/Seoul"))
                 .minus(RETENTION)
                 .toInstant()
         val deletedCount = loginHistoryRepository.deleteOccurredBefore(cutoff)
