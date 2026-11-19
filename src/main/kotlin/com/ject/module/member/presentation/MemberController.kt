@@ -33,7 +33,6 @@ class MemberController(
         return ApiResponse(
             RegistrationInfoResponse(
                 status = RegistrationStatus.SIGNING_UP,
-                socialDisplayName = registration.socialDisplayName,
                 terms =
                     registration.terms.map {
                         RegistrationInfoResponse.Terms(
