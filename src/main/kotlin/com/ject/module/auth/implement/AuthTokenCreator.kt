@@ -12,6 +12,7 @@ import org.springframework.security.oauth2.jwt.JwtClaimsSet
 import org.springframework.security.oauth2.jwt.JwtEncoder
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters
 import org.springframework.stereotype.Component
+import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -29,8 +30,9 @@ class AuthTokenCreator(
      * 회원 세션을 만들고 회원용 Access Token과 Refresh Token을 발급합니다.
      *
      * 세션에는 Refresh Token의 SHA-256 해시만 저장합니다. 새 세션은 로그인이므로 로그인 기록도 남깁니다.
-     * 세션 저장과 회원 검증을 함께 커밋해야 하면 호출하는 UseCase가 트랜잭션을 엽니다.
+     * 세션과 로그인 기록은 한 트랜잭션으로 커밋해, 기록 저장이 실패하면 세션도 남지 않습니다. 호출하는 UseCase에 트랜잭션이 있으면 거기에 참여합니다.
      */
+    @Transactional
     fun createMemberTokens(memberId: Long): AuthTokenResult {
         val now = clock.instant()
         val sessionId = UUID.randomUUID()
