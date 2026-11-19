@@ -7,7 +7,10 @@ import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.security.oauth2.jwt.JwtEncoder
+import org.springframework.web.context.request.RequestContextHolder
+import org.springframework.web.context.request.ServletRequestAttributes
 import java.security.MessageDigest
 import java.sql.Timestamp
 import java.time.Clock
@@ -23,11 +26,15 @@ class AuthTokenCreatorTest : IntegrationTestSupport() {
     @Autowired
     private lateinit var authSessionRepository: AuthSessionRepository
 
+    @Autowired
+    private lateinit var loginHistoryCreator: LoginHistoryCreator
+
     private val memberIds = mutableListOf<Long>()
 
     init {
         afterEach {
             memberIds.forEach { id ->
+                jdbc.update("DELETE FROM login_history WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM auth_session WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM member WHERE id = ?", id)
             }
@@ -38,7 +45,14 @@ class AuthTokenCreatorTest : IntegrationTestSupport() {
             // given
             val now = Instant.parse("2026-11-13T00:00:00Z")
             val memberId = createMember()
-            val creator = AuthTokenCreator(jwtEncoder, authSessionRepository, RefreshTokenHasher(), Clock.fixed(now, ZoneOffset.UTC))
+            val creator =
+                AuthTokenCreator(
+                    jwtEncoder,
+                    authSessionRepository,
+                    RefreshTokenHasher(),
+                    loginHistoryCreator,
+                    Clock.fixed(now, ZoneOffset.UTC),
+                )
 
             // when
             val tokens = creator.createMemberTokens(memberId)
@@ -59,11 +73,53 @@ class AuthTokenCreatorTest : IntegrationTestSupport() {
             }
         }
 
+        test("회원 토큰을 발급하면 요청의 접속 IP 주소와 발급 시각으로 LOGIN 로그인 기록을 남긴다") {
+            // given
+            val now = Instant.parse("2026-11-13T00:00:00Z")
+            val memberId = createMember()
+            val creator =
+                AuthTokenCreator(
+                    jwtEncoder,
+                    authSessionRepository,
+                    RefreshTokenHasher(),
+                    loginHistoryCreator,
+                    Clock.fixed(now, ZoneOffset.UTC),
+                )
+            val request = MockHttpServletRequest().apply { remoteAddr = "203.0.113.7" }
+            RequestContextHolder.setRequestAttributes(ServletRequestAttributes(request))
+
+            // when
+            try {
+                creator.createMemberTokens(memberId)
+            } finally {
+                RequestContextHolder.resetRequestAttributes()
+            }
+
+            // then
+            val history =
+                jdbc.queryForMap(
+                    "SELECT login_type::text AS login_type, ip_address, occurred_at FROM login_history WHERE member_id = ?",
+                    memberId,
+                )
+            assertSoftly {
+                history["login_type"] shouldBe "LOGIN"
+                history["ip_address"] shouldBe "203.0.113.7"
+                (history["occurred_at"] as Timestamp).toInstant() shouldBe now
+            }
+        }
+
         test("회원용 Access Token은 15분, Refresh Token은 30일 동안 유효하고 토큰 종류와 회원을 담는다") {
             // given
             val now = Instant.parse("2026-11-13T00:00:00Z")
             val memberId = createMember()
-            val creator = AuthTokenCreator(jwtEncoder, authSessionRepository, RefreshTokenHasher(), Clock.fixed(now, ZoneOffset.UTC))
+            val creator =
+                AuthTokenCreator(
+                    jwtEncoder,
+                    authSessionRepository,
+                    RefreshTokenHasher(),
+                    loginHistoryCreator,
+                    Clock.fixed(now, ZoneOffset.UTC),
+                )
 
             // when
             val tokens = creator.createMemberTokens(memberId)
@@ -83,11 +139,18 @@ class AuthTokenCreatorTest : IntegrationTestSupport() {
             }
         }
 
-        test("가입 전용 토큰은 30분 동안 유효하고 세션을 만들지 않는다") {
+        test("가입 전용 토큰은 30분 동안 유효하고 세션과 로그인 기록을 만들지 않는다") {
             // given
             val now = Instant.parse("2026-11-13T00:00:00Z")
             val memberId = createMember()
-            val creator = AuthTokenCreator(jwtEncoder, authSessionRepository, RefreshTokenHasher(), Clock.fixed(now, ZoneOffset.UTC))
+            val creator =
+                AuthTokenCreator(
+                    jwtEncoder,
+                    authSessionRepository,
+                    RefreshTokenHasher(),
+                    loginHistoryCreator,
+                    Clock.fixed(now, ZoneOffset.UTC),
+                )
 
             // when
             val token = creator.createRegistrationToken(memberId)
@@ -100,6 +163,7 @@ class AuthTokenCreatorTest : IntegrationTestSupport() {
                 claims.getStringClaim("sid") shouldBe null
                 claims.expirationTime.toInstant() shouldBe Instant.parse("2026-11-13T00:30:00Z")
                 jdbc.queryForObject("SELECT COUNT(*) FROM auth_session WHERE member_id = ?", Int::class.java, memberId) shouldBe 0
+                jdbc.queryForObject("SELECT COUNT(*) FROM login_history WHERE member_id = ?", Int::class.java, memberId) shouldBe 0
             }
         }
     }
