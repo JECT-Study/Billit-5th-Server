@@ -377,7 +377,20 @@ paths:
       - Trip
       operationId: joinTripByInviteCode
       summary: 여행 참여
-      description: 초대 코드와 이 여행에서 사용할 여행방 닉네임으로 여행에 참여하고 본인의 참여 식별자를 반환합니다. 가입을 완료한 회원만 요청할 수 있습니다. 최초 참여는 201, 이미 참여 중인 본인의 재요청은 기존 참여 정보와 200을 반환하며 Location 헤더는 넣지 않습니다. 입력한 여행방 닉네임이 같은 여행의 로그인 참여자나 비로그인 참여자의 여행방 닉네임과 같으면 참여할 수 없습니다. 같은 이름의 비로그인 참여자 때문에 거절됐다면 관리자가 그 비로그인 참여자를 삭제한 뒤 참여할 수 있습니다. 여행 종료일이 지났더라도 확정 전이면 참여할 수 있습니다. 나간 회원이 확정 전에 다시 참여하면 새 참여 정보를 만들지 않고 나가기 전의 tripMemberId를 다시 쓰며, 여행방 닉네임도 나가기 전에 쓰던 닉네임을 그대로 씁니다.
+      description: |
+        초대 코드와 이 여행에서 사용할 여행방 닉네임으로 여행에 참여하고 본인의 참여 식별자를 반환합니다.
+
+        ### 요청 권한
+        가입을 완료한 회원만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        확정 전이고 빈자리가 있는 여행에 참여할 수 있으며, 참여하면 빈자리 하나에 배정됩니다. 여행 종료일이 지났더라도 확정 전이면 참여할 수 있습니다.
+        입력한 여행방 닉네임이 같은 여행의 로그인 참여자나 비로그인 참여자의 여행방 닉네임과 같으면 참여할 수 없습니다. 같은 이름의 비로그인 참여자 때문에 거절됐다면 관리자가 그 비로그인 참여자를 삭제한 뒤 참여할 수 있습니다.
+        나간 회원이 확정 전에 다시 참여하면 새 참여 정보를 만들지 않고 나가기 전의 tripMemberId를 다시 쓰며, 여행방 닉네임도 나가기 전에 쓰던 닉네임을 그대로 씁니다.
+
+        ### 사용 시 주의
+        이미 참여 중인 본인이 다시 요청하면 새로 등록하지 않고 기존 참여 정보를 200으로 반환합니다. 여행이 확정됐거나 정원이 찼어도, 다른 닉네임을 보내도 같습니다. 참여 응답을 받지 못해 다시 보낸 요청도 이 방식으로 실제 참여 여부를 확인할 수 있습니다.
+        동시에 요청해도 정원을 넘거나 같은 회원이 두 번 등록되지 않습니다.
       security:
       - bearerAuth: []
       requestBody:
@@ -391,7 +404,7 @@ paths:
               nickname: 지훈
       responses:
         '200':
-          description: 이미 참여 중인 본인의 재요청. 기존 참여 정보를 반환합니다.
+          description: 이미 참여 중인 본인의 재요청. 기존 참여 정보를 반환합니다. Location 헤더는 넣지 않습니다.
           content:
             application/json:
               schema:
@@ -402,8 +415,15 @@ paths:
                 properties:
                   data:
                     "$ref": "./trip.yml#/components/schemas/Membership"
+              examples:
+                alreadyJoined:
+                  summary: 이미 참여 중
+                  value:
+                    data:
+                      tripId: '123'
+                      tripMemberId: '456'
         '201':
-          description: 최초 참여 성공
+          description: 최초 참여 성공. 참여 정보를 조회할 주소가 없어 Location 헤더는 넣지 않습니다.
           content:
             application/json:
               schema:
@@ -414,22 +434,79 @@ paths:
                 properties:
                   data:
                     "$ref": "./trip.yml#/components/schemas/Membership"
+              examples:
+                success:
+                  summary: 여행 참여 성공
+                  value:
+                    data:
+                      tripId: '123'
+                      tripMemberId: '457'
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
+          description: |
+            inviteCode가 없거나 비어 있거나 공백뿐이거나, nickname이 필드 형식을 벗어났습니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 요청 본문이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors: null
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
         '404':
-          description: 해당 코드로 찾을 수 있는 여행이 없음. TRIP_INVITATION_NOT_FOUND
+          description: |
+            inviteCode에 해당하는 여행이 없거나 삭제됐습니다. 형식이 맞지 않는 코드도 포함합니다.
+
+            **오류 코드:** `TRIP_INVITATION_NOT_FOUND`
           content:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_INVITATION_NOT_FOUND:
+                  summary: 초대 코드에 해당하는 여행이 없음
+                  value:
+                    code: TRIP_INVITATION_NOT_FOUND
+                    message: 초대 코드에 해당하는 여행을 찾을 수 없습니다.
+                    errors: null
         '409':
-          description: 신규 참여자가 확정된 여행에 참여하려 함(TRIP_ALREADY_CONFIRMED), 빈자리가 없음(TRIP_CAPACITY_FULL) 또는 입력한 여행방 닉네임을 같은 여행의 다른 참여자가 사용 중임(TRIP_NICKNAME_DUPLICATED)
+          description: |
+            신규 참여자의 요청이 여행의 현재 상태와 충돌합니다. 이미 참여 중인 본인의 요청에는 해당하지 않습니다.
+
+            | 오류 코드 | 발생 조건 |
+            | --- | --- |
+            | `TRIP_ALREADY_CONFIRMED` | 확정된 여행입니다. |
+            | `TRIP_CAPACITY_FULL` | 빈자리가 없습니다. |
+            | `TRIP_NICKNAME_DUPLICATED` | 입력한 여행방 닉네임을 같은 여행의 다른 참여자가 사용 중입니다. |
           content:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_ALREADY_CONFIRMED:
+                  summary: 여행이 이미 확정됨
+                  value:
+                    code: TRIP_ALREADY_CONFIRMED
+                    message: 이미 확정된 여행입니다.
+                    errors: null
+                TRIP_CAPACITY_FULL:
+                  summary: 빈자리가 없음
+                  value:
+                    code: TRIP_CAPACITY_FULL
+                    message: 여행 정원이 모두 찼습니다.
+                    errors: null
+                TRIP_NICKNAME_DUPLICATED:
+                  summary: 여행방 닉네임이 겹침
+                  value:
+                    code: TRIP_NICKNAME_DUPLICATED
+                    message: 이 여행에서 이미 사용 중인 닉네임입니다.
+                    errors: null
   "/api/v1/trips/{tripId}/guests":
     parameters:
     - "$ref": "./trip.yml#/components/parameters/TripId"
@@ -1070,7 +1147,8 @@ components:
       properties:
         inviteCode:
           type: string
-          description: 공유받은 초대 코드. 영문 대문자와 숫자로 된 6자이며, 서버는 앞뒤 공백을 지우고 대소문자를 구분하지 않고 비교합니다.
+          minLength: 1
+          description: 공유받은 초대 코드. 영문 대문자와 숫자로 된 6자리입니다. 서버는 앞뒤 공백을 지우고 대소문자를 구분하지 않고 비교하며, 형식이 맞지 않는 코드는 없는 코드와 같이 처리합니다.
           example: A7K2PQ
         nickname:
           type: string
