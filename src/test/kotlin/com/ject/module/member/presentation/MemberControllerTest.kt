@@ -122,7 +122,7 @@ class MemberControllerTest : IntegrationTestSupport() {
         context("GET /api/v1/me") {
             test("가입을 마친 회원의 Access Token이면 200과 회원 ID, 닉네임, 프로필 이미지, 소셜 제공자를 반환한다") {
                 // given
-                val nickname = newNickname()
+                val nickname = "여행하는고래"
                 val memberId = createMember("ACTIVE", nickname = nickname)
                 val accessToken = authTokenCreator.createMemberTokens(memberId).accessToken
 
@@ -147,7 +147,7 @@ class MemberControllerTest : IntegrationTestSupport() {
 
             test("유효한 Access Token이어도 회원이 가입 완료 상태가 아니면 401 COMMON_UNAUTHORIZED를 반환한다") {
                 // given
-                val memberId = createMember("ACTIVE", nickname = newNickname())
+                val memberId = createMember("ACTIVE", nickname = "여행하는고래")
                 val accessToken = authTokenCreator.createMemberTokens(memberId).accessToken
                 jdbc.update("UPDATE member SET status = 'WITHDRAWN'::member_status WHERE id = ?", memberId)
 
