@@ -2,6 +2,7 @@ package com.ject.module.auth.infra
 
 import com.ject.module.auth.domain.AuthSessionRepository
 import com.ject.module.auth.implement.AuthTokenCreator
+import com.ject.module.auth.implement.LoginHistoryCreator
 import com.ject.module.auth.implement.RefreshTokenHasher
 import com.ject.support.IntegrationTestSupport
 import com.nimbusds.jose.JWSAlgorithm
@@ -55,6 +56,9 @@ class SecurityConfigTest : IntegrationTestSupport() {
     @Autowired
     private lateinit var jwtEncoder: JwtEncoder
 
+    @Autowired
+    private lateinit var loginHistoryCreator: LoginHistoryCreator
+
     @MockitoSpyBean
     private lateinit var authSessionRepository: AuthSessionRepository
 
@@ -67,6 +71,7 @@ class SecurityConfigTest : IntegrationTestSupport() {
     init {
         afterEach {
             memberIds.forEach { id ->
+                jdbc.update("DELETE FROM login_history WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM auth_session WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM member WHERE id = ?", id)
             }
@@ -515,6 +520,7 @@ class SecurityConfigTest : IntegrationTestSupport() {
             jwtEncoder,
             authSessionRepository,
             RefreshTokenHasher(),
+            loginHistoryCreator,
             Clock.fixed(Instant.now().minus(issuedBefore), ZoneOffset.UTC),
         )
 

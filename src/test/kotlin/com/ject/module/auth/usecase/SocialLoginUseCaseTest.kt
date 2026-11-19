@@ -51,6 +51,10 @@ class SocialLoginUseCaseTest : IntegrationTestSupport() {
         afterEach {
             providerUserIds.forEach { providerUserId ->
                 jdbc.update(
+                    "DELETE FROM login_history WHERE member_id IN (SELECT id FROM member WHERE social_provider_user_id = ?)",
+                    providerUserId,
+                )
+                jdbc.update(
                     "DELETE FROM auth_session WHERE member_id IN (SELECT id FROM member WHERE social_provider_user_id = ?)",
                     providerUserId,
                 )
