@@ -9,6 +9,7 @@ import com.ject.module.auth.implement.AuthTokenCreator
 import com.ject.module.auth.implement.LoginHistoryCreator
 import com.ject.module.auth.implement.RefreshTokenHasher
 import com.ject.module.auth.implement.RefreshTokenReader
+import com.ject.module.auth.implement.RefreshTokenRotator
 import com.ject.support.IntegrationTestSupport
 import com.nimbusds.jwt.SignedJWT
 import io.kotest.assertions.assertSoftly
@@ -21,6 +22,7 @@ import io.kotest.matchers.shouldNotBe
 import org.mockito.Mockito.doAnswer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.jwt.JwtEncoder
 import org.springframework.security.oauth2.jwt.JwtException
@@ -30,6 +32,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
@@ -53,6 +56,9 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
     private lateinit var loginHistoryCreator: LoginHistoryCreator
 
     @Autowired
+    private lateinit var refreshTokenRotator: RefreshTokenRotator
+
+    @Autowired
     @Qualifier("memberJwtDecoder")
     private lateinit var memberJwtDecoder: JwtDecoder
 
@@ -61,8 +67,8 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
 
     private val refreshTokenHasher = RefreshTokenHasher()
 
-    /** 갱신과 재시도 허용 시간 판단의 기준 시각입니다. 테스트 실행이 늦어져도 유예 시간 안팎 판정이 바뀌지 않게 고정합니다. */
-    private val clock = Clock.fixed(Instant.now(), ZoneOffset.UTC)
+    /** 갱신과 재시도 허용 시간 판단의 기준 시각입니다. 테스트 실행이 늦어져도 유예 시간 안팎 판정이 바뀌지 않게 고정하고, DB 시각 정밀도(마이크로초)에 맞춥니다. */
+    private val clock = Clock.fixed(Instant.now().truncatedTo(ChronoUnit.MICROS), ZoneOffset.UTC)
 
     private val refreshTokensUseCase by lazy {
         RefreshTokensUseCase(
@@ -71,7 +77,7 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
             refreshTokenHasher,
             authTokenCreator,
             refreshTokenRetryPolicy,
-            loginHistoryCreator,
+            refreshTokenRotator,
             clock,
         )
     }
@@ -139,6 +145,33 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
             assertSoftly {
                 history["login_type"] shouldBe "TOKEN_REFRESH"
                 (history["occurred_at"] as Timestamp).toInstant() shouldBe clock.instant()
+            }
+        }
+
+        test("갱신 기록 저장이 실패하면 회전도 되돌려 기존 Refresh Token으로 다시 갱신할 수 있다") {
+            // given
+            val memberId = createMember()
+            val issued = authTokenCreator.createMemberTokens(memberId)
+            val sessionId = sessionId(issued.refreshToken)
+            // 이 회원의 로그인 기록 저장만 DB가 거절하게 합니다.
+            jdbc.execute("ALTER TABLE login_history ADD CONSTRAINT ck_login_history_test_reject CHECK (member_id <> $memberId) NOT VALID")
+
+            // when
+            val failure =
+                try {
+                    shouldThrow<DataIntegrityViolationException> { refreshTokensUseCase.refresh(issued.refreshToken) }
+                } finally {
+                    jdbc.execute("ALTER TABLE login_history DROP CONSTRAINT ck_login_history_test_reject")
+                }
+
+            // then
+            val session = findSession(sessionId)
+            val retried = refreshTokensUseCase.refresh(issued.refreshToken)
+            assertSoftly {
+                failure.shouldNotBeNull()
+                session["refresh_token_hash"] shouldBe refreshTokenHasher.hash(issued.refreshToken)
+                session["previous_refresh_token_hash"].shouldBeNull()
+                findSession(sessionId)["refresh_token_hash"] shouldBe refreshTokenHasher.hash(retried.refreshToken)
             }
         }
 
