@@ -39,6 +39,9 @@ interface MemberRepository {
     /** 가입 절차에서 확인할 회원의 현재 상태와 표시 값을 조회합니다. 영속성 컨텍스트에 남은 값이 아니라 조회 시점의 DB 값을 반환합니다. */
     fun findRegistrationMember(memberId: Long): RegistrationMemberResult?
 
+    /** 가입을 마친(`ACTIVE`) 회원의 프로필을 조회합니다. 회원이 없거나 가입 중·탈퇴 상태면 `null`입니다. */
+    fun findActiveProfile(memberId: Long): MemberProfileResult?
+
     /**
      * 가입 중(`PENDING`) 회원에게 닉네임과 설문 응답, 마케팅 푸시 동의 시각을 저장하고 가입 완료(`ACTIVE`)로 바꿉니다.
      *
