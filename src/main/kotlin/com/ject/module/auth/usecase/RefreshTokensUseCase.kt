@@ -66,14 +66,18 @@ class RefreshTokensUseCase(
             checkNotNull(
                 transactionTemplate.execute {
                     // 회전과 갱신 기록을 한 트랜잭션으로 커밋해, 기록 저장이 실패하면 회전도 되돌립니다.
-                    authSessionRepository
-                        .rotateRefreshToken(
+                    val isRotated =
+                        authSessionRepository.rotateRefreshToken(
                             id = session.id,
                             expectedVersion = checkNotNull(session.version),
                             newRefreshTokenHash = refreshTokenHasher.hash(tokens.refreshToken),
                             newRefreshTokenExpiresAt = now.plus(AuthTokenCreator.REFRESH_TOKEN_TTL),
                             rotatedAt = now,
-                        ).also { if (it) loginHistoryCreator.create(session.memberId, LoginHistoryType.TOKEN_REFRESH, now) }
+                        )
+                    if (isRotated) {
+                        loginHistoryCreator.create(session.memberId, LoginHistoryType.TOKEN_REFRESH, now)
+                    }
+                    isRotated
                 },
             )
         if (!rotated) {
