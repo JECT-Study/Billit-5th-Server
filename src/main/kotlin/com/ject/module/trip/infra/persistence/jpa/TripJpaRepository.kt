@@ -38,7 +38,11 @@ interface TripJpaRepository : JpaRepository<Trip, Long> {
         @Param("adminRole") adminRole: TripMemberRole,
     ): IdempotentTripResult?
 
-    /** 초대 코드가 같고 삭제되지 않은 여행 행을 `SELECT ... FOR UPDATE` 계열 잠금으로 조회합니다. */
+    fun findByIdAndDeletedAtIsNull(id: Long): Trip?
+
+    fun findByInviteCodeAndDeletedAtIsNull(inviteCode: String): Trip?
+
+    /** 같은 조건의 여행 행을 `SELECT ... FOR UPDATE` 계열 잠금으로 조회합니다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT t FROM Trip t WHERE t.inviteCode = :inviteCode AND t.deletedAt IS NULL")
     fun findByInviteCodeAndDeletedAtIsNullForUpdate(

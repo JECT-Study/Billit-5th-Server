@@ -21,8 +21,14 @@ interface TripRepository {
      */
     fun findByIdempotencyKey(idempotencyKey: UUID): IdempotentTripResult?
 
+    /** 삭제되지 않은 여행을 조회합니다. 없거나 삭제된 여행이면 `null`입니다. */
+    fun findTrip(tripId: Long): Trip?
+
+    /** 초대 코드가 정확히 같은 여행 중 삭제되지 않은 여행을 조회합니다. 없거나 삭제된 여행이면 `null`입니다. */
+    fun findTripByInviteCode(inviteCode: String): Trip?
+
     /**
-     * 초대 코드가 정확히 같은 여행 중 삭제되지 않은 여행을 조회하면서 여행 행에 쓰기 잠금을 겁니다. 없거나 삭제된 여행이면 `null`입니다.
+     * [findTripByInviteCode]와 같은 여행을 조회하면서 여행 행에 쓰기 잠금을 겁니다.
      *
      * 참여자 수와 확정 여부를 확인한 뒤 참여자를 저장하는 동안 다른 참여 요청이 같은 여행을 바꾸지 못하게 합니다.
      * 트랜잭션: 호출하는 쪽의 트랜잭션이 필요하며, 잠금은 그 트랜잭션이 끝날 때 풀립니다.
