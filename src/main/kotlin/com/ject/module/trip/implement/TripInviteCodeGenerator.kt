@@ -19,5 +19,8 @@ class TripInviteCodeGenerator(
     companion object {
         const val LENGTH = 6
         const val CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+        /** [code]가 이 생성기가 만들 수 있는 형식인지 확인합니다. 형식이 다른 코드는 저장된 여행이 없으므로 조회 전에 걸러 냅니다. */
+        fun isWellFormed(code: String): Boolean = code.length == LENGTH && code.all { it in CHARACTERS }
     }
 }

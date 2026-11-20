@@ -157,6 +157,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                     mapOf(
                         "없는 코드" to newInviteCode(),
                         "형식이 틀린 코드" to "AB-12",
+                        "NUL 문자가 든 코드" to "A\\u0000BC12",
                         "삭제된 여행의 코드" to deletedTrip.inviteCode,
                     )
 
@@ -190,6 +191,8 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                 assertSoftly {
                     responses.mapValues { it.value.statusCode() } shouldBe responses.mapValues { 400 }
                     responses.mapValues { body(it.value)["code"] } shouldBe responses.mapValues { "COMMON_INVALID_REQUEST" }
+                    body(responses.getValue("닉네임에 공백"))["errors"] shouldBe
+                        listOf(mapOf("field" to "nickname", "reason" to "한글, 영문, 숫자로 1~10자여야 합니다."))
                     countMemberParticipations(memberId) shouldBe 0
                 }
             }

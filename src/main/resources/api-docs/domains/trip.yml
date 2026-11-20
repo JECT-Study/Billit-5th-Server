@@ -452,11 +452,13 @@ paths:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
               examples:
                 COMMON_INVALID_REQUEST:
-                  summary: 요청 본문이 올바르지 않음
+                  summary: 닉네임 형식이 올바르지 않음
                   value:
                     code: COMMON_INVALID_REQUEST
                     message: 요청이 올바르지 않습니다.
-                    errors: null
+                    errors:
+                    - field: nickname
+                      reason: 한글, 영문, 숫자로 1~10자여야 합니다.
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
         '404':
