@@ -4,6 +4,7 @@ import com.ject.global.error.BusinessException
 import com.ject.module.trip.domain.TripErrorCode
 import com.ject.module.trip.domain.TripInvitationSearchResult
 import com.ject.module.trip.domain.TripRepository
+import com.ject.module.trip.implement.TripInviteCodeGenerator
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
@@ -16,12 +17,15 @@ import org.springframework.transaction.annotation.Transactional
 class SearchTripInvitationUseCase(
     private val tripRepository: TripRepository,
 ) {
-    /** [inviteCode]는 앞뒤 공백을 지우고 대문자로 바꾼 값입니다. 같은 코드의 여행이 없거나 삭제됐으면 404입니다. 형식이 맞지 않는 코드도 찾을 수 없으므로 같습니다. */
+    /** [inviteCode]는 앞뒤 공백을 지우고 대문자로 바꾼 값입니다. 같은 코드의 여행이 없거나 삭제됐으면 404입니다. 형식이 맞지 않는 코드는 DB를 조회하지 않고 404입니다. */
     @Transactional(readOnly = true)
     fun search(
         memberId: Long,
         inviteCode: String,
     ): TripInvitationSearchResult {
+        if (!TripInviteCodeGenerator.isWellFormed(inviteCode)) {
+            throw BusinessException(TripErrorCode.INVITATION_NOT_FOUND)
+        }
         val trip = tripRepository.findTripByInviteCode(inviteCode) ?: throw BusinessException(TripErrorCode.INVITATION_NOT_FOUND)
         val tripId = checkNotNull(trip.id)
         val registeredMemberCount = tripRepository.countTripMembers(tripId)

@@ -193,6 +193,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                     mapOf(
                         "없는 코드" to newInviteCode(),
                         "형식이 틀린 코드" to "AB-12",
+                        "NUL 문자가 든 코드" to "A\u0000BC12",
                         "삭제된 여행의 코드" to deletedTrip.inviteCode,
                     )
 
