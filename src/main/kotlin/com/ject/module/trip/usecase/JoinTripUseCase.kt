@@ -8,6 +8,7 @@ import com.ject.module.trip.domain.TripMembershipResult
 import com.ject.module.trip.domain.TripNicknameDuplicatedException
 import com.ject.module.trip.domain.TripRepository
 import com.ject.module.trip.domain.TripStatus
+import com.ject.module.trip.implement.TripInviteCodeGenerator
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Clock
@@ -27,7 +28,7 @@ class JoinTripUseCase(
     /**
      * [inviteCode]는 앞뒤 공백을 지우고 대문자로 바꾼 값입니다.
      *
-     * 1. 같은 코드의 여행이 없거나 삭제됐으면 404입니다. 형식이 맞지 않는 코드도 같습니다.
+     * 1. 같은 코드의 여행이 없거나 삭제됐으면 404입니다. 형식이 맞지 않는 코드는 DB를 조회하지 않고 404입니다. PostgreSQL이 받지 못하는 NUL 문자 같은 입력이 500으로 끝나지 않게 합니다.
      * 2. 이미 참여 중이면 확정 여부, 정원과 [nickname]에 관계없이 기존 참여 정보를 반환합니다.
      * 3. 확정된 여행이면 409 `TRIP_ALREADY_CONFIRMED`, 빈자리가 없으면 409 `TRIP_CAPACITY_FULL`입니다.
      * 4. 같은 여행의 다른 참여자가 [nickname]을 쓰고 있으면 409 `TRIP_NICKNAME_DUPLICATED`입니다.
@@ -38,6 +39,9 @@ class JoinTripUseCase(
         inviteCode: String,
         nickname: String,
     ): TripMembershipResult {
+        if (!TripInviteCodeGenerator.isWellFormed(inviteCode)) {
+            throw BusinessException(TripErrorCode.INVITATION_NOT_FOUND)
+        }
         val trip = tripRepository.findTripByInviteCodeForUpdate(inviteCode) ?: throw BusinessException(TripErrorCode.INVITATION_NOT_FOUND)
         val tripId = checkNotNull(trip.id)
 

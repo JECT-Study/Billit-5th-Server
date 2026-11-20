@@ -12,11 +12,14 @@ import jakarta.validation.constraints.Pattern
 data class JoinTripRequest(
     @field:NotBlank
     val inviteCode: String,
-    @field:Pattern(regexp = NICKNAME_PATTERN)
+    @field:Pattern(regexp = NICKNAME_PATTERN, message = NICKNAME_MESSAGE)
     val nickname: String,
 ) {
     companion object {
         /** 한글 완성형, 영문과 숫자로 된 1~10자입니다. 계정 닉네임과 같은 규칙입니다. */
         private const val NICKNAME_PATTERN = "[가-힣A-Za-z0-9]{1,10}"
+
+        /** 명세 예제와 같은 사유를 응답하도록 서버 locale에 따라 달라지는 기본 메시지 대신 고정 문구를 씁니다. */
+        private const val NICKNAME_MESSAGE = "한글, 영문, 숫자로 1~10자여야 합니다."
     }
 }
