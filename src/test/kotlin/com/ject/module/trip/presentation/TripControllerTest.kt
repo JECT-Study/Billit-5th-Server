@@ -139,9 +139,9 @@ class TripControllerTest : IntegrationTestSupport() {
                 val requestBody =
                     jsonMapper.writeValueAsString(
                         mapOf(
-                            "name" to " \u3000$fifteenCharacterName\u3000 ",
+                            "name" to " \u3000\u001C$fifteenCharacterName\u001C\u3000 ",
                             "countryCode" to "ETC",
-                            "customCountryName" to "\u3000 Vietnam \u3000",
+                            "customCountryName" to "\u3000\u001C Vietnam \u001C\u3000",
                             "baseCurrency" to "USD",
                             "startDate" to "2026-12-01",
                             "endDate" to "2026-12-04",
@@ -238,6 +238,7 @@ class TripControllerTest : IntegrationTestSupport() {
                         "여행명 null" to valid + ("name" to null),
                         "빈 여행명" to valid + ("name" to ""),
                         "공백만 입력한 여행명" to valid + ("name" to "   "),
+                        "trim이 지우지 않는 제어 문자가 있는 여행명" to valid + ("name" to "\u0085도쿄 여행\u0085"),
                         "16자 여행명" to valid + ("name" to "가".repeat(16)),
                         "특수문자가 있는 여행명" to valid + ("name" to "도쿄 여행!"),
                         "한글 자모가 있는 여행명" to valid + ("name" to "ㅋㅋ 여행"),
@@ -248,6 +249,7 @@ class TripControllerTest : IntegrationTestSupport() {
                         "기타 국가가 아닌데 국가명 입력" to valid + ("customCountryName" to "베트남"),
                         "기타 국가가 아닌데 국가명 null" to valid + ("customCountryName" to null),
                         "공백만 입력한 기타 국가명" to validCustomCountry + ("customCountryName" to "  "),
+                        "trim이 지우지 않는 제어 문자가 있는 기타 국가명" to validCustomCountry + ("customCountryName" to "\u0085베트남\u0085"),
                         "11자 기타 국가명" to validCustomCountry + ("customCountryName" to "가".repeat(11)),
                         "숫자가 있는 기타 국가명" to validCustomCountry + ("customCountryName" to "베트남1"),
                         "가운데 공백이 있는 기타 국가명" to validCustomCountry + ("customCountryName" to "뉴 질랜드"),
