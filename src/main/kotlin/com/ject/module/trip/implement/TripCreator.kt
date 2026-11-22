@@ -50,7 +50,7 @@ class TripCreator(
             TripMember(
                 tripId = tripId,
                 memberId = memberId,
-                guestName = command.nickname,
+                tripNickname = command.tripNickname,
                 role = TripMemberRole.ADMIN,
                 joinedAt = null,
             ),

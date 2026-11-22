@@ -22,8 +22,8 @@ class TripMember(
     @field:Column(name = "member_id", nullable = true)
     val memberId: Long?,
     /** 여행방 닉네임입니다. 로그인 참여자와 비로그인 참여자 모두 저장하며 같은 여행 안에서 겹칠 수 없습니다. */
-    @field:Column(name = "guest_name", nullable = true)
-    val guestName: String?,
+    @field:Column(name = "trip_nickname", nullable = true)
+    val tripNickname: String?,
     @field:Enumerated(EnumType.STRING)
     @field:JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @field:Column(name = "role", nullable = false)

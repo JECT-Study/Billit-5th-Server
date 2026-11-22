@@ -35,14 +35,19 @@ ALTER TABLE trip
     ADD CONSTRAINT ck_trip_member_capacity_range CHECK (member_capacity BETWEEN 1 AND 10);
 
 /**
- * trip_member 컬럼의 의미 변경 | 컬럼 정의는 그대로
+ * trip_member 컬럼의 의미와 이름 변경
  * trip_member = 여행 참여자 | 로그인 참여자가 참여하거나 관리자가 비로그인 참여자를 추가할 때 행 생성 | 빈자리 행은 만들지 않음 | 빈자리 수 = trip.member_capacity - 등록된 참여자 수
  * id = 여행 참여자 ID
  * member_id = 회원 ID → member.id | NULL = 비로그인 참여자
- * guest_name = 여행방 닉네임 | 로그인 참여자와 비로그인 참여자 모두 저장 | 같은 여행 안에서 중복 불가 | 여행 확정 전과 후 모두 수정 가능
+ * trip_nickname = 여행방 닉네임 | 로그인 참여자와 비로그인 참여자 모두 저장 | 같은 여행 안에서 중복 불가 | 여행 확정 전과 후 모두 수정 가능
  * joined_at = 초대 코드 참여 시각 | NULL = 초대 코드로 참여하지 않음 (여행 생성자, 비로그인 참여자)
  * created_at = 참여자 등록 시각
  **/
+ALTER TABLE trip_member
+    RENAME COLUMN guest_name TO trip_nickname;
+
+ALTER TABLE trip_member
+    RENAME CONSTRAINT uq_trip_member_trip_id_guest_name TO uq_trip_member_trip_id_trip_nickname;
 
 /** 여행당 관리자(ADMIN)는 1명 **/
 CREATE UNIQUE INDEX uq_trip_member_trip_id_admin

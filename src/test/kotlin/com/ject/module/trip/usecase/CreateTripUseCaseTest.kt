@@ -89,8 +89,8 @@ class CreateTripUseCaseTest : IntegrationTestSupport() {
             // given
             val memberId = createMember()
             val idempotencyKey = newIdempotencyKey()
-            // trip_member.guest_name은 10자까지라 11자 닉네임은 여행을 저장한 뒤 참여자 저장에서 실패합니다.
-            val failingCommand = command(nickname = "가".repeat(11))
+            // trip_member.trip_nickname은 10자까지라 11자 닉네임은 여행을 저장한 뒤 참여자 저장에서 실패합니다.
+            val failingCommand = command(tripNickname = "가".repeat(11))
 
             // when
             val failure =
@@ -176,7 +176,7 @@ class CreateTripUseCaseTest : IntegrationTestSupport() {
         customCountryName: String? = null,
         startDate: LocalDate = LocalDate.parse("2026-11-05"),
         endDate: LocalDate = LocalDate.parse("2026-11-07"),
-        nickname: String = "민지",
+        tripNickname: String = "민지",
     ): CreateTripCommand =
         CreateTripCommand(
             name = "도쿄 여행",
@@ -186,7 +186,7 @@ class CreateTripUseCaseTest : IntegrationTestSupport() {
             startDate = startDate,
             endDate = endDate,
             memberCapacity = 3,
-            nickname = nickname,
+            tripNickname = tripNickname,
         )
 
     private fun findTripIds(idempotencyKey: UUID): List<Long> =

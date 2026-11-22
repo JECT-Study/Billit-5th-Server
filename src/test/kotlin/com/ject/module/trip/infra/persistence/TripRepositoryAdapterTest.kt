@@ -73,16 +73,17 @@ class TripRepositoryAdapterTest : IntegrationTestSupport() {
         test("한 여행에 관리자를 두 명 저장할 수 없다") {
             // given
             val tripId = tripRepository.saveTrip(trip())
-            tripRepository.saveTripMember(tripMember(tripId, guestName = "민지"))
+            tripRepository.saveTripMember(tripMember(tripId, tripNickname = "민지"))
 
             // when
             val failure =
-                shouldThrow<DataIntegrityViolationException> { tripRepository.saveTripMember(tripMember(tripId, guestName = "지훈")) }
+                shouldThrow<DataIntegrityViolationException> { tripRepository.saveTripMember(tripMember(tripId, tripNickname = "지훈")) }
 
             // then
             assertSoftly {
                 violatedConstraint(failure) shouldBe "uq_trip_member_trip_id_admin"
-                jdbc.queryForList("SELECT guest_name FROM trip_member WHERE trip_id = ?", String::class.java, tripId) shouldBe listOf("민지")
+                jdbc.queryForList("SELECT trip_nickname FROM trip_member WHERE trip_id = ?", String::class.java, tripId) shouldBe
+                    listOf("민지")
             }
         }
     }
@@ -113,8 +114,8 @@ class TripRepositoryAdapterTest : IntegrationTestSupport() {
     /** 회원 행이 없어도 저장할 수 있도록 비로그인 참여자 형태의 관리자 행을 만듭니다. 관리자 수 제약만 확인합니다. */
     private fun tripMember(
         tripId: Long,
-        guestName: String,
-    ): TripMember = TripMember(tripId = tripId, memberId = null, guestName = guestName, role = TripMemberRole.ADMIN, joinedAt = null)
+        tripNickname: String,
+    ): TripMember = TripMember(tripId = tripId, memberId = null, tripNickname = tripNickname, role = TripMemberRole.ADMIN, joinedAt = null)
 
     private fun countTrips(idempotencyKey: UUID): Int =
         checkNotNull(jdbc.queryForObject("SELECT count(*) FROM trip WHERE idempotency_key = ?", Int::class.java, idempotencyKey))

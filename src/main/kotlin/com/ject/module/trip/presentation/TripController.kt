@@ -39,7 +39,7 @@ class TripController(
                 startDate = request.startDate,
                 endDate = request.endDate,
                 memberCapacity = checkNotNull(request.memberCapacity),
-                nickname = request.nickname,
+                tripNickname = request.tripNickname,
             )
 
         val trip = createTripUseCase.create(memberId(accessToken), UUID.fromString(idempotencyKey), command)

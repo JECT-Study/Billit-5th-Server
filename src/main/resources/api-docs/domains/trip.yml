@@ -56,7 +56,7 @@ paths:
         가입을 완료한 회원만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
 
         ### 처리 조건
-        여행은 확정 전(UNCONFIRMED) 상태로 만들고, 요청의 nickname을 생성자의 여행방 닉네임으로 등록합니다. 총인원에서 생성자를 뺀 나머지는 빈자리로 남으므로 처음 registeredMemberCount는 1입니다. 영문 대문자와 숫자로 된 6자리 초대 코드도 함께 만듭니다.
+        여행은 확정 전(UNCONFIRMED) 상태로 만들고, 요청의 tripNickname을 생성자의 여행방 닉네임으로 등록합니다. 총인원에서 생성자를 뺀 나머지는 빈자리로 남으므로 처음 registeredMemberCount는 1입니다. 영문 대문자와 숫자로 된 6자리 초대 코드도 함께 만듭니다.
 
         ### 사용 시 주의
         앱은 생성 시도마다 Idempotency-Key에 새 UUID를 보내고, 응답을 받지 못해 같은 요청을 다시 보낼 때만 같은 키를 사용합니다.
@@ -90,7 +90,7 @@ paths:
                   startDate: '2026-11-05'
                   endDate: '2026-11-07'
                   memberCapacity: 3
-                  nickname: 민지
+                  tripNickname: 민지
               customCountry:
                 summary: 기타 국가를 입력한 여행 생성
                 value:
@@ -101,7 +101,7 @@ paths:
                   startDate: '2026-12-01'
                   endDate: '2026-12-04'
                   memberCapacity: 4
-                  nickname: 민지
+                  tripNickname: 민지
       responses:
         '201':
           description: 여행 생성 성공. 같은 회원이 같은 키로 다시 요청해도 처음 만든 여행을 반환합니다.
@@ -847,7 +847,7 @@ components:
       - startDate
       - endDate
       - memberCapacity
-      - nickname
+      - tripNickname
       additionalProperties: false
       properties:
         name:
@@ -882,7 +882,7 @@ components:
           maximum: 10
           description: 생성자를 포함한 총인원입니다.
           example: 3
-        nickname:
+        tripNickname:
           type: string
           minLength: 1
           maxLength: 10
@@ -900,7 +900,7 @@ components:
       - startDate
       - endDate
       - memberCapacity
-      - nickname
+      - tripNickname
       additionalProperties: false
       properties:
         name:
@@ -936,7 +936,7 @@ components:
           maximum: 10
           description: 생성자를 포함한 총인원입니다.
           example: 4
-        nickname:
+        tripNickname:
           type: string
           minLength: 1
           maxLength: 10
