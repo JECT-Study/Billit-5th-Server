@@ -46,13 +46,15 @@ class TripRepositoryAdapterTest : IntegrationTestSupport() {
             }
         }
 
-        test("종료일이 시작일보다 빠르거나 정원이 1~10명을 벗어난 여행은 저장되지 않는다") {
+        test("종료일이 시작일보다 빠르거나 정원이 1~10명을 벗어나거나 대표 국가와 기타 국가명이 맞지 않는 여행은 저장되지 않는다") {
             // given
             val trips =
                 mapOf(
                     "시작일보다 빠른 종료일" to trip(startDate = LocalDate.parse("2026-11-05"), endDate = LocalDate.parse("2026-11-04")),
                     "정원 0명" to trip(memberCapacity = 0),
                     "정원 11명" to trip(memberCapacity = 11),
+                    "기타 국가인데 국가명 없음" to trip(countryCode = TripCountryCode.ETC, customCountryName = null),
+                    "기타 국가가 아닌데 국가명 있음" to trip(countryCode = TripCountryCode.JP, customCountryName = "베트남"),
                 )
 
             // when
@@ -65,6 +67,8 @@ class TripRepositoryAdapterTest : IntegrationTestSupport() {
                         "시작일보다 빠른 종료일" to "ck_trip_valid_date_range",
                         "정원 0명" to "ck_trip_member_capacity_range",
                         "정원 11명" to "ck_trip_member_capacity_range",
+                        "기타 국가인데 국가명 없음" to "ck_trip_custom_country_name",
+                        "기타 국가가 아닌데 국가명 있음" to "ck_trip_custom_country_name",
                     )
                 trips.mapValues { countTrips(it.value.idempotencyKey) } shouldBe trips.mapValues { 0 }
             }
@@ -92,6 +96,8 @@ class TripRepositoryAdapterTest : IntegrationTestSupport() {
         name: String = "도쿄 여행",
         startDate: LocalDate = LocalDate.parse("2026-11-05"),
         endDate: LocalDate = LocalDate.parse("2026-11-07"),
+        countryCode: TripCountryCode = TripCountryCode.JP,
+        customCountryName: String? = null,
         memberCapacity: Int = 3,
     ): Trip {
         val idempotencyKey = UUID.randomUUID()
@@ -100,8 +106,8 @@ class TripRepositoryAdapterTest : IntegrationTestSupport() {
             name = name,
             startDate = startDate,
             endDate = endDate,
-            countryCode = TripCountryCode.JP,
-            customCountryName = null,
+            countryCode = countryCode,
+            customCountryName = customCountryName,
             baseCurrency = TripCurrency.JPY,
             memberCapacity = memberCapacity,
             status = TripStatus.UNCONFIRMED,

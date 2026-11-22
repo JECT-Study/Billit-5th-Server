@@ -32,7 +32,8 @@ ALTER TABLE trip
 ALTER TABLE trip
     ADD CONSTRAINT uq_trip_idempotency_key UNIQUE (idempotency_key),
     ADD CONSTRAINT ck_trip_valid_date_range CHECK (end_date >= start_date),
-    ADD CONSTRAINT ck_trip_member_capacity_range CHECK (member_capacity BETWEEN 1 AND 10);
+    ADD CONSTRAINT ck_trip_member_capacity_range CHECK (member_capacity BETWEEN 1 AND 10),
+    ADD CONSTRAINT ck_trip_custom_country_name CHECK ((country_code = 'ETC') = (custom_country_name IS NOT NULL));
 
 /**
  * trip_member 컬럼의 의미와 이름 변경
