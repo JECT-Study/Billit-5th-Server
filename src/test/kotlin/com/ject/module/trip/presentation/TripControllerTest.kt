@@ -139,9 +139,9 @@ class TripControllerTest : IntegrationTestSupport() {
                 val requestBody =
                     jsonMapper.writeValueAsString(
                         mapOf(
-                            "name" to "  $fifteenCharacterName  ",
+                            "name" to " \u3000$fifteenCharacterName\u3000 ",
                             "countryCode" to "ETC",
-                            "customCountryName" to " Vietnam ",
+                            "customCountryName" to "\u3000 Vietnam \u3000",
                             "baseCurrency" to "USD",
                             "startDate" to "2026-12-01",
                             "endDate" to "2026-12-04",

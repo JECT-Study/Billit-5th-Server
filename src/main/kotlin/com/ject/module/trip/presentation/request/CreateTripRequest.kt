@@ -36,10 +36,10 @@ data class CreateTripRequest(
 ) {
     companion object {
         /** 앞뒤 공백을 뺀 값이 한글 완성형, 영문, 숫자와 가운데 공백으로 된 1~15자입니다. */
-        private const val NAME_PATTERN = "\\s*[가-힣A-Za-z0-9](?:[가-힣A-Za-z0-9 ]{0,13}[가-힣A-Za-z0-9])?\\s*"
+        private const val NAME_PATTERN = "(?U)\\s*[가-힣A-Za-z0-9](?:[가-힣A-Za-z0-9 ]{0,13}[가-힣A-Za-z0-9])?\\s*"
 
         /** 앞뒤 공백을 뺀 값이 한글 완성형과 영문으로 된 1~10자입니다. 가운데 공백은 받지 않습니다. */
-        private const val CUSTOM_COUNTRY_NAME_PATTERN = "\\s*[가-힣A-Za-z]{1,10}\\s*"
+        private const val CUSTOM_COUNTRY_NAME_PATTERN = "(?U)\\s*[가-힣A-Za-z]{1,10}\\s*"
 
         /** 한글 완성형, 영문과 숫자로 된 1~10자입니다. 계정 닉네임과 같은 규칙입니다. */
         private const val NICKNAME_PATTERN = "[가-힣A-Za-z0-9]{1,10}"
