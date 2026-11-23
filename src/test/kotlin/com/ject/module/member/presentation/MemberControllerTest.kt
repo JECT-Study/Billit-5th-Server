@@ -37,6 +37,7 @@ class MemberControllerTest : IntegrationTestSupport() {
     init {
         afterEach {
             memberIds.forEach { id ->
+                jdbc.update("DELETE FROM login_history WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM auth_session WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM member_consent WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM member_pain_point WHERE member_id = ?", id)

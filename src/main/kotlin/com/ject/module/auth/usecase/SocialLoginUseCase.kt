@@ -14,12 +14,13 @@ import com.ject.module.member.domain.MemberStatus
 import com.ject.module.member.domain.SocialMemberResult
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Service
+import org.springframework.transaction.support.TransactionTemplate
 
 /**
  * 소셜 계정으로 로그인하거나 가입 절차를 시작합니다. 구글과 카카오는 ID 토큰, 애플은 ID 토큰과 인가 코드로 인증합니다.
  *
  * 제공자 호출(JWKS 조회, 애플 인가 코드 교환)이 DB 트랜잭션을 붙잡지 않도록 외부 호출을 모두 마친 뒤 DB에 씁니다.
- * 이후 쓰기는 회원 생성, 애플 Refresh Token 저장, 세션 생성이며 각 저장이 자체 트랜잭션으로 커밋됩니다.
+ * 이후 쓰기는 회원 생성, 애플 Refresh Token 저장, 세션 생성이며 각 저장이 자체 트랜잭션으로 커밋됩니다. 세션 생성은 로그인 기록과 함께 한 트랜잭션으로 커밋합니다.
  * 이 UseCase는 여러 쓰기를 하나로 묶는 트랜잭션을 열지 않습니다. 중간에 실패해도 먼저 저장한 값은 다음 로그인에서 재사용하거나 교체되므로 로그인 결과에 영향을 주지 않습니다.
  */
 @Service
@@ -29,6 +30,7 @@ class SocialLoginUseCase(
     private val memberRepository: MemberRepository,
     private val appleRefreshTokenRepository: AppleRefreshTokenRepository,
     private val authTokenCreator: AuthTokenCreator,
+    private val transactionTemplate: TransactionTemplate,
 ) {
     /** 구글과 카카오 ID 토큰으로 로그인합니다. */
     fun login(
@@ -83,9 +85,19 @@ class SocialLoginUseCase(
 
     private fun issueLoginResult(member: SocialMemberResult): SocialLoginResult =
         when (member.status) {
-            MemberStatus.ACTIVE -> SocialLoginResult.Authenticated(authTokenCreator.createMemberTokens(member.memberId))
-            MemberStatus.PENDING -> SocialLoginResult.RegistrationRequired(authTokenCreator.createRegistrationToken(member.memberId))
-            MemberStatus.WITHDRAWN -> throw BusinessException(AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED)
+            MemberStatus.ACTIVE -> {
+                // 세션과 로그인 기록을 한 트랜잭션으로 커밋합니다. 외부 제공자 호출은 이미 끝났습니다.
+                val tokens = checkNotNull(transactionTemplate.execute { authTokenCreator.createMemberTokens(member.memberId) })
+                SocialLoginResult.Authenticated(tokens)
+            }
+
+            MemberStatus.PENDING -> {
+                SocialLoginResult.RegistrationRequired(authTokenCreator.createRegistrationToken(member.memberId))
+            }
+
+            MemberStatus.WITHDRAWN -> {
+                throw BusinessException(AuthErrorCode.SOCIAL_AUTHENTICATION_FAILED)
+            }
         }
 
     /**
