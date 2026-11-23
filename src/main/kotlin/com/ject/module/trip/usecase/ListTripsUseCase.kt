@@ -31,9 +31,9 @@ class ListTripsUseCase(
     ): TripListResult {
         val offset = page.toLong() * size
         val totalElements = tripRepository.countMyTrips(memberId, filter, today)
-        // 조회 시작 위치가 JPA가 받는 Int 범위를 넘으면 마지막 페이지를 넘은 것이므로 조회하지 않습니다.
+        // 조회 시작 위치가 전체 건수 이상이거나 JPA가 받는 Int 범위를 넘으면 꺼낼 여행이 없으므로 조회하지 않습니다.
         val trips =
-            if (offset > Int.MAX_VALUE) {
+            if (offset >= totalElements || offset > Int.MAX_VALUE) {
                 emptyList()
             } else {
                 tripRepository.findMyTrips(memberId, filter, today, offset.toInt(), size)
