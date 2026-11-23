@@ -485,6 +485,7 @@ class TripControllerTest : IntegrationTestSupport() {
                         "size 101" to "today=2026-11-05&size=101",
                         "허용하지 않는 filter" to "today=2026-11-05&filter=ALL",
                         "소문자 filter" to "today=2026-11-05&filter=ongoing",
+                        "빈 filter" to "today=2026-11-05&filter=",
                     )
 
                 // when
@@ -495,6 +496,7 @@ class TripControllerTest : IntegrationTestSupport() {
                     responses.mapValues { it.value.statusCode() } shouldBe queries.mapValues { 400 }
                     responses.mapValues { body(it.value)["code"] } shouldBe queries.mapValues { "COMMON_INVALID_REQUEST" }
                     body(responses.getValue("today 누락"))["errors"] shouldBe listOf(mapOf("field" to "today", "reason" to "필수 값입니다."))
+                    body(responses.getValue("빈 filter"))["errors"] shouldBe listOf(mapOf("field" to "filter", "reason" to "허용되지 않는 값입니다."))
                 }
             }
 
