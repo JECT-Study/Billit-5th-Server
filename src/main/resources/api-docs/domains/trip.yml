@@ -346,7 +346,9 @@ paths:
                   value:
                     code: COMMON_INVALID_REQUEST
                     message: 요청이 올바르지 않습니다.
-                    errors: null
+                    errors:
+                    - field: tripId
+                      reason: 허용되지 않는 값입니다.
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
         '403':
@@ -463,7 +465,9 @@ paths:
                   value:
                     code: COMMON_INVALID_REQUEST
                     message: 요청이 올바르지 않습니다.
-                    errors: null
+                    errors:
+                    - field: code
+                      reason: 필수 값입니다.
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
         '404':

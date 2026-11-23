@@ -207,7 +207,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                 }
             }
 
-            test("code가 없거나 공백뿐이면 400 COMMON_INVALID_REQUEST를 받는다") {
+            test("code가 없거나 비어 있거나 공백뿐이면 400 COMMON_INVALID_REQUEST와 같은 필드 오류를 받는다") {
                 // given
                 val memberId = createMember("ACTIVE")
 
@@ -215,6 +215,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                 val responses =
                     mapOf(
                         "code 없음" to get("/api/v1/trip-invitations", accessToken(memberId)),
+                        "빈 code" to search("", accessToken(memberId)),
                         "공백뿐인 code" to search("   ", accessToken(memberId)),
                     )
 
@@ -222,6 +223,8 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                 assertSoftly {
                     responses.mapValues { it.value.statusCode() } shouldBe responses.mapValues { 400 }
                     responses.mapValues { body(it.value)["code"] } shouldBe responses.mapValues { "COMMON_INVALID_REQUEST" }
+                    responses.mapValues { body(it.value)["errors"] } shouldBe
+                        responses.mapValues { listOf(mapOf("field" to "code", "reason" to "필수 값입니다.")) }
                 }
             }
         }

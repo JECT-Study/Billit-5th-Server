@@ -52,7 +52,7 @@ class TripInvitationController(
     @GetMapping("/api/v1/trip-invitations")
     fun searchTripInvitation(
         @AuthenticationPrincipal accessToken: Jwt,
-        @RequestParam @NotBlank code: String,
+        @RequestParam @NotBlank(message = "필수 값입니다.") code: String,
     ): ResponseEntity<ApiResponse<TripInvitationSearchResponse>> {
         val trip = searchTripInvitationUseCase.search(memberId(accessToken), normalizeInviteCode(code))
 
