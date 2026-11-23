@@ -28,7 +28,7 @@ class TripInvitationController(
         @AuthenticationPrincipal accessToken: Jwt,
         @Valid @RequestBody request: JoinTripRequest,
     ): ResponseEntity<ApiResponse<TripMembershipResponse>> {
-        val membership = joinTripUseCase.join(memberId(accessToken), normalizeInviteCode(request.inviteCode), request.nickname)
+        val membership = joinTripUseCase.join(memberId(accessToken), normalizeInviteCode(request.inviteCode), request.tripNickname)
 
         val status = if (membership.isNewMember) HttpStatus.CREATED else HttpStatus.OK
         return ResponseEntity

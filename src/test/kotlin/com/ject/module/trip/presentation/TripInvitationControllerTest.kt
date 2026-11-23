@@ -178,10 +178,10 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                 val memberId = createMember("ACTIVE")
                 val requestBodies =
                     mapOf(
-                        "초대 코드 없음" to """{"nickname": "지훈"}""",
-                        "공백뿐인 초대 코드" to """{"inviteCode": "   ", "nickname": "지훈"}""",
-                        "닉네임에 공백" to """{"inviteCode": "${trip.inviteCode}", "nickname": "지 훈"}""",
-                        "11자 닉네임" to """{"inviteCode": "${trip.inviteCode}", "nickname": "${"가".repeat(11)}"}""",
+                        "초대 코드 없음" to """{"tripNickname": "지훈"}""",
+                        "공백뿐인 초대 코드" to """{"inviteCode": "   ", "tripNickname": "지훈"}""",
+                        "닉네임에 공백" to """{"inviteCode": "${trip.inviteCode}", "tripNickname": "지 훈"}""",
+                        "11자 닉네임" to """{"inviteCode": "${trip.inviteCode}", "tripNickname": "${"가".repeat(11)}"}""",
                     )
 
                 // when
@@ -192,7 +192,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                     responses.mapValues { it.value.statusCode() } shouldBe responses.mapValues { 400 }
                     responses.mapValues { body(it.value)["code"] } shouldBe responses.mapValues { "COMMON_INVALID_REQUEST" }
                     body(responses.getValue("닉네임에 공백"))["errors"] shouldBe
-                        listOf(mapOf("field" to "nickname", "reason" to "한글, 영문, 숫자로 1~10자여야 합니다."))
+                        listOf(mapOf("field" to "tripNickname", "reason" to "한글, 영문, 숫자로 1~10자여야 합니다."))
                     countMemberParticipations(memberId) shouldBe 0
                 }
             }
@@ -261,7 +261,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
     private fun addMember(
         tripId: Long,
         memberId: Long,
-        nickname: String,
+        tripNickname: String,
     ): Long =
         checkNotNull(
             jdbc.queryForObject(
@@ -270,7 +270,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                 Long::class.java,
                 tripId,
                 memberId,
-                nickname,
+                tripNickname,
             ),
         )
 
@@ -329,9 +329,9 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
 
     private fun join(
         inviteCode: String,
-        nickname: String,
+        tripNickname: String,
         token: String?,
-    ): HttpResponse<String> = post("""{"inviteCode": "$inviteCode", "nickname": "$nickname"}""", token)
+    ): HttpResponse<String> = post("""{"inviteCode": "$inviteCode", "tripNickname": "$tripNickname"}""", token)
 
     private fun post(
         requestBody: String,
