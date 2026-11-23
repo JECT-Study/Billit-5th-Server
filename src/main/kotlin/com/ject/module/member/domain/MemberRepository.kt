@@ -55,6 +55,9 @@ interface MemberRepository {
         marketingPushAgreedAt: Instant?,
     ): RegistrationCompletionResult
 
+    /** [memberIds] 중 탈퇴 시각이 기록된 회원과 그 탈퇴 시각을 조회합니다. 탈퇴 시각이 없거나 없는 회원은 결과에서 빠지며 순서는 보장하지 않습니다. */
+    fun findWithdrawnMembers(memberIds: Collection<Long>): List<WithdrawnMemberResult>
+
     companion object {
         /** `member.social_display_name`의 최대 길이(문자 수)입니다. */
         const val SOCIAL_DISPLAY_NAME_MAX_LENGTH = 100

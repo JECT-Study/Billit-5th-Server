@@ -37,4 +37,6 @@ interface TripJpaRepository : JpaRepository<Trip, Long> {
         @Param("adminRole") adminRole: TripMemberRole,
         @Param("registeredStatuses") registeredStatuses: Collection<TripMemberStatus>,
     ): IdempotentTripResult?
+
+    fun findByIdAndDeletedAtIsNull(id: Long): Trip?
 }

@@ -5,6 +5,7 @@ import com.ject.module.member.domain.Gender
 import com.ject.module.member.domain.Member
 import com.ject.module.member.domain.MemberStatus
 import com.ject.module.member.domain.RegistrationMemberResult
+import com.ject.module.member.domain.WithdrawnMemberResult
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
@@ -73,4 +74,16 @@ interface MemberJpaRepository : JpaRepository<Member, Long> {
         @Param("marketingPushAgreedAt") marketingPushAgreedAt: Instant?,
         @Param("updatedAt") updatedAt: Instant,
     ): Int
+
+    @Query(
+        """
+        SELECT new com.ject.module.member.domain.WithdrawnMemberResult(m.id, m.withdrawnAt)
+        FROM Member m
+        WHERE m.id IN :ids
+          AND m.withdrawnAt IS NOT NULL
+        """,
+    )
+    fun findWithdrawnMembers(
+        @Param("ids") ids: Collection<Long>,
+    ): List<WithdrawnMemberResult>
 }

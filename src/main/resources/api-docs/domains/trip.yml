@@ -6,25 +6,40 @@ paths:
       - Trip
       operationId: listTrips
       summary: 내 여행 목록 조회
-      description: 요청자가 참여 중인 여행을 페이지 단위로 조회합니다. 가입을 완료한 회원만 요청할 수 있습니다. filter를 보내면 서버가 조건에 맞는 여행만 조회하고, 필터를 적용한 결과에 페이지를 나눕니다. 최근에 만든 여행부터 정렬하며 만든 시각이 같으면 여행 ID가 큰 여행을 먼저 둡니다. 나간 여행과 삭제된 여행은 포함하지 않습니다.
+      description: |
+        요청한 회원이 참여 중인 여행을 페이지 단위로 조회합니다.
+
+        ### 요청 권한
+        가입을 완료한 회원만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        나간 여행과 삭제된 여행은 포함하지 않습니다. 최근에 만든 여행부터 정렬하며 만든 시각이 같으면 여행 ID가 큰 여행을 먼저 둡니다. filter를 보내면 조건에 맞는 여행만 조회하고, 필터를 적용한 결과에 페이지를 나눕니다.
+        일정 상태(scheduleStatus)와 filter는 같은 기준으로 나눕니다. 확정 전 여행은 날짜와 관계없이 INVITING이고, 확정 후 여행은 today가 시작일보다 앞이면 UPCOMING, 시작일부터 종료일까지(양 끝 포함) ONGOING, 종료일보다 뒤면 ENDED입니다.
+
+        ### 사용 시 주의
+        today는 사용자 기기의 현지 날짜이며 서버는 시간대를 받지 않습니다. 다음 페이지를 요청할 때도 첫 페이지 요청에 쓴 today를 그대로 보냅니다. 새로고침, 목록 화면 재진입과 앱 복귀 때는 현재 현지 날짜로 page=0부터 다시 조회합니다.
       security:
       - bearerAuth: []
       parameters:
+      - name: today
+        in: query
+        required: true
+        description: '사용자 기기의 현지 날짜입니다. filter와 관계없이 항상 보내며, 서버는 이 날짜로 filter를 적용하고 scheduleStatus를 계산합니다. YYYY-MM-DD 형식만 받고 없는 날짜는 거절합니다. 예: today=2026-11-06'
+        schema:
+          type: string
+          format: date
+          example: '2026-11-06'
       - "$ref": "../common/components.yml#/parameters/Page"
       - "$ref": "../common/components.yml#/parameters/Size"
       - name: filter
         in: query
         required: false
-        description: 여행 목록 필터. INVITING은 참여자 초대중, UPCOMING은 여행 예정, ENDED는 여행 종료입니다. 확정 전 여행은 여행 시작일과 관계없이 INVITING에만 들어가고, UPCOMING과 ENDED에는 확정 후 여행만 들어갑니다. 생략하면 진행 중 여행을 포함한 전체 여행 목록을 조회합니다.
+        description: 조회할 일정 상태입니다. INVITING은 참여자 초대중, UPCOMING은 여행 예정, ONGOING은 진행 중, ENDED는 여행 종료입니다. 확정 전 여행은 날짜와 관계없이 INVITING에만 들어가고, UPCOMING, ONGOING과 ENDED에는 확정 후 여행만 들어갑니다. 생략하면 일정 상태로 제한하지 않고 전체 여행을 조회합니다.
         schema:
-          type: string
-          enum:
-          - INVITING
-          - UPCOMING
-          - ENDED
+          "$ref": "./trip.yml#/components/schemas/TripScheduleStatus"
       responses:
         '200':
-          description: 조회 성공. 참여 중인 여행이 없거나 마지막 페이지를 넘으면 빈 목록을 반환합니다.
+          description: 내 여행 목록 조회 성공
           content:
             application/json:
               schema:
@@ -36,12 +51,60 @@ paths:
                 properties:
                   data:
                     type: array
+                    description: 참여 중인 여행이 없거나 마지막 페이지를 넘으면 빈 목록입니다.
                     items:
                       "$ref": "./trip.yml#/components/schemas/TripListItem"
                   page:
                     "$ref": "../common/components.yml#/schemas/PageInfo"
+              examples:
+                success:
+                  summary: 진행 중인 여행 목록 조회 성공
+                  value:
+                    data:
+                    - tripId: '123'
+                      name: 도쿄 여행
+                      countryCode: JP
+                      customCountryName: null
+                      startDate: '2026-11-05'
+                      endDate: '2026-11-07'
+                      memberCapacity: 3
+                      registeredMemberCount: 3
+                      status: CONFIRMED
+                      scheduleStatus: ONGOING
+                      myRole: ADMIN
+                      myShareAmountKrw: '0.00'
+                    page:
+                      page: 0
+                      size: 20
+                      totalElements: 1
+                      hasNext: false
+                emptyResult:
+                  summary: 참여 중인 여행이 없음
+                  value:
+                    data: []
+                    page:
+                      page: 0
+                      size: 20
+                      totalElements: 0
+                      hasNext: false
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
+          description: |
+            today가 없거나 YYYY-MM-DD 형식의 날짜가 아니거나, page가 0보다 작거나, size가 1~100을 벗어나거나, filter가 허용하지 않는 값입니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: today가 없음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: today
+                      reason: 필수 값입니다.
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
     post:
@@ -194,12 +257,19 @@ paths:
       - Trip
       operationId: getTrip
       summary: 여행 상세
-      description: 여행 상세 진입에 필요한 기본 정보와 참여자 목록을 함께 조회합니다. 해당 여행에 참여한 회원만 요청할 수 있습니다. 여행 종료일이 지나도 조회할 수 있습니다. 참여자 목록은 관리자, 로그인 참여자(참여한 순서), 비로그인 참여자(관리자가 추가한 순서) 순으로 제공하며 빈자리는 넣지 않습니다. 앱은 memberCapacity에서 registeredMemberCount를 뺀 수만큼 빈자리를 표시합니다.
+      description: |
+        여행 상세 진입에 필요한 기본 정보와 참여자 목록을 함께 조회합니다.
+
+        ### 요청 권한
+        해당 여행에 참여 중인 회원만 요청할 수 있습니다. 여행을 나간 회원은 요청할 수 없습니다.
+
+        ### 처리 조건
+        여행 종료일이 지나도 조회할 수 있습니다. 참여자 목록에는 나간 회원과 탈퇴 회원도 넣고 빈자리는 넣지 않습니다. 앱은 memberCapacity에서 registeredMemberCount를 뺀 수만큼 빈자리를 표시합니다.
       security:
       - bearerAuth: []
       responses:
         '200':
-          description: 조회 성공
+          description: 여행 상세 조회 성공
           content:
             application/json:
               schema:
@@ -210,14 +280,105 @@ paths:
                 properties:
                   data:
                     "$ref": "./trip.yml#/components/schemas/TripDetail"
+              examples:
+                success:
+                  summary: 나간 회원과 탈퇴 회원이 있는 여행 상세 조회 성공
+                  value:
+                    data:
+                      tripId: '123'
+                      name: 도쿄 여행
+                      countryCode: JP
+                      customCountryName: null
+                      startDate: '2026-11-05'
+                      endDate: '2026-11-07'
+                      baseCurrency: JPY
+                      memberCapacity: 4
+                      registeredMemberCount: 3
+                      status: CONFIRMED
+                      myRole: ADMIN
+                      participants:
+                      - tripMemberId: '501'
+                        memberId: '11'
+                        displayName: 민지
+                        role: ADMIN
+                        participantStatus: MEMBER
+                        shareAmountKrw: '0.00'
+                      - tripMemberId: '502'
+                        memberId: '12'
+                        displayName: 지훈
+                        role: MEMBER
+                        participantStatus: MEMBER
+                        shareAmountKrw: '0.00'
+                      - tripMemberId: '503'
+                        memberId: null
+                        displayName: 서연
+                        role: MEMBER
+                        participantStatus: GUEST
+                        shareAmountKrw: '0.00'
+                      - tripMemberId: '504'
+                        memberId: '14'
+                        displayName: 하준
+                        role: MEMBER
+                        participantStatus: LEFT
+                        shareAmountKrw: '0.00'
+                      - tripMemberId: '505'
+                        memberId: null
+                        displayName: 탈퇴한 사용자 1
+                        role: MEMBER
+                        participantStatus: WITHDRAWN
+                        shareAmountKrw: '0.00'
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
+          description: |
+            tripId가 숫자 형식의 여행 ID가 아닙니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 여행 ID 형식이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: tripId
+                      reason: 허용되지 않는 값입니다.
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
         '403':
-          "$ref": "../common/components.yml#/responses/Forbidden"
+          description: |
+            요청한 회원이 이 여행에 참여하지 않았거나 여행을 나갔습니다.
+
+            **오류 코드:** `COMMON_FORBIDDEN`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_FORBIDDEN:
+                  summary: 참여 중인 여행이 아님
+                  value:
+                    code: COMMON_FORBIDDEN
+                    message: 요청을 수행할 권한이 없습니다.
+                    errors: null
         '404':
-          "$ref": "../common/components.yml#/responses/NotFound"
+          description: |
+            tripId에 해당하는 여행이 없거나 삭제됐습니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_NOT_FOUND:
+                  summary: 여행이 없거나 삭제됨
+                  value:
+                    code: COMMON_NOT_FOUND
+                    message: 요청한 리소스를 찾을 수 없습니다.
+                    errors: null
     patch:
       tags:
       - Trip
@@ -660,6 +821,22 @@ components:
       - UNCONFIRMED
       - CONFIRMED
       description: 여행 확정 상태. UNCONFIRMED는 확정 전, CONFIRMED는 확정 후입니다.
+    TripScheduleStatus:
+      type: string
+      enum:
+      - INVITING
+      - UPCOMING
+      - ONGOING
+      - ENDED
+      description: 여행 일정 상태입니다. INVITING은 참여자 초대중(확정 전 여행), UPCOMING은 여행 예정, ONGOING은 진행 중, ENDED는 여행 종료입니다. 확정 전 여행은 날짜와 관계없이 INVITING이고, 확정 후 여행만 요청의 today와 여행 시작일, 종료일로 나눕니다.
+    ParticipantStatus:
+      type: string
+      enum:
+      - MEMBER
+      - GUEST
+      - LEFT
+      - WITHDRAWN
+      description: 참여자 상태입니다. MEMBER는 참여 중인 로그인 참여자, GUEST는 비로그인 참여자, LEFT는 나간 회원, WITHDRAWN은 탈퇴 회원입니다.
     TripSummary:
       type: object
       required:
@@ -725,6 +902,7 @@ components:
       - memberCapacity
       - registeredMemberCount
       - status
+      - scheduleStatus
       - myRole
       - myShareAmountKrw
       additionalProperties: false
@@ -756,9 +934,12 @@ components:
         registeredMemberCount:
           type: integer
           minimum: 0
+          description: 참여 중인 로그인 참여자와 비로그인 참여자의 합. 나간 회원, 탈퇴 회원과 빈자리는 제외합니다.
           example: 3
         status:
           "$ref": "./trip.yml#/components/schemas/TripStatus"
+        scheduleStatus:
+          "$ref": "./trip.yml#/components/schemas/TripScheduleStatus"
         myRole:
           "$ref": "./trip.yml#/components/schemas/TripRole"
         myShareAmountKrw:
@@ -813,6 +994,7 @@ components:
         registeredMemberCount:
           type: integer
           minimum: 0
+          description: 참여 중인 로그인 참여자와 비로그인 참여자의 합. 나간 회원, 탈퇴 회원과 빈자리는 제외합니다.
           example: 3
         status:
           "$ref": "./trip.yml#/components/schemas/TripStatus"
@@ -820,7 +1002,7 @@ components:
           "$ref": "./trip.yml#/components/schemas/TripRole"
         participants:
           type: array
-          description: 참여자 목록. 관리자, 로그인 참여자(참여한 순서), 비로그인 참여자(관리자가 추가한 순서) 순이며 빈자리는 넣지 않습니다.
+          description: 참여자 목록. 관리자, 로그인 참여자(참여한 순서), 비로그인 참여자(관리자가 추가한 순서), 나간 회원(먼저 나간 순서), 탈퇴 회원(먼저 탈퇴한 순서) 순이며 빈자리는 넣지 않습니다.
           items:
             "$ref": "./trip.yml#/components/schemas/Participant"
     TripCreate:
@@ -984,6 +1166,7 @@ components:
       - memberId
       - displayName
       - role
+      - participantStatus
       - shareAmountKrw
       additionalProperties: false
       properties:
@@ -992,13 +1175,15 @@ components:
         memberId:
           type: string
           nullable: true
-          description: Billit 회원 계정 ID. 비로그인 참여자이면 null입니다.
+          description: Billit 회원 계정 ID. 비로그인 참여자와 탈퇴 회원이면 null입니다.
         displayName:
           type: string
-          description: 참여자의 여행방 닉네임. 이름을 식별자로 사용하지 않습니다.
+          description: 참여자의 여행방 닉네임. 나간 회원은 나가기 전에 쓰던 닉네임이고, 탈퇴 회원은 같은 여행의 탈퇴 회원에게 먼저 탈퇴한 순서대로 1부터 붙인 '탈퇴한 사용자 N'입니다. 이름을 식별자로 사용하지 않습니다.
           example: 민지
         role:
           "$ref": "./trip.yml#/components/schemas/TripRole"
+        participantStatus:
+          "$ref": "./trip.yml#/components/schemas/ParticipantStatus"
         shareAmountKrw:
           allOf:
           - "$ref": "../common/components.yml#/schemas/DecimalString"

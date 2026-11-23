@@ -8,6 +8,7 @@ import com.ject.module.member.domain.MemberStatus
 import com.ject.module.member.domain.RegistrationCompletionResult
 import com.ject.module.member.domain.RegistrationMemberResult
 import com.ject.module.member.domain.SocialMemberResult
+import com.ject.module.member.domain.WithdrawnMemberResult
 import com.ject.module.member.infra.persistence.jpa.MemberJpaRepository
 import org.hibernate.exception.ConstraintViolationException
 import org.springframework.dao.DataIntegrityViolationException
@@ -91,6 +92,13 @@ class MemberRepositoryAdapter(
                 updatedAt = clock.instant(),
             )
         return if (updated == 1) RegistrationCompletionResult.COMPLETED else RegistrationCompletionResult.NOT_PENDING
+    }
+
+    override fun findWithdrawnMembers(memberIds: Collection<Long>): List<WithdrawnMemberResult> {
+        if (memberIds.isEmpty()) {
+            return emptyList()
+        }
+        return memberJpaRepository.findWithdrawnMembers(memberIds)
     }
 
     /** PostgreSQL `VARCHAR` 길이는 문자(코드 포인트) 수이므로 서로게이트 쌍을 나누지 않고 자릅니다. */
