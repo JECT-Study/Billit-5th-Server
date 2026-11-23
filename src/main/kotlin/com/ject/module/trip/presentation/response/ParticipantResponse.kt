@@ -7,7 +7,7 @@ import com.ject.module.trip.domain.TripMemberStatus
 data class ParticipantResponse(
     val tripMemberId: String,
     val memberId: String?,
-    val displayName: String,
+    val tripNickname: String,
     val role: TripMemberRole,
     val participantStatus: TripMemberStatus,
     val shareAmountKrw: String,

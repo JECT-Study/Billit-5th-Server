@@ -54,12 +54,12 @@ class GetTripDetailUseCase(
             if (isWithdrawn) {
                 withdrawnNumber++
             }
-            val displayName = if (isWithdrawn) "$WITHDRAWN_DISPLAY_NAME_PREFIX$withdrawnNumber" else checkNotNull(tripMember.tripNickname)
+            val tripNickname = if (isWithdrawn) "$WITHDRAWN_NICKNAME_PREFIX$withdrawnNumber" else checkNotNull(tripMember.tripNickname)
             participants.add(
                 TripDetailResult.Participant(
                     tripMemberId = checkNotNull(tripMember.id),
                     memberId = if (isWithdrawn) null else tripMember.memberId,
-                    displayName = displayName,
+                    tripNickname = tripNickname,
                     role = tripMember.role,
                     participantStatus = tripMember.status,
                     shareAmountKrw = BigDecimal.ZERO.setScale(2),
@@ -108,6 +108,6 @@ class GetTripDetailUseCase(
         }
 
     companion object {
-        private const val WITHDRAWN_DISPLAY_NAME_PREFIX = "탈퇴한 사용자 "
+        private const val WITHDRAWN_NICKNAME_PREFIX = "탈퇴한 사용자 "
     }
 }

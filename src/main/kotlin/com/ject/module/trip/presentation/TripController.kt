@@ -103,7 +103,7 @@ class TripController(
                             ParticipantResponse(
                                 tripMemberId = it.tripMemberId.toString(),
                                 memberId = it.memberId?.toString(),
-                                displayName = it.displayName,
+                                tripNickname = it.tripNickname,
                                 role = it.role,
                                 participantStatus = it.participantStatus,
                                 shareAmountKrw = it.shareAmountKrw.setScale(2, RoundingMode.UNNECESSARY).toPlainString(),

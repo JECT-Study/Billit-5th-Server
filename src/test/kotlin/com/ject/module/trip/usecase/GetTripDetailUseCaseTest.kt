@@ -111,13 +111,13 @@ class GetTripDetailUseCaseTest : IntegrationTestSupport() {
     private fun participant(
         tripMemberId: Long,
         memberId: Long?,
-        displayName: String,
+        tripNickname: String,
         role: TripMemberRole,
         status: TripMemberStatus,
     ) = TripDetailResult.Participant(
         tripMemberId = tripMemberId,
         memberId = memberId,
-        displayName = displayName,
+        tripNickname = tripNickname,
         role = role,
         participantStatus = status,
         shareAmountKrw = BigDecimal("0.00"),

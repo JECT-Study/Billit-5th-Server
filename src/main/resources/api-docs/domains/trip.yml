@@ -299,31 +299,31 @@ paths:
                       participants:
                       - tripMemberId: '501'
                         memberId: '11'
-                        displayName: 민지
+                        tripNickname: 민지
                         role: ADMIN
                         participantStatus: MEMBER
                         shareAmountKrw: '0.00'
                       - tripMemberId: '502'
                         memberId: '12'
-                        displayName: 지훈
+                        tripNickname: 지훈
                         role: MEMBER
                         participantStatus: MEMBER
                         shareAmountKrw: '0.00'
                       - tripMemberId: '503'
                         memberId: null
-                        displayName: 서연
+                        tripNickname: 서연
                         role: MEMBER
                         participantStatus: GUEST
                         shareAmountKrw: '0.00'
                       - tripMemberId: '504'
                         memberId: '14'
-                        displayName: 하준
+                        tripNickname: 하준
                         role: MEMBER
                         participantStatus: LEFT
                         shareAmountKrw: '0.00'
                       - tripMemberId: '505'
                         memberId: null
-                        displayName: 탈퇴한 사용자 1
+                        tripNickname: 탈퇴한 사용자 1
                         role: MEMBER
                         participantStatus: WITHDRAWN
                         shareAmountKrw: '0.00'
@@ -1164,7 +1164,7 @@ components:
       required:
       - tripMemberId
       - memberId
-      - displayName
+      - tripNickname
       - role
       - participantStatus
       - shareAmountKrw
@@ -1176,7 +1176,7 @@ components:
           type: string
           nullable: true
           description: Billit 회원 계정 ID. 비로그인 참여자와 탈퇴 회원이면 null입니다.
-        displayName:
+        tripNickname:
           type: string
           description: 참여자의 여행방 닉네임. 나간 회원은 나가기 전에 쓰던 닉네임이고, 탈퇴 회원은 같은 여행의 탈퇴 회원에게 먼저 탈퇴한 순서대로 1부터 붙인 '탈퇴한 사용자 N'입니다. 이름을 식별자로 사용하지 않습니다.
           example: 민지

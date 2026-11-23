@@ -646,14 +646,14 @@ class TripControllerTest : IntegrationTestSupport() {
     private fun participant(
         tripMemberId: Long,
         memberId: Long?,
-        displayName: String,
+        tripNickname: String,
         role: String,
         participantStatus: String,
     ): Map<String, Any?> =
         mapOf(
             "tripMemberId" to tripMemberId.toString(),
             "memberId" to memberId?.toString(),
-            "displayName" to displayName,
+            "tripNickname" to tripNickname,
             "role" to role,
             "participantStatus" to participantStatus,
             "shareAmountKrw" to "0.00",

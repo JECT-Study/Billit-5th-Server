@@ -23,11 +23,11 @@ data class TripDetailResult(
     val myRole: TripMemberRole,
     val participants: List<Participant>,
 ) {
-    /** [memberId]는 비로그인 참여자와 탈퇴 회원이면 `null`이고, [displayName]은 탈퇴 회원이면 '탈퇴한 사용자 N'입니다. */
+    /** [memberId]는 비로그인 참여자와 탈퇴 회원이면 `null`이고, [tripNickname]은 탈퇴 회원이면 '탈퇴한 사용자 N'입니다. */
     data class Participant(
         val tripMemberId: Long,
         val memberId: Long?,
-        val displayName: String,
+        val tripNickname: String,
         val role: TripMemberRole,
         val participantStatus: TripMemberStatus,
         val shareAmountKrw: BigDecimal,
