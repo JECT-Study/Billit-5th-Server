@@ -41,7 +41,7 @@ interface TripRepository {
     /**
      * 초대 코드로 참여한 회원을 저장하고 여행 참여자 ID를 반환합니다.
      *
-     * - 같은 여행에 같은 여행방 닉네임이 있어 `uq_trip_member_trip_id_guest_name` 위반이면 [TripNicknameDuplicatedException]을 던집니다. 다른 DB 오류는 그대로 던집니다.
+     * - 같은 여행에 같은 여행방 닉네임이 있어 `uq_trip_member_trip_id_trip_nickname` 위반이면 [TripNicknameDuplicatedException]을 던집니다. 다른 DB 오류는 그대로 던집니다.
      * - 트랜잭션: 호출하는 쪽의 트랜잭션에 참여합니다. 제약 위반이 난 트랜잭션은 더 쓸 수 없으므로 예외를 트랜잭션 밖으로 전파해 롤백합니다.
      */
     fun saveJoinedTripMember(tripMember: TripMember): Long

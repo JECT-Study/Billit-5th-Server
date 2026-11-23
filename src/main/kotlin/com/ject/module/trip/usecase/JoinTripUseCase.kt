@@ -62,7 +62,7 @@ class JoinTripUseCase(
                     TripMember(
                         tripId = tripId,
                         memberId = memberId,
-                        guestName = nickname,
+                        tripNickname = nickname,
                         role = TripMemberRole.MEMBER,
                         joinedAt = clock.instant(),
                     ),

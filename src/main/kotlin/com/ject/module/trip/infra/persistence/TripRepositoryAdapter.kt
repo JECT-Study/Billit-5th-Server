@@ -63,6 +63,6 @@ class TripRepositoryAdapter(
     companion object {
         private const val IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT = "uq_trip_idempotency_key"
         private const val INVITE_CODE_UNIQUE_CONSTRAINT = "uq_trip_invite_code"
-        private const val NICKNAME_UNIQUE_CONSTRAINT = "uq_trip_member_trip_id_guest_name"
+        private const val NICKNAME_UNIQUE_CONSTRAINT = "uq_trip_member_trip_id_trip_nickname"
     }
 }

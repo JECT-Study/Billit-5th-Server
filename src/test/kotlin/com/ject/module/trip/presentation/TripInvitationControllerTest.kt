@@ -65,7 +65,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                         .shouldBeNull()
                     body(response) shouldBe
                         mapOf("data" to mapOf("tripId" to trip.id.toString(), "tripMemberId" to joined["id"].toString()))
-                    joined["guest_name"] shouldBe "지훈"
+                    joined["trip_nickname"] shouldBe "지훈"
                     joined["role"] shouldBe "MEMBER"
                     joined["joined_at"].shouldNotBeNull()
                     countTripMembers(trip.id) shouldBe 2
@@ -102,7 +102,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                     response.statusCode() shouldBe 200
                     body(response) shouldBe
                         mapOf("data" to mapOf("tripId" to trip.id.toString(), "tripMemberId" to tripMemberId.toString()))
-                    findTripMember(trip.id, memberId)?.get("guest_name") shouldBe "지훈"
+                    findTripMember(trip.id, memberId)?.get("trip_nickname") shouldBe "지훈"
                     countTripMembers(trip.id) shouldBe 2
                 }
             }
@@ -249,7 +249,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
             )
         tripIds.add(tripId)
         jdbc.update(
-            "INSERT INTO trip_member (trip_id, member_id, guest_name, role, created_at, updated_at) " +
+            "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, created_at, updated_at) " +
                 "VALUES (?, ?, ?, 'ADMIN', now(), now())",
             tripId,
             createMember("ACTIVE"),
@@ -265,7 +265,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
     ): Long =
         checkNotNull(
             jdbc.queryForObject(
-                "INSERT INTO trip_member (trip_id, member_id, guest_name, role, joined_at, created_at, updated_at) " +
+                "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, joined_at, created_at, updated_at) " +
                     "VALUES (?, ?, ?, 'MEMBER', now(), now(), now()) RETURNING id",
                 Long::class.java,
                 tripId,
@@ -279,7 +279,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
         name: String,
     ) {
         jdbc.update(
-            "INSERT INTO trip_member (trip_id, guest_name, role, created_at, updated_at) VALUES (?, ?, 'MEMBER', now(), now())",
+            "INSERT INTO trip_member (trip_id, trip_nickname, role, created_at, updated_at) VALUES (?, ?, 'MEMBER', now(), now())",
             tripId,
             name,
         )
@@ -316,7 +316,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
     ): Map<String, Any?>? =
         jdbc
             .queryForList(
-                "SELECT id, guest_name, role::text AS role, joined_at FROM trip_member WHERE trip_id = ? AND member_id = ?",
+                "SELECT id, trip_nickname, role::text AS role, joined_at FROM trip_member WHERE trip_id = ? AND member_id = ?",
                 tripId,
                 memberId,
             ).singleOrNull()
