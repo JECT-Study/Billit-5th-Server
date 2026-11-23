@@ -6,6 +6,8 @@ import com.ject.module.trip.domain.TripRepository
 import com.ject.module.trip.domain.TripScheduleStatus
 import com.ject.module.trip.domain.TripStatus
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Isolation
+import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.time.LocalDate
 
@@ -17,7 +19,9 @@ class ListTripsUseCase(
     /**
      * [today]는 사용자 기기의 현지 날짜이며, [filter]와 일정 상태는 이 날짜로 나눕니다.
      * 페이지는 필터를 적용한 결과에 나눕니다. 지출 기능 전이므로 요청한 회원의 누적 부담액은 0원입니다.
+     * 전체 건수와 페이지 항목이 같은 시점의 데이터를 보도록 두 조회를 `REPEATABLE READ` 읽기 전용 트랜잭션 하나로 묶습니다.
      */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     fun list(
         memberId: Long,
         filter: TripScheduleStatus?,
