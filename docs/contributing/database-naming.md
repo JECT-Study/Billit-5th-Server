@@ -16,7 +16,7 @@ PostgreSQL 테이블, 컬럼, enum, 제약과 인덱스 이름에 적용합니�
 | --- | --- | --- |
 | 서비스 회원 | `member` | 소셜 로그인 계정과 프로필을 관리합니다. |
 | 여행 | `trip` | 여행별 참여자와 지출을 관리합니다. |
-| 여행 참여자 자리 | `trip_member` | 회원, 비로그인 참여자와 빈자리를 표현합니다. |
+| 여행 참여자 | `trip_member` | 로그인 참여자와 비로그인 참여자를 표현합니다. 빈자리는 행으로 만들지 않습니다. |
 | 지출 | `expense` | 결제한 지출을 기록합니다. |
 | 지출 항목 | `expense_item` | 지출 안의 개별 항목입니다. |
 | 항목별 부담 참여자 연결 | `expense_item_member` | 항목과 `trip_member`를 연결합니다. |
@@ -39,7 +39,7 @@ PostgreSQL 테이블, 컬럼, enum, 제약과 인덱스 이름에 적용합니�
 | 생성자 외래키 | `created_by_<참조 대상>_id` | `created_by_trip_member_id` |
 | 외부 제공자 식별자 | `<제공자 구분>_<외부 식별자>` | `social_provider_user_id` |
 
-`member_id`는 서비스 회원, `trip_member_id`는 여행 참여자 자리를 참조합니다. 두 식별자를 혼용하지 않습니다. 외부 소셜 제공자의 사용자 ID에 포함된 `user`는 내부 회원 테이블명과 별개로 유지합니다.
+`member_id`는 서비스 회원, `trip_member_id`는 여행 참여자를 참조합니다. 두 식별자를 혼용하지 않습니다. 외부 소셜 제공자의 사용자 ID에 포함된 `user`는 내부 회원 테이블명과 별개로 유지합니다.
 
 ## 컬럼의 의미와 접미사
 
@@ -70,7 +70,7 @@ PostgreSQL 테이블, 컬럼, enum, 제약과 인덱스 이름에 적용합니�
 컬럼 이름은 저장하는 값의 의미를 표현하고, NULL의 업무 의미는 해당 컬럼 옆에 `/** ... **/` 주석으로 작성합니다. `COMMENT ON`으로 대체하지 않습니다.
 
 ```sql
-member_id BIGINT, /** 회원 ID → member.id | NULL + guest_name 있음 = 비로그인 | 둘 다 NULL = 빈자리 **/
+member_id BIGINT, /** 회원 ID → member.id | NULL = 비로그인 참여자 **/
 settlement_currency CHAR(3), /** KRW_UNIFIED → KRW | BY_CURRENCY → NULL = 단일 통화 통합 없음 **/
 received_at TIMESTAMPTZ, /** 수령 확인 시각 | NULL = 확인 기록 없음 | 정산 상태 판정 → settlement.status **/
 ```

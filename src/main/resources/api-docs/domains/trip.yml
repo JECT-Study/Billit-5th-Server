@@ -49,21 +49,30 @@ paths:
       - Trip
       operationId: createTrip
       summary: 여행 생성
-      description: 여행 기본 정보와 정원을 입력해 새 여행을 생성합니다. 가입을 완료한 회원만 요청할 수 있으며 생성자가 관리자이자 첫 참여자가 되고, 요청의 nickname을 생성자의 여행방 닉네임으로 사용합니다. 앱은 생성 시도마다
-        Idempotency-Key 헤더에 새 고유키를 보내고, 응답을 받지 못해 같은 요청을 다시 보낼 때는 같은 키를 사용합니다. 같은 회원이 같은 키로 다시
-        보내면 서버는 새 여행을 만들지 않고 처음 만든 여행의 현재 정보를 처음과 같이 201과 Location으로 반환합니다. 요청 본문은 비교하지 않으므로
-        내용이 달라도 처음 만든 여행을 반환합니다. 같은 키의 요청이 동시에 와도 여행은 하나만 만듭니다.
+      description: |
+        여행 기본 정보와 총인원으로 새 여행을 만들고, 생성자를 관리자이자 첫 참여자로 등록합니다.
+
+        ### 요청 권한
+        가입을 완료한 회원만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        여행은 확정 전(UNCONFIRMED) 상태로 만들고, 요청의 tripNickname을 생성자의 여행방 닉네임으로 등록합니다. 총인원에서 생성자를 뺀 나머지는 빈자리로 남으므로 처음 registeredMemberCount는 1입니다. 영문 대문자와 숫자로 된 6자리 초대 코드도 함께 만듭니다.
+
+        ### 사용 시 주의
+        앱은 생성 시도마다 Idempotency-Key에 새 UUID를 보내고, 응답을 받지 못해 같은 요청을 다시 보낼 때만 같은 키를 사용합니다.
+        같은 회원이 같은 키로 다시 보내면 새 여행을 만들지 않고 처음 만든 여행의 현재 정보를 처음과 같이 201과 Location으로 반환합니다. 요청 본문은 처음 요청과 비교하지 않으므로 내용이 달라도 처음 만든 여행을 반환합니다.
+        같은 키의 요청이 동시에 와도 여행은 하나만 만들고, 모든 요청이 그 여행을 받습니다.
       security:
       - bearerAuth: []
       parameters:
       - name: Idempotency-Key
         in: header
         required: true
-        description: 여행 생성 요청의 고유키. 앱이 생성 시도마다 UUID로 만들고, 같은 요청을 다시 보낼 때만 같은 값을 사용합니다. 키는 여행 생성에만
-          쓰며 여행 생성 키끼리 한 번만 사용할 수 있습니다. 만료되지 않고 만든 여행과 함께 보관합니다. 없거나 UUID 형식이 아니면 400입니다.
+        description: 여행 생성 요청의 고유키입니다. 앱이 생성 시도마다 UUID로 만들고, 같은 요청을 다시 보낼 때만 같은 값을 사용합니다. 키는 여행 생성에만 쓰며 여행 생성 키끼리 한 번만 사용할 수 있습니다. 만료되지 않고 만든 여행과 함께 보관합니다. 하이픈으로 구분한 8-4-4-4-12자리 16진수 표기만 받습니다.
         schema:
           type: string
           format: uuid
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
           example: 3f1c2b8e-6a4d-4e2f-9b7a-1c5d8e0f2a6b
       requestBody:
         required: true
@@ -81,7 +90,7 @@ paths:
                   startDate: '2026-11-05'
                   endDate: '2026-11-07'
                   memberCapacity: 3
-                  nickname: 민지
+                  tripNickname: 민지
               customCountry:
                 summary: 기타 국가를 입력한 여행 생성
                 value:
@@ -92,15 +101,16 @@ paths:
                   startDate: '2026-12-01'
                   endDate: '2026-12-04'
                   memberCapacity: 4
-                  nickname: 민지
+                  tripNickname: 민지
       responses:
         '201':
-          description: 생성 성공. 같은 키의 재요청도 처음 만든 여행을 201로 반환합니다.
+          description: 여행 생성 성공. 같은 회원이 같은 키로 다시 요청해도 처음 만든 여행을 반환합니다.
           headers:
             Location:
-              description: 생성한 여행의 URI
+              description: 생성한 여행의 URI입니다. /api/v1/trips/{tripId} 형식입니다.
               schema:
                 type: string
+              example: /api/v1/trips/123
           content:
             application/json:
               schema:
@@ -111,16 +121,71 @@ paths:
                 properties:
                   data:
                     "$ref": "./trip.yml#/components/schemas/TripSummary"
+              examples:
+                success:
+                  summary: 대표 국가를 선택한 여행 생성 성공
+                  value:
+                    data:
+                      tripId: '123'
+                      name: 도쿄 여행
+                      countryCode: JP
+                      customCountryName: null
+                      startDate: '2026-11-05'
+                      endDate: '2026-11-07'
+                      baseCurrency: JPY
+                      memberCapacity: 3
+                      registeredMemberCount: 1
+                      status: UNCONFIRMED
+                      myRole: ADMIN
+                customCountry:
+                  summary: 기타 국가를 입력한 여행 생성 성공
+                  value:
+                    data:
+                      tripId: '124'
+                      name: 하노이 여행
+                      countryCode: ETC
+                      customCountryName: 베트남
+                      startDate: '2026-12-01'
+                      endDate: '2026-12-04'
+                      baseCurrency: USD
+                      memberCapacity: 4
+                      registeredMemberCount: 1
+                      status: UNCONFIRMED
+                      myRole: ADMIN
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
-        '401':
-          "$ref": "../common/components.yml#/responses/Unauthorized"
-        '409':
-          description: 다른 회원이 이미 사용한 키이거나 그 키로 만든 여행이 삭제됨. TRIP_IDEMPOTENCY_KEY_REUSED
+          description: |
+            Idempotency-Key가 없거나 형식이 올바르지 않거나, 요청 본문이 필드 형식과 범위를 벗어났습니다. 종료일이 시작일보다 빠르거나, countryCode가 ETC인데 customCountryName이 없거나, ETC가 아닌데 customCountryName을 보낸 경우도 포함합니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
           content:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 고유키나 요청 본문이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors: null
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '409':
+          description: |
+            다른 회원이 이미 사용한 Idempotency-Key이거나, 그 키로 만든 여행이 삭제됐습니다. 기존 여행 정보는 반환하지 않습니다.
+
+            **오류 코드:** `TRIP_IDEMPOTENCY_KEY_REUSED`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_IDEMPOTENCY_KEY_REUSED:
+                  summary: 다른 회원이 사용했거나 삭제된 여행의 고유키
+                  value:
+                    code: TRIP_IDEMPOTENCY_KEY_REUSED
+                    message: 이미 사용된 여행 생성 요청입니다. 다시 시도해주세요.
+                    errors: null
   "/api/v1/trips/{tripId}":
     parameters:
     - "$ref": "./trip.yml#/components/parameters/TripId"
@@ -759,7 +824,22 @@ components:
           items:
             "$ref": "./trip.yml#/components/schemas/Participant"
     TripCreate:
+      description: 대표 국가(countryCode)에 따라 기타 국가명(customCountryName)을 받습니다. 기타 국가(ETC)이면 customCountryName이 필수이고, 그 외 국가이면 customCountryName을 보내지 않습니다. 함께 보내면 400입니다.
+      oneOf:
+      - "$ref": "./trip.yml#/components/schemas/ListedCountryTripCreate"
+      - "$ref": "./trip.yml#/components/schemas/CustomCountryTripCreate"
+      discriminator:
+        propertyName: countryCode
+        mapping:
+          KR: "./trip.yml#/components/schemas/ListedCountryTripCreate"
+          JP: "./trip.yml#/components/schemas/ListedCountryTripCreate"
+          US: "./trip.yml#/components/schemas/ListedCountryTripCreate"
+          CN: "./trip.yml#/components/schemas/ListedCountryTripCreate"
+          EU: "./trip.yml#/components/schemas/ListedCountryTripCreate"
+          ETC: "./trip.yml#/components/schemas/CustomCountryTripCreate"
+    ListedCountryTripCreate:
       type: object
+      description: 한국, 일본, 미국, 중국, 유럽 중 하나를 대표 국가로 선택한 여행 생성 요청입니다. customCountryName은 보내지 않습니다.
       required:
       - name
       - countryCode
@@ -767,45 +847,101 @@ components:
       - startDate
       - endDate
       - memberCapacity
-      - nickname
+      - tripNickname
       additionalProperties: false
       properties:
         name:
           type: string
-          minLength: 1
-          maxLength: 15
-          pattern: "^[가-힣A-Za-z0-9 ]+$"
-          description: 여행명. 공백을 포함해 최대 15자이며 한글, 영문, 숫자와 공백만 허용하고 특수문자는 금지합니다. 앞뒤 공백을 지운 값으로 검사하고 저장하며, 공백만 입력하면 거절합니다.
+          pattern: '^\s*[가-힣A-Za-z0-9]([가-힣A-Za-z0-9 ]{0,13}[가-힣A-Za-z0-9])?\s*$'
+          description: 여행 목록과 상세에 표시할 여행명입니다. 앞뒤 공백을 지운 값으로 검사하고 저장하며, 지운 값은 공백을 포함해 1~15자이고 한글, 영문, 숫자와 공백만 허용합니다. 공백만 입력하면 거절합니다.
+          example: 도쿄 여행
         countryCode:
-          "$ref": "./trip.yml#/components/schemas/CountryCode"
-        customCountryName:
+          type: string
+          enum:
+          - KR
+          - JP
+          - US
+          - CN
+          - EU
+          description: 대표 국가입니다. 한국 KR, 일본 JP, 미국 US, 중국 CN, 유럽 EU입니다.
+        baseCurrency:
+          "$ref": "./trip.yml#/components/schemas/Currency"
+        startDate:
+          type: string
+          format: date
+          description: 여행 시작일입니다. 과거 날짜를 허용합니다.
+          example: '2026-11-05'
+        endDate:
+          type: string
+          format: date
+          description: 여행 종료일입니다. startDate와 같거나 이후여야 하며 당일 여행을 허용합니다.
+          example: '2026-11-07'
+        memberCapacity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: 생성자를 포함한 총인원입니다.
+          example: 3
+        tripNickname:
           type: string
           minLength: 1
           maxLength: 10
-          pattern: "^[가-힣A-Za-z]+$"
-          description: 기타 국가로 직접 입력한 국가명. countryCode가 ETC이면 필수입니다. 한글과 영문만 허용하고 가운데 공백, 숫자와 특수문자는 금지하며 영문 대소문자를 구분합니다. 앞뒤 공백을 지운 값으로 검사하고 저장하며, 공백만 입력하면 거절합니다.
+          pattern: "^[가-힣A-Za-z0-9]+$"
+          description: 생성자가 이 여행에서 사용할 여행방 닉네임입니다. 한글 완성형, 영문과 숫자만 허용하며 계정 닉네임과 같은 규칙입니다. 공백을 지우지 않고 검사합니다.
+          example: 민지
+    CustomCountryTripCreate:
+      type: object
+      description: 대표 국가를 기타(ETC)로 고르고 국가명을 직접 입력한 여행 생성 요청입니다.
+      required:
+      - name
+      - countryCode
+      - customCountryName
+      - baseCurrency
+      - startDate
+      - endDate
+      - memberCapacity
+      - tripNickname
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          pattern: '^\s*[가-힣A-Za-z0-9]([가-힣A-Za-z0-9 ]{0,13}[가-힣A-Za-z0-9])?\s*$'
+          description: 여행 목록과 상세에 표시할 여행명입니다. 앞뒤 공백을 지운 값으로 검사하고 저장하며, 지운 값은 공백을 포함해 1~15자이고 한글, 영문, 숫자와 공백만 허용합니다. 공백만 입력하면 거절합니다.
+          example: 하노이 여행
+        countryCode:
+          type: string
+          enum:
+          - ETC
+          description: 기타 국가를 나타내는 ETC입니다.
+        customCountryName:
+          type: string
+          pattern: '^\s*[가-힣A-Za-z]{1,10}\s*$'
+          description: 기타 국가로 직접 입력한 국가명입니다. 국가 코드로 바꾸지 않고 입력한 텍스트 그대로 저장합니다. 앞뒤 공백을 지운 값으로 검사하고 저장하며, 지운 값은 1~10자이고 한글과 영문만 허용합니다. 가운데 공백, 숫자와 특수문자는 거절하고 영문 대소문자를 구분합니다. 공백만 입력하면 거절합니다.
           example: 베트남
         baseCurrency:
           "$ref": "./trip.yml#/components/schemas/Currency"
         startDate:
           type: string
           format: date
-          description: 여행 시작일. 과거 날짜를 허용합니다.
+          description: 여행 시작일입니다. 과거 날짜를 허용합니다.
+          example: '2026-12-01'
         endDate:
           type: string
           format: date
-          description: 여행 종료일. startDate 이상이며 당일 여행을 허용합니다.
+          description: 여행 종료일입니다. startDate와 같거나 이후여야 하며 당일 여행을 허용합니다.
+          example: '2026-12-04'
         memberCapacity:
           type: integer
           minimum: 1
           maximum: 10
-          description: 생성자를 포함한 총 정원
-        nickname:
+          description: 생성자를 포함한 총인원입니다.
+          example: 4
+        tripNickname:
           type: string
           minLength: 1
           maxLength: 10
           pattern: "^[가-힣A-Za-z0-9]+$"
-          description: 생성자가 이 여행에서 사용할 여행방 닉네임. 한글 완성형, 영문과 숫자만 허용하며 계정 닉네임과 같은 규칙입니다.
+          description: 생성자가 이 여행에서 사용할 여행방 닉네임입니다. 한글 완성형, 영문과 숫자만 허용하며 계정 닉네임과 같은 규칙입니다. 공백을 지우지 않고 검사합니다.
           example: 민지
     TripUpdate:
       type: object
