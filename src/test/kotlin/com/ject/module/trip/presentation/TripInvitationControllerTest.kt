@@ -39,6 +39,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
             }
             tripIds.clear()
             memberIds.forEach { id ->
+                jdbc.update("DELETE FROM login_history WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM auth_session WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM member WHERE id = ?", id)
             }
