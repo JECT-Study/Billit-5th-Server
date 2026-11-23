@@ -18,3 +18,7 @@ END;
 
 ALTER TABLE trip_member
     ALTER COLUMN status SET NOT NULL;
+
+/** 내 여행 목록 조회 | member_id와 status로 참여 중인 여행을 찾음 **/
+CREATE INDEX idx_trip_member_member_id_status
+    ON trip_member (member_id, status);
