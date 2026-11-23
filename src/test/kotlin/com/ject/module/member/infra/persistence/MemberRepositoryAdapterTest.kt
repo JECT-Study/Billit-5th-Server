@@ -29,7 +29,7 @@ class MemberRepositoryAdapterTest : IntegrationTestSupport() {
             // when
             val failure =
                 shouldThrow<DataIntegrityViolationException> {
-                    memberRepository.createPendingMember(AuthProvider.GOOGLE, tooLongProviderUserId, socialDisplayName = null)
+                    memberRepository.createPendingMember(AuthProvider.GOOGLE, tooLongProviderUserId)
                 }
 
             // then
@@ -37,20 +37,6 @@ class MemberRepositoryAdapterTest : IntegrationTestSupport() {
                 failure.message.orEmpty().contains("uq_member_social_provider_social_provider_user_id") shouldBe false
                 countMembers(tooLongProviderUserId) shouldBe 0
             }
-        }
-
-        test("100자를 넘는 표시 이름은 문자를 나누지 않고 앞 100자만 저장한다") {
-            // given
-            val providerUserId = "test-long-display-name"
-            providerUserIds.add(providerUserId)
-            val displayName = "😀".repeat(101)
-
-            // when
-            val memberId = memberRepository.createPendingMember(AuthProvider.GOOGLE, providerUserId, displayName)
-
-            // then
-            jdbc.queryForObject("SELECT social_display_name FROM member WHERE id = ?", String::class.java, memberId) shouldBe
-                "😀".repeat(100)
         }
     }
 
