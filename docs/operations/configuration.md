@@ -259,6 +259,7 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - `management.endpoint.health.probes.enabled`를 켜고 readiness 그룹에 `readinessState,db,redis`, liveness 그룹에 `livenessState`를 포함합니다. 두 그룹은 `additional-path`로 앱 포트의 `/readyz`, `/healthz`에 연결합니다.
 - 노출하는 actuator 엔드포인트는 `health`, `prometheus`뿐이며 상태 응답에 상세 정보를 포함하지 않습니다.
 - 지표에는 `application` 태그로 `spring.application.name`을 붙입니다.
+- `local`, `dev`, `prod`에서는 `management.metrics.distribution.percentiles-histogram.http.server.requests: true`로 HTTP 응답 시간 히스토그램(`http_server_requests_seconds_bucket`)을 노출합니다. Grafana는 이 지표로 응답 시간의 95백분위수(p95)를 계산합니다.
 - 관리 포트는 `dev`, `prod`에서 `8081`, `local`에서 `${MANAGEMENT_PORT:8081}`, `test`에서 `0`입니다.
 - 인증을 적용해도 `/healthz`, `/readyz`와 관리 포트의 actuator는 인증 없이 응답해야 합니다.
 
