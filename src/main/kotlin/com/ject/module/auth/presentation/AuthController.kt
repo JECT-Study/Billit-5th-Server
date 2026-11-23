@@ -41,7 +41,7 @@ class AuthController(
         val result =
             if (request.provider == AuthProvider.APPLE) {
                 val authorizationCode = request.authorizationCode ?: throw BusinessException(CommonErrorCode.INVALID_REQUEST)
-                socialLoginUseCase.loginWithApple(request.idToken, authorizationCode, request.fullName)
+                socialLoginUseCase.loginWithApple(request.idToken, authorizationCode)
             } else {
                 // 구글과 카카오 요청 형식에는 애플 전용 필드가 없습니다.
                 if (request.authorizationCode != null || request.fullName != null) {

@@ -48,9 +48,9 @@ class MemberControllerTest : IntegrationTestSupport() {
         }
 
         context("GET /api/v1/me/registration") {
-            test("가입 중 회원은 200과 가입 상태, 소셜 표시 이름, 시행 중인 가입 약관의 현재 버전을 받는다") {
+            test("가입 중 회원은 200과 가입 상태, 시행 중인 가입 약관의 현재 버전을 받는다") {
                 // given
-                val memberId = createMember("PENDING", socialDisplayName = "김빌릿")
+                val memberId = createMember("PENDING")
                 createPolicy("TERMS", "v1", isRequired = true, effectiveAt = "now() - interval '2 days'")
                 val termsId = createPolicy("TERMS", "v2", isRequired = true, effectiveAt = "now() - interval '1 day'")
                 createPolicy("TERMS", "v3", isRequired = true, effectiveAt = "now() + interval '1 day'")
@@ -68,7 +68,6 @@ class MemberControllerTest : IntegrationTestSupport() {
                             "data" to
                                 mapOf(
                                     "status" to "SIGNING_UP",
-                                    "socialDisplayName" to "김빌릿",
                                     "terms" to
                                         listOf(
                                             mapOf(
@@ -278,16 +277,14 @@ class MemberControllerTest : IntegrationTestSupport() {
     private fun createMember(
         status: String,
         nickname: String? = null,
-        socialDisplayName: String? = null,
     ): Long {
         val id =
             checkNotNull(
                 jdbc.queryForObject(
-                    "INSERT INTO member (social_provider, nickname, social_display_name, status, created_at, updated_at) " +
-                        "VALUES ('GOOGLE', ?, ?, ?::member_status, now(), now()) RETURNING id",
+                    "INSERT INTO member (social_provider, nickname, status, created_at, updated_at) " +
+                        "VALUES ('GOOGLE', ?, ?::member_status, now(), now()) RETURNING id",
                     Long::class.java,
                     nickname,
-                    socialDisplayName,
                     status,
                 ),
             )

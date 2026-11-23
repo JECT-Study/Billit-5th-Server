@@ -7,7 +7,7 @@ import com.ject.module.member.implement.RegistrationMemberReader
 import org.springframework.stereotype.Service
 import java.time.Clock
 
-/** 가입 화면에 표시할 본인 정보와 동의받을 약관의 현재 버전을 조회합니다. 가입 중 회원만 조회할 수 있습니다. */
+/** 가입 화면에서 동의받을 약관의 현재 버전을 조회합니다. 가입 중 회원만 조회할 수 있습니다. */
 @Service
 class GetRegistrationUseCase(
     private val registrationMemberReader: RegistrationMemberReader,
@@ -16,7 +16,7 @@ class GetRegistrationUseCase(
     private val clock: Clock,
 ) {
     fun get(memberId: Long): RegistrationInfoResult {
-        val member = registrationMemberReader.readPending(memberId)
+        registrationMemberReader.readPending(memberId)
 
         val terms =
             memberRegistrationRepository.findCurrentSignupPolicies(clock.instant()).map {
@@ -27,9 +27,6 @@ class GetRegistrationUseCase(
                     contentUrl = policyContentUrlCreator.create(it),
                 )
             }
-        return RegistrationInfoResult(
-            socialDisplayName = member.socialDisplayName,
-            terms = terms,
-        )
+        return RegistrationInfoResult(terms = terms)
     }
 }
