@@ -31,14 +31,11 @@ class SocialIdTokenAdapter(
         provider: AuthProvider,
         idToken: String,
     ): SocialIdentity {
-        val (verifier, displayNameClaim) =
+        val verifier =
             when (provider) {
-                AuthProvider.GOOGLE -> googleVerifier to GOOGLE_DISPLAY_NAME_CLAIM
-
-                AuthProvider.KAKAO -> kakaoVerifier to KAKAO_DISPLAY_NAME_CLAIM
-
-                // 애플은 ID 토큰에 이름을 담지 않습니다. 이름은 최초 권한 부여 때 앱이 요청 본문으로 보냅니다.
-                AuthProvider.APPLE -> appleVerifier to null
+                AuthProvider.GOOGLE -> googleVerifier
+                AuthProvider.KAKAO -> kakaoVerifier
+                AuthProvider.APPLE -> appleVerifier
             }
         val token =
             try {
@@ -55,10 +52,7 @@ class SocialIdTokenAdapter(
                     }
                 }
             }
-        return SocialIdentity(
-            subject = token.subject,
-            displayName = displayNameClaim?.let(token::stringClaim)?.takeIf { it.isNotBlank() },
-        )
+        return SocialIdentity(subject = token.subject)
     }
 
     companion object {
@@ -67,7 +61,5 @@ class SocialIdTokenAdapter(
         private val GOOGLE_ISSUERS = setOf("https://accounts.google.com", "accounts.google.com")
         private val KAKAO_ISSUERS = setOf("https://kauth.kakao.com")
         private val APPLE_ISSUERS = setOf("https://appleid.apple.com")
-        private const val GOOGLE_DISPLAY_NAME_CLAIM = "name"
-        private const val KAKAO_DISPLAY_NAME_CLAIM = "nickname"
     }
 }

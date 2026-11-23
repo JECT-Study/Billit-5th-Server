@@ -6,6 +6,7 @@ import com.ject.module.auth.domain.AuthSessionRepository
 import com.ject.module.auth.domain.AuthTokenResult
 import com.ject.module.auth.domain.RefreshTokenRetryPolicy
 import com.ject.module.auth.implement.AuthTokenCreator
+import com.ject.module.auth.implement.LoginHistoryCreator
 import com.ject.module.auth.implement.RefreshTokenHasher
 import com.ject.module.auth.implement.RefreshTokenReader
 import com.ject.support.IntegrationTestSupport
@@ -20,15 +21,18 @@ import io.kotest.matchers.shouldNotBe
 import org.mockito.Mockito.doAnswer
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Qualifier
+import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.security.oauth2.jwt.JwtDecoder
 import org.springframework.security.oauth2.jwt.JwtEncoder
 import org.springframework.security.oauth2.jwt.JwtException
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+import org.springframework.transaction.support.TransactionTemplate
 import java.sql.Timestamp
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.Executors
@@ -49,6 +53,12 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
     private lateinit var jwtEncoder: JwtEncoder
 
     @Autowired
+    private lateinit var loginHistoryCreator: LoginHistoryCreator
+
+    @Autowired
+    private lateinit var transactionTemplate: TransactionTemplate
+
+    @Autowired
     @Qualifier("memberJwtDecoder")
     private lateinit var memberJwtDecoder: JwtDecoder
 
@@ -57,8 +67,8 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
 
     private val refreshTokenHasher = RefreshTokenHasher()
 
-    /** 갱신과 재시도 허용 시간 판단의 기준 시각입니다. 테스트 실행이 늦어져도 유예 시간 안팎 판정이 바뀌지 않게 고정합니다. */
-    private val clock = Clock.fixed(Instant.now(), ZoneOffset.UTC)
+    /** 갱신과 재시도 허용 시간 판단의 기준 시각입니다. 테스트 실행이 늦어져도 유예 시간 안팎 판정이 바뀌지 않게 고정하고, DB 시각 정밀도(마이크로초)에 맞춥니다. */
+    private val clock = Clock.fixed(Instant.now().truncatedTo(ChronoUnit.MICROS), ZoneOffset.UTC)
 
     private val refreshTokensUseCase by lazy {
         RefreshTokensUseCase(
@@ -67,6 +77,8 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
             refreshTokenHasher,
             authTokenCreator,
             refreshTokenRetryPolicy,
+            loginHistoryCreator,
+            transactionTemplate,
             clock,
         )
     }
@@ -75,6 +87,7 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
     init {
         afterEach {
             memberIds.forEach { id ->
+                jdbc.update("DELETE FROM login_history WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM auth_session WHERE member_id = ?", id)
                 jdbc.update("DELETE FROM member WHERE id = ?", id)
             }
@@ -114,6 +127,71 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
 
             // then
             findSession(sessionId(second.refreshToken))["refresh_token_hash"] shouldBe refreshTokenHasher.hash(second.refreshToken)
+        }
+
+        test("갱신에 성공하면 갱신 시각으로 TOKEN_REFRESH 로그인 기록을 남긴다") {
+            // given
+            val memberId = createMember()
+            val issued = authTokenCreator.createMemberTokens(memberId)
+
+            // when
+            refreshTokensUseCase.refresh(issued.refreshToken)
+
+            // then
+            val history =
+                jdbc.queryForMap(
+                    "SELECT login_type::text AS login_type, occurred_at FROM login_history WHERE member_id = ? AND login_type = 'TOKEN_REFRESH'",
+                    memberId,
+                )
+            assertSoftly {
+                history["login_type"] shouldBe "TOKEN_REFRESH"
+                (history["occurred_at"] as Timestamp).toInstant() shouldBe clock.instant()
+            }
+        }
+
+        test("갱신 기록 저장이 실패하면 회전도 되돌려 기존 Refresh Token으로 다시 갱신할 수 있다") {
+            // given
+            val memberId = createMember()
+            val issued = authTokenCreator.createMemberTokens(memberId)
+            val sessionId = sessionId(issued.refreshToken)
+            // 이 회원의 로그인 기록 저장만 DB가 거절하게 합니다.
+            jdbc.execute("ALTER TABLE login_history ADD CONSTRAINT ck_login_history_test_reject CHECK (member_id <> $memberId) NOT VALID")
+
+            // when
+            val failure =
+                try {
+                    shouldThrow<DataIntegrityViolationException> { refreshTokensUseCase.refresh(issued.refreshToken) }
+                } finally {
+                    jdbc.execute("ALTER TABLE login_history DROP CONSTRAINT ck_login_history_test_reject")
+                }
+
+            // then
+            val session = findSession(sessionId)
+            val retried = refreshTokensUseCase.refresh(issued.refreshToken)
+            assertSoftly {
+                failure.shouldNotBeNull()
+                session["refresh_token_hash"] shouldBe refreshTokenHasher.hash(issued.refreshToken)
+                session["previous_refresh_token_hash"].shouldBeNull()
+                findSession(sessionId)["refresh_token_hash"] shouldBe refreshTokenHasher.hash(retried.refreshToken)
+            }
+        }
+
+        test("갱신에 실패하면 TOKEN_REFRESH 로그인 기록을 남기지 않는다") {
+            // given
+            val memberId = createMember()
+            val issued = authTokenCreator.createMemberTokens(memberId)
+            refreshTokensUseCase.refresh(issued.refreshToken)
+            moveRotatedAt(sessionId(issued.refreshToken), Duration.ofSeconds(31))
+
+            // when
+            shouldThrow<BusinessException> { refreshTokensUseCase.refresh(issued.refreshToken) }
+
+            // then
+            jdbc.queryForObject(
+                "SELECT COUNT(*) FROM login_history WHERE member_id = ? AND login_type = 'TOKEN_REFRESH'",
+                Int::class.java,
+                memberId,
+            ) shouldBe 1
         }
 
         test("유예 시간이 지난 직전 Refresh Token이 다시 오면 401로 거절하고 세션을 종료해 최신 토큰도 쓸 수 없게 한다") {
@@ -323,6 +401,7 @@ class RefreshTokensUseCaseTest : IntegrationTestSupport() {
             jwtEncoder,
             authSessionRepository,
             refreshTokenHasher,
+            loginHistoryCreator,
             Clock.fixed(clock.instant().minus(duration), ZoneOffset.UTC),
         )
 }

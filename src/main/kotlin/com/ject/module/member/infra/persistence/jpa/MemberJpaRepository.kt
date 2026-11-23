@@ -19,28 +19,9 @@ interface MemberJpaRepository : JpaRepository<Member, Long> {
         socialProviderUserId: String,
     ): Member?
 
-    @Transactional
-    @Modifying
     @Query(
         """
-        UPDATE Member m
-        SET m.socialDisplayName = :socialDisplayName,
-            m.updatedAt = :updatedAt
-        WHERE m.id = :id
-          AND m.status = :status
-          AND m.socialDisplayName IS NULL
-        """,
-    )
-    fun fillSocialDisplayNameIfAbsent(
-        @Param("id") id: Long,
-        @Param("status") status: MemberStatus,
-        @Param("socialDisplayName") socialDisplayName: String,
-        @Param("updatedAt") updatedAt: Instant,
-    ): Int
-
-    @Query(
-        """
-        SELECT new com.ject.module.member.domain.RegistrationMemberResult(m.status, m.socialDisplayName)
+        SELECT new com.ject.module.member.domain.RegistrationMemberResult(m.status)
         FROM Member m
         WHERE m.id = :id
         """,
