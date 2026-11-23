@@ -5,6 +5,7 @@ import com.ject.module.trip.domain.TripCountryCode
 import com.ject.module.trip.domain.TripCurrency
 import com.ject.module.trip.domain.TripMember
 import com.ject.module.trip.domain.TripMemberRole
+import com.ject.module.trip.domain.TripMemberStatus
 import com.ject.module.trip.domain.TripRepository
 import com.ject.module.trip.domain.TripStatus
 import com.ject.support.IntegrationTestSupport
@@ -121,7 +122,16 @@ class TripRepositoryAdapterTest : IntegrationTestSupport() {
     private fun tripMember(
         tripId: Long,
         tripNickname: String,
-    ): TripMember = TripMember(tripId = tripId, memberId = null, tripNickname = tripNickname, role = TripMemberRole.ADMIN, joinedAt = null)
+    ): TripMember =
+        TripMember(
+            tripId = tripId,
+            memberId = null,
+            tripNickname = tripNickname,
+            role = TripMemberRole.ADMIN,
+            joinedAt = null,
+            status = TripMemberStatus.GUEST,
+            leftAt = null,
+        )
 
     private fun countTrips(idempotencyKey: UUID): Int =
         checkNotNull(jdbc.queryForObject("SELECT count(*) FROM trip WHERE idempotency_key = ?", Int::class.java, idempotencyKey))

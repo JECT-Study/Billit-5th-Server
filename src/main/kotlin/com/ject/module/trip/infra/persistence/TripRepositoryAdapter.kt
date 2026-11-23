@@ -6,6 +6,7 @@ import com.ject.module.trip.domain.TripCreationConflict
 import com.ject.module.trip.domain.TripCreationConflictException
 import com.ject.module.trip.domain.TripMember
 import com.ject.module.trip.domain.TripMemberRole
+import com.ject.module.trip.domain.TripMemberStatus
 import com.ject.module.trip.domain.TripRepository
 import com.ject.module.trip.infra.persistence.jpa.TripJpaRepository
 import com.ject.module.trip.infra.persistence.jpa.TripMemberJpaRepository
@@ -32,7 +33,7 @@ class TripRepositoryAdapter(
     }
 
     override fun findByIdempotencyKey(idempotencyKey: UUID): IdempotentTripResult? =
-        tripJpaRepository.findIdempotentTrip(idempotencyKey, TripMemberRole.ADMIN)
+        tripJpaRepository.findIdempotentTrip(idempotencyKey, TripMemberRole.ADMIN, TripMemberStatus.REGISTERED)
 
     /** 고유키나 초대 코드의 유니크 제약 위반이면 해당 충돌을, 다른 무결성 오류이면 `null`을 반환합니다. */
     private fun findCreationConflict(exception: DataIntegrityViolationException): TripCreationConflict? {

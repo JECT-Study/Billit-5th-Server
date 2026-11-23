@@ -3,6 +3,7 @@ package com.ject.module.trip.infra.persistence.jpa
 import com.ject.module.trip.domain.IdempotentTripResult
 import com.ject.module.trip.domain.Trip
 import com.ject.module.trip.domain.TripMemberRole
+import com.ject.module.trip.domain.TripMemberStatus
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
@@ -24,7 +25,7 @@ interface TripJpaRepository : JpaRepository<Trip, Long> {
             t.status,
             t.deletedAt,
             a.memberId,
-            (SELECT count(m) FROM TripMember m WHERE m.tripId = t.id)
+            (SELECT count(m) FROM TripMember m WHERE m.tripId = t.id AND m.status IN :registeredStatuses)
         )
         FROM Trip t
         LEFT JOIN TripMember a ON a.tripId = t.id AND a.role = :adminRole
@@ -34,5 +35,6 @@ interface TripJpaRepository : JpaRepository<Trip, Long> {
     fun findIdempotentTrip(
         @Param("idempotencyKey") idempotencyKey: UUID,
         @Param("adminRole") adminRole: TripMemberRole,
+        @Param("registeredStatuses") registeredStatuses: Collection<TripMemberStatus>,
     ): IdempotentTripResult?
 }

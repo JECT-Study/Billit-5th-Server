@@ -107,6 +107,26 @@ class CreateTripUseCaseTest : IntegrationTestSupport() {
             }
         }
 
+        test("같은 회원이 같은 Idempotency-Key로 다시 요청하면 나간 회원과 탈퇴 회원을 빼고 등록 인원을 센다") {
+            // given
+            val memberId = createMember()
+            val leftMemberId = createMember()
+            val idempotencyKey = newIdempotencyKey()
+            val created = createTripUseCase.create(memberId, idempotencyKey, command())
+            addTripMember(created.tripId, memberId = null, tripNickname = "서연", status = "GUEST")
+            addTripMember(created.tripId, memberId = leftMemberId, tripNickname = "하준", status = "LEFT")
+            addTripMember(created.tripId, memberId = null, tripNickname = "도윤", status = "WITHDRAWN")
+
+            // when
+            val retried = createTripUseCase.create(memberId, idempotencyKey, command())
+
+            // then
+            assertSoftly {
+                retried.tripId shouldBe created.tripId
+                retried.registeredMemberCount shouldBe 2
+            }
+        }
+
         test("초대 코드가 다른 여행과 겹치면 새 코드로 여행을 만든다") {
             // given
             val memberId = createMember()
@@ -163,6 +183,22 @@ class CreateTripUseCaseTest : IntegrationTestSupport() {
             )
         memberIds.add(id)
         return id
+    }
+
+    private fun addTripMember(
+        tripId: Long,
+        memberId: Long?,
+        tripNickname: String,
+        status: String,
+    ) {
+        jdbc.update(
+            "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, status, created_at, updated_at) " +
+                "VALUES (?, ?, ?, 'MEMBER', ?::trip_member_status, now(), now())",
+            tripId,
+            memberId,
+            tripNickname,
+            status,
+        )
     }
 
     private fun newIdempotencyKey(): UUID {

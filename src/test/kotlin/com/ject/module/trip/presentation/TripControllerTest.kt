@@ -94,7 +94,16 @@ class TripControllerTest : IntegrationTestSupport() {
                     trip["deleted_at"].shouldBeNull()
                     (trip["invite_code"] as String) shouldMatch "[A-Z0-9]{6}"
                     tripMembers shouldBe
-                        listOf(mapOf("member_id" to memberId, "trip_nickname" to "민지", "role" to "ADMIN", "joined_at" to null))
+                        listOf(
+                            mapOf(
+                                "member_id" to memberId,
+                                "trip_nickname" to "민지",
+                                "role" to "ADMIN",
+                                "joined_at" to null,
+                                "status" to "MEMBER",
+                                "left_at" to null,
+                            ),
+                        )
                 }
             }
 
@@ -294,8 +303,8 @@ class TripControllerTest : IntegrationTestSupport() {
                 val tripId = findTrip(idempotencyKey)["id"] as Long
                 // 처음 응답 뒤에 비로그인 참여자가 한 명 등록된 상태를 만듭니다.
                 jdbc.update(
-                    "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, joined_at, created_at, updated_at) " +
-                        "VALUES (?, NULL, '서연', 'MEMBER'::trip_member_role, NULL, now(), now())",
+                    "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, joined_at, status, created_at, updated_at) " +
+                        "VALUES (?, NULL, '서연', 'MEMBER'::trip_member_role, NULL, 'GUEST'::trip_member_status, now(), now())",
                     tripId,
                 )
 
@@ -429,7 +438,8 @@ class TripControllerTest : IntegrationTestSupport() {
 
     private fun findTripMembers(tripId: Long): List<Map<String, Any?>> =
         jdbc.queryForList(
-            "SELECT member_id, trip_nickname, role::text AS role, joined_at FROM trip_member WHERE trip_id = ? ORDER BY id",
+            "SELECT member_id, trip_nickname, role::text AS role, joined_at, status::text AS status, left_at " +
+                "FROM trip_member WHERE trip_id = ? ORDER BY id",
             tripId,
         )
 
