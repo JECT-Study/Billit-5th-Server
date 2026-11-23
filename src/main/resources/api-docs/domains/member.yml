@@ -6,10 +6,7 @@ paths:
       operationId: 'getRegistration'
       summary: 가입 정보 조회
       description: |
-        가입 화면에 표시할 본인 정보와 약관을 조회합니다.
-
-        ### 처리 조건
-        `socialDisplayName`은 Google ID 토큰의 `name`, Kakao ID 토큰의 `nickname`, Apple 요청의 `fullName`입니다. 닉네임 초기값으로 쓰지 않습니다.
+        가입 화면에 표시할 약관을 조회합니다. 소셜 표시 이름은 저장하거나 돌려주지 않습니다.
       security:
       - registrationBearerAuth: []
       responses:
@@ -32,7 +29,6 @@ paths:
                   value:
                     data:
                       status: SIGNING_UP
-                      socialDisplayName: 김빌릿
                       terms:
                       - termsId: '1'
                         title: 개인정보 수집 및 이용 동의
@@ -406,7 +402,6 @@ components:
       type: object
       required:
       - status
-      - socialDisplayName
       - terms
       additionalProperties: false
       properties:
@@ -415,10 +410,6 @@ components:
           enum:
           - SIGNING_UP
           description: 가입 미완료 상태를 나타내는 SIGNING_UP을 반환합니다.
-        socialDisplayName:
-          type: string
-          nullable: true
-          description: 소셜 제공자가 준 표시 이름입니다. 제공값이 없으면 null입니다.
         terms:
           type: array
           items:
