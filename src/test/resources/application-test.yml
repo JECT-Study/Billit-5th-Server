@@ -94,6 +94,9 @@ app:
   member:
     policy:
       content-base-url: https://terms.billit.test/terms
+  trip:
+    invitation:
+      base-url: https://billit.test/invitations
 
 logging:
   pattern:

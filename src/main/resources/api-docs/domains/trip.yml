@@ -301,7 +301,14 @@ paths:
       - Trip
       operationId: getTripInvitation
       summary: 초대 정보 조회
-      description: 공유할 초대 코드와 초대 링크를 조회합니다. 여행 확정 전, 해당 여행의 관리자만 요청할 수 있습니다. 초대 코드는 확정 전까지 시간 제한 없이 유효하고 확정하면 초대가 자동으로 종료됩니다. 초대를 수동으로 중지하거나 코드를 재발급하는 기능은 없습니다.
+      description: |
+        공유할 초대 코드와 초대 링크를 조회합니다.
+
+        ### 요청 권한
+        해당 여행의 관리자만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        확정 전 여행에서만 조회할 수 있습니다. 초대 코드는 여행을 만들 때 발급하며, 확정 전까지 시간 제한 없이 유효하고 확정하면 초대가 자동으로 종료됩니다. 초대를 수동으로 중지하거나 코드를 재발급하는 기능은 없습니다.
       security:
       - bearerAuth: []
       responses:
@@ -317,36 +324,105 @@ paths:
                 properties:
                   data:
                     "$ref": "./trip.yml#/components/schemas/Invitation"
+              examples:
+                success:
+                  summary: 초대 정보 조회 성공
+                  value:
+                    data:
+                      inviteCode: A7K2PQ
+                      inviteUrl: https://example.com/invitations/A7K2PQ
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
-        '401':
-          "$ref": "../common/components.yml#/responses/Unauthorized"
-        '403':
-          "$ref": "../common/components.yml#/responses/Forbidden"
-        '404':
-          "$ref": "../common/components.yml#/responses/NotFound"
-        '409':
-          description: 확정 후 초대 정보를 요청함. TRIP_ALREADY_CONFIRMED
+          description: |
+            tripId가 숫자 형식이 아닙니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
           content:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 여행 ID 형식이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: tripId
+                      reason: 허용되지 않는 값입니다.
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          description: |
+            요청한 회원이 해당 여행의 관리자가 아닙니다. 여행에 참여하지 않은 회원도 포함합니다.
+
+            **오류 코드:** `COMMON_FORBIDDEN`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_FORBIDDEN:
+                  summary: 해당 여행의 관리자가 아님
+                  value:
+                    code: COMMON_FORBIDDEN
+                    message: 요청을 수행할 권한이 없습니다.
+                    errors: null
+        '404':
+          description: |
+            tripId에 해당하는 여행이 없거나 삭제됐습니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_NOT_FOUND:
+                  summary: 여행이 없거나 삭제됨
+                  value:
+                    code: COMMON_NOT_FOUND
+                    message: 요청한 리소스를 찾을 수 없습니다.
+                    errors: null
+        '409':
+          description: |
+            확정된 여행이라 초대가 종료됐습니다.
+
+            **오류 코드:** `TRIP_ALREADY_CONFIRMED`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_ALREADY_CONFIRMED:
+                  summary: 여행이 이미 확정됨
+                  value:
+                    code: TRIP_ALREADY_CONFIRMED
+                    message: 이미 확정된 여행입니다.
+                    errors: null
   "/api/v1/trip-invitations":
     get:
       tags:
       - Trip
       operationId: searchTripInvitation
       summary: 초대 코드 검색
-      description: 초대 코드에 해당하는 여행의 참여 전 확인 정보를 조회합니다. 가입을 완료한 회원만 요청할 수 있습니다. 검색만으로 참여하거나 빈자리를 배정하지 않습니다. 정원이 찼거나 확정된 여행도 검색 결과를 반환하며, 앱은 registeredMemberCount, memberCapacity와 status로 참여 가능 여부를 표시합니다.
+      description: |
+        초대 코드에 해당하는 여행의 참여 전 확인 정보를 조회합니다.
+
+        ### 요청 권한
+        가입을 완료한 회원만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 사용 시 주의
+        검색만으로 참여하거나 빈자리를 배정하지 않습니다. 정원이 찼거나 확정된 여행도 검색 결과를 반환하며, 앱은 registeredMemberCount, memberCapacity와 status로 참여 가능 여부를 표시합니다.
       security:
       - bearerAuth: []
       parameters:
       - name: code
         in: query
         required: true
-        description: 공유받은 초대 코드. 영문 대문자와 숫자를 조합한 6자리이며, 서버는 앞뒤 공백을 지우고 대소문자를 구분하지 않고 비교합니다.
+        description: 공유받은 초대 코드. 영문 대문자와 숫자를 조합한 6자리입니다. 서버는 앞뒤 공백을 지우고 대소문자를 구분하지 않고 비교하며, 형식이 맞지 않는 코드는 없는 코드와 같이 처리합니다.
         schema:
           type: string
+          minLength: 1
           example: A7K2PQ
       responses:
         '200':
@@ -361,16 +437,55 @@ paths:
                 properties:
                   data:
                     "$ref": "./trip.yml#/components/schemas/InvitationSearch"
+              examples:
+                success:
+                  summary: 초대 코드 검색 성공
+                  value:
+                    data:
+                      tripId: '123'
+                      name: 도쿄 여행
+                      startDate: '2026-11-05'
+                      endDate: '2026-11-07'
+                      registeredMemberCount: 2
+                      memberCapacity: 3
+                      status: UNCONFIRMED
+                      isAlreadyJoined: false
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
-        '401':
-          "$ref": "../common/components.yml#/responses/Unauthorized"
-        '404':
-          description: 해당 코드로 검색 가능한 여행이 없음. TRIP_INVITATION_NOT_FOUND
+          description: |
+            code가 없거나 비어 있거나 공백뿐입니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
           content:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 초대 코드를 입력하지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: code
+                      reason: 필수 값입니다.
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '404':
+          description: |
+            code에 해당하는 여행이 없거나 삭제됐습니다. 형식이 맞지 않는 코드도 포함합니다.
+
+            **오류 코드:** `TRIP_INVITATION_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_INVITATION_NOT_FOUND:
+                  summary: 초대 코드에 해당하는 여행이 없음
+                  value:
+                    code: TRIP_INVITATION_NOT_FOUND
+                    message: 초대 코드에 해당하는 여행을 찾을 수 없습니다.
+                    errors: null
   "/api/v1/trip-memberships":
     post:
       tags:
@@ -1101,7 +1216,7 @@ components:
         inviteUrl:
           type: string
           format: uri
-          description: 초대 링크. 열기만 해서는 참여하지 않습니다.
+          description: 초대 링크. 환경별로 설정한 초대 링크 기본 주소 뒤에 초대 코드를 붙인 주소입니다. 열기만 해서는 참여하지 않습니다.
           example: https://example.com/invitations/A7K2PQ
     InvitationSearch:
       type: object
