@@ -9,13 +9,15 @@ import com.ject.module.trip.domain.TripMemberRole
 import com.ject.module.trip.domain.TripMemberStatus
 import com.ject.module.trip.domain.TripRepository
 import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Isolation
+import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
 import java.time.Instant
 
 /**
  * 여행 기본 정보와 참여자 목록을 조회합니다. 참여 중인 회원만 조회할 수 있으며 여행 종료일이 지나도 조회할 수 있습니다.
  *
- * 조회만 하므로 트랜잭션을 열지 않습니다. 탈퇴 회원의 탈퇴 시각은 회원 업무의 Repository에서 값으로 받습니다.
+ * 여행 정보, 참여자와 탈퇴 시각을 같은 시점의 스냅샷으로 읽도록 `REPEATABLE READ` 읽기 전용 트랜잭션에서 조회합니다. 탈퇴 회원의 탈퇴 시각은 회원 업무의 Repository에서 값으로 받습니다.
  */
 @Service
 class GetTripDetailUseCase(
@@ -28,6 +30,7 @@ class GetTripDetailUseCase(
      * 3. 참여자는 관리자, 로그인 참여자(참여한 순서), 비로그인 참여자(추가한 순서), 나간 회원(나간 순서), 탈퇴 회원(탈퇴한 순서) 순으로 둡니다.
      *    탈퇴 회원은 회원 ID를 숨기고 그 순서대로 '탈퇴한 사용자 N'으로 부릅니다. 지출 기능 전이므로 부담액은 0원입니다.
      */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     fun get(
         memberId: Long,
         tripId: Long,
