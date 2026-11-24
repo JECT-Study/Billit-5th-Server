@@ -5,6 +5,7 @@ import com.ject.global.response.ApiResponse
 import com.ject.module.trip.domain.CreateTripCommand
 import com.ject.module.trip.domain.TripScheduleStatus
 import com.ject.module.trip.presentation.request.CreateTripRequest
+import com.ject.module.trip.presentation.request.ListTripsRequest
 import com.ject.module.trip.presentation.response.ParticipantResponse
 import com.ject.module.trip.presentation.response.TripDetailResponse
 import com.ject.module.trip.presentation.response.TripListItemResponse
@@ -13,10 +14,7 @@ import com.ject.module.trip.usecase.CreateTripUseCase
 import com.ject.module.trip.usecase.GetTripDetailUseCase
 import com.ject.module.trip.usecase.ListTripsUseCase
 import jakarta.validation.Valid
-import jakarta.validation.constraints.Max
-import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.Pattern
-import org.springframework.format.annotation.DateTimeFormat
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
@@ -28,12 +26,10 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 import java.beans.PropertyEditorSupport
 import java.math.RoundingMode
 import java.net.URI
-import java.time.LocalDate
 import java.util.UUID
 
 @RestController
@@ -59,12 +55,9 @@ class TripController(
     @GetMapping
     fun listTrips(
         @AuthenticationPrincipal accessToken: Jwt,
-        @RequestParam(defaultValue = "0") @Min(0) page: Int,
-        @RequestParam(defaultValue = "20") @Min(1) @Max(100) size: Int,
-        @RequestParam(required = false) filter: TripScheduleStatus?,
-        @RequestParam @DateTimeFormat(pattern = DATE_PATTERN) today: LocalDate,
+        @Valid request: ListTripsRequest,
     ): ResponseEntity<PageResponse<TripListItemResponse>> {
-        val result = listTripsUseCase.list(memberId(accessToken), filter, today, page, size)
+        val result = listTripsUseCase.list(memberId(accessToken), request.filter, checkNotNull(request.today), request.page, request.size)
 
         return ResponseEntity.ok(
             PageResponse.from(
@@ -85,8 +78,8 @@ class TripController(
                             myShareAmountKrw = it.myShareAmountKrw.setScale(2, RoundingMode.UNNECESSARY).toPlainString(),
                         )
                     },
-                page = page,
-                size = size,
+                page = request.page,
+                size = request.size,
                 totalElements = result.totalElements,
                 hasNext = result.hasNext,
             ),
@@ -176,9 +169,6 @@ class TripController(
 
     companion object {
         private const val IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
-
-        /** 엄격한 형식이라 `2026-1-5`나 없는 날짜 `2026-02-30`은 받지 않습니다. */
-        private const val DATE_PATTERN = "yyyy-MM-dd"
 
         /** 8-4-4-4-12자리 16진수 표기만 받습니다. `UUID.fromString`은 자릿수가 모자란 값도 받으므로 형식을 먼저 확인합니다. */
         private const val UUID_PATTERN = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
