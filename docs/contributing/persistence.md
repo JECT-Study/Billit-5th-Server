@@ -196,6 +196,10 @@ DB 오류는 해당 업무에서 정의한 실패에 대응할 때만 변환합�
 
 제약 위반을 변환할 때는 원인 예외, SQLSTATE와 제약 이름 등 식별 근거를 확인합니다. 예를 들어 PostgreSQL의 `23505`는 유니크 제약 위반을 나타내지만, 어떤 업무의 중복인지는 해당 제약을 확인해야 합니다. 다른 SQL 오류는 원래 실패를 유지합니다.
 
+유니크 제약 위반은 [violatedUniqueConstraint](../../src/main/kotlin/com/ject/global/persistence/DataIntegrityViolations.kt)로 위반한 제약 이름을 얻고, 업무의 Repository Adapter가 제약 이름별로 업무 예외로 바꿉니다. 같은 제약도 기능에 따라 다른 실패가 될 수 있으므로 제약 이름과 업무 오류를 전역에서 한꺼번에 대응시키지 않습니다. 비교할 이름은 migration에서 붙인 제약 이름 그대로 Adapter의 상수로 두고, 제약 이름을 바꾸면 상수도 함께 바꿉니다.
+
+Hibernate의 PostgreSQL dialect는 영어 오류 메시지에서 제약 이름을 읽습니다. DB의 `lc_messages`가 영어가 아니면 제약 이름을 알 수 없어 변환하지 못하고 원래 실패를 유지하므로, 모든 환경의 DB는 오류 메시지를 영어로 설정합니다.
+
 ## 검증
 
 검증 범위와 Testcontainers 사용은 [테스트 가이드](testing.md)를 따릅니다.

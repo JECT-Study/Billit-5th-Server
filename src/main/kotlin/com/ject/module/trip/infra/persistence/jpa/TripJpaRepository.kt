@@ -3,7 +3,9 @@ package com.ject.module.trip.infra.persistence.jpa
 import com.ject.module.trip.domain.IdempotentTripResult
 import com.ject.module.trip.domain.Trip
 import com.ject.module.trip.domain.TripMemberRole
+import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Lock
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
 import java.util.UUID
@@ -35,4 +37,11 @@ interface TripJpaRepository : JpaRepository<Trip, Long> {
         @Param("idempotencyKey") idempotencyKey: UUID,
         @Param("adminRole") adminRole: TripMemberRole,
     ): IdempotentTripResult?
+
+    /** 초대 코드가 같고 삭제되지 않은 여행 행을 `SELECT ... FOR UPDATE` 계열 잠금으로 조회합니다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM Trip t WHERE t.inviteCode = :inviteCode AND t.deletedAt IS NULL")
+    fun findByInviteCodeAndDeletedAtIsNullForUpdate(
+        @Param("inviteCode") inviteCode: String,
+    ): Trip?
 }
