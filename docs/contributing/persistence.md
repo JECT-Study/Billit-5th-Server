@@ -174,8 +174,15 @@ DB 롤백이 외부 API 호출이나 다른 저장소의 변경까지 되돌리�
 | 위치 | 변경 | 이유 |
 | --- | --- | --- |
 | [AuthSessionJpaRepository](../../src/main/kotlin/com/ject/module/auth/infra/persistence/jpa/AuthSessionJpaRepository.kt)의 `revokeIfActive` | 이미 사용된 Refresh Token이 다시 제출됐을 때의 로그인 세션 종료 | 401로 응답하면서도 세션 종료는 반영돼야 탈취된 토큰을 막을 수 있습니다. |
-| 같은 파일의 `rotateRefreshToken` | Refresh Token 회전 | 위 이유로 [RefreshTokensUseCase](../../src/main/kotlin/com/ject/module/auth/usecase/RefreshTokensUseCase.kt)에 트랜잭션이 없어, 회전도 조건부 UPDATE 한 번을 자체 트랜잭션으로 커밋합니다. |
-| [AppleRefreshTokenJpaRepository](../../src/main/kotlin/com/ject/module/auth/infra/persistence/jpa/AppleRefreshTokenJpaRepository.kt)의 `upsert`, `deleteByMemberIdAndEncryptedRefreshToken`과 [MemberJpaRepository](../../src/main/kotlin/com/ject/module/member/infra/persistence/jpa/MemberJpaRepository.kt)의 `fillSocialDisplayNameIfAbsent` | 애플 Refresh Token 저장·삭제, 소셜 표시 이름 채우기 | [SocialLoginUseCase](../../src/main/kotlin/com/ject/module/auth/usecase/SocialLoginUseCase.kt)와 애플 연결 해제는 애플 토큰 API 호출을 사이에 두므로 DB 트랜잭션을 외부 호출 동안 열어 두지 않습니다. 각 쓰기는 조건부 쿼리 한 번이고, 하나가 실패해도 앞의 쓰기를 되돌릴 필요가 없습니다(다음 로그인에서 다시 저장하거나 채웁니다). |
+| [AppleRefreshTokenJpaRepository](../../src/main/kotlin/com/ject/module/auth/infra/persistence/jpa/AppleRefreshTokenJpaRepository.kt)의 `upsert`, `deleteByMemberIdAndEncryptedRefreshToken` | 애플 Refresh Token 저장·삭제 | [SocialLoginUseCase](../../src/main/kotlin/com/ject/module/auth/usecase/SocialLoginUseCase.kt)와 애플 연결 해제는 애플 토큰 API 호출을 사이에 두므로 DB 트랜잭션을 외부 호출 동안 열어 두지 않습니다. 각 쓰기는 조건부 쿼리 한 번이고, 하나가 실패해도 앞의 쓰기를 되돌릴 필요가 없습니다(다음 로그인에서 다시 저장합니다). |
+
+### 예외: 유니크 제약 위반 뒤 다시 조회하는 저장
+
+같은 요청이 동시에 와서 늦은 요청이 유니크 제약 위반으로 실패할 때, 먼저 저장된 결과를 다시 조회해 응답해야 하는 경우에만 UseCase에 트랜잭션을 두지 않습니다. PostgreSQL은 오류가 난 트랜잭션에서 더 조회할 수 없기 때문입니다. 함께 저장할 변경은 `implement`의 협력 객체 메서드 하나에 `@Transactional`로 묶고, Repository Adapter가 SQLSTATE와 제약 이름으로 위반을 구분해 업무 예외로 바꿉니다. UseCase는 그 예외를 트랜잭션 밖에서 받아 새 조회로 결과를 찾습니다. 다른 제약 위반은 원래 실패를 유지합니다.
+
+| 위치 | 변경 | 이유 |
+| --- | --- | --- |
+| [TripCreator](../../src/main/kotlin/com/ject/module/trip/implement/TripCreator.kt)의 `create` | 여행, 여행 생성 고유키와 생성자 참여 정보 저장 | 같은 고유키의 생성 요청이 동시에 오면 늦은 요청은 `uq_trip_idempotency_key` 위반으로 롤백되고, [CreateTripUseCase](../../src/main/kotlin/com/ject/module/trip/usecase/CreateTripUseCase.kt)가 새 조회로 먼저 만든 여행을 찾아 같은 회원이면 그 여행을 반환합니다. 초대 코드가 겹쳐 `uq_trip_invite_code` 위반이 나면 새 코드로 다시 저장합니다. |
 
 ## 동시성과 제약조건
 
@@ -188,6 +195,10 @@ DB 롤백이 외부 API 호출이나 다른 저장소의 변경까지 되돌리�
 DB 오류는 해당 업무에서 정의한 실패에 대응할 때만 변환합니다. 모든 무결성 오류를 중복으로 처리하거나 원인을 확인하지 않은 채 정상 결과로 바꾸지 않습니다.
 
 제약 위반을 변환할 때는 원인 예외, SQLSTATE와 제약 이름 등 식별 근거를 확인합니다. 예를 들어 PostgreSQL의 `23505`는 유니크 제약 위반을 나타내지만, 어떤 업무의 중복인지는 해당 제약을 확인해야 합니다. 다른 SQL 오류는 원래 실패를 유지합니다.
+
+유니크 제약 위반은 [violatedUniqueConstraint](../../src/main/kotlin/com/ject/global/persistence/DataIntegrityViolations.kt)로 위반한 제약 이름을 얻고, 업무의 Repository Adapter가 제약 이름별로 업무 예외로 바꿉니다. 같은 제약도 기능에 따라 다른 실패가 될 수 있으므로 제약 이름과 업무 오류를 전역에서 한꺼번에 대응시키지 않습니다. 비교할 이름은 migration에서 붙인 제약 이름 그대로 Adapter의 상수로 두고, 제약 이름을 바꾸면 상수도 함께 바꿉니다.
+
+Hibernate의 PostgreSQL dialect는 영어 오류 메시지에서 제약 이름을 읽습니다. DB의 `lc_messages`가 영어가 아니면 제약 이름을 알 수 없어 변환하지 못하고 원래 실패를 유지하므로, 모든 환경의 DB는 오류 메시지를 영어로 설정합니다.
 
 ## 검증
 

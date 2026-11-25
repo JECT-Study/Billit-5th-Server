@@ -1,0 +1,1511 @@
+---
+paths:
+  "/api/v1/trips":
+    get:
+      tags:
+      - Trip
+      operationId: listTrips
+      summary: 내 여행 목록 조회
+      description: |
+        요청한 회원이 참여 중인 여행을 페이지 단위로 조회합니다.
+
+        ### 요청 권한
+        가입을 완료한 회원만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        나간 여행과 삭제된 여행은 포함하지 않습니다. 최근에 만든 여행부터 정렬하며 만든 시각이 같으면 여행 ID가 큰 여행을 먼저 둡니다. filter를 보내면 조건에 맞는 여행만 조회하고, 필터를 적용한 결과에 페이지를 나눕니다.
+        일정 상태(scheduleStatus)와 filter는 같은 기준으로 나눕니다. 확정 전 여행은 날짜와 관계없이 INVITING이고, 확정 후 여행은 today가 시작일보다 앞이면 UPCOMING, 시작일부터 종료일까지(양 끝 포함) ONGOING, 종료일보다 뒤면 ENDED입니다.
+
+        ### 사용 시 주의
+        today는 사용자 기기의 현지 날짜이며 서버는 시간대를 받지 않습니다. 다음 페이지를 요청할 때도 첫 페이지 요청에 쓴 today를 그대로 보냅니다. 새로고침, 목록 화면 재진입과 앱 복귀 때는 현재 현지 날짜로 page=0부터 다시 조회합니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: today
+        in: query
+        required: true
+        description: '사용자 기기의 현지 날짜입니다. filter와 관계없이 항상 보내며, 서버는 이 날짜로 filter를 적용하고 scheduleStatus를 계산합니다. YYYY-MM-DD 형식만 받고 없는 날짜는 거절합니다. 예: today=2026-11-06'
+        schema:
+          type: string
+          format: date
+          example: '2026-11-06'
+      - "$ref": "../common/components.yml#/parameters/Page"
+      - "$ref": "../common/components.yml#/parameters/Size"
+      - name: filter
+        in: query
+        required: false
+        description: 조회할 일정 상태입니다. INVITING은 참여자 초대중, UPCOMING은 여행 예정, ONGOING은 진행 중, ENDED는 여행 종료입니다. 확정 전 여행은 날짜와 관계없이 INVITING에만 들어가고, UPCOMING, ONGOING과 ENDED에는 확정 후 여행만 들어갑니다. 생략하면 일정 상태로 제한하지 않고 전체 여행을 조회합니다.
+        schema:
+          "$ref": "./trip.yml#/components/schemas/TripScheduleStatus"
+      responses:
+        '200':
+          description: 내 여행 목록 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                - page
+                additionalProperties: false
+                properties:
+                  data:
+                    type: array
+                    description: 참여 중인 여행이 없거나 마지막 페이지를 넘으면 빈 목록입니다.
+                    items:
+                      "$ref": "./trip.yml#/components/schemas/TripListItem"
+                  page:
+                    "$ref": "../common/components.yml#/schemas/PageInfo"
+              examples:
+                success:
+                  summary: 진행 중인 여행 목록 조회 성공
+                  value:
+                    data:
+                    - tripId: '123'
+                      name: 도쿄 여행
+                      countryCode: JP
+                      customCountryName: null
+                      startDate: '2026-11-05'
+                      endDate: '2026-11-07'
+                      memberCapacity: 3
+                      registeredMemberCount: 3
+                      status: CONFIRMED
+                      scheduleStatus: ONGOING
+                      myRole: ADMIN
+                      myShareAmountKrw: '0.00'
+                    page:
+                      page: 0
+                      size: 20
+                      totalElements: 1
+                      hasNext: false
+                emptyResult:
+                  summary: 참여 중인 여행이 없음
+                  value:
+                    data: []
+                    page:
+                      page: 0
+                      size: 20
+                      totalElements: 0
+                      hasNext: false
+        '400':
+          description: |
+            today가 없거나 YYYY-MM-DD 형식의 날짜가 아니거나, page가 0보다 작거나, size가 1~100을 벗어나거나, filter가 허용하지 않는 값입니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: today가 없음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: today
+                      reason: 필수 값입니다.
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+    post:
+      tags:
+      - Trip
+      operationId: createTrip
+      summary: 여행 생성
+      description: |
+        여행 기본 정보와 총인원으로 새 여행을 만들고, 생성자를 관리자이자 첫 참여자로 등록합니다.
+
+        ### 요청 권한
+        가입을 완료한 회원만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        여행은 확정 전(UNCONFIRMED) 상태로 만들고, 요청의 tripNickname을 생성자의 여행방 닉네임으로 등록합니다. 총인원에서 생성자를 뺀 나머지는 빈자리로 남으므로 처음 registeredMemberCount는 1입니다. 영문 대문자와 숫자로 된 6자리 초대 코드도 함께 만듭니다.
+
+        ### 사용 시 주의
+        앱은 생성 시도마다 Idempotency-Key에 새 UUID를 보내고, 응답을 받지 못해 같은 요청을 다시 보낼 때만 같은 키를 사용합니다.
+        같은 회원이 같은 키로 다시 보내면 새 여행을 만들지 않고 처음 만든 여행의 현재 정보를 처음과 같이 201과 Location으로 반환합니다. 요청 본문은 처음 요청과 비교하지 않으므로 내용이 달라도 처음 만든 여행을 반환합니다.
+        같은 키의 요청이 동시에 와도 여행은 하나만 만들고, 모든 요청이 그 여행을 받습니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: 여행 생성 요청의 고유키입니다. 앱이 생성 시도마다 UUID로 만들고, 같은 요청을 다시 보낼 때만 같은 값을 사용합니다. 키는 여행 생성에만 쓰며 여행 생성 키끼리 한 번만 사용할 수 있습니다. 만료되지 않고 만든 여행과 함께 보관합니다. 하이픈으로 구분한 8-4-4-4-12자리 16진수 표기만 받습니다.
+        schema:
+          type: string
+          format: uuid
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+          example: 3f1c2b8e-6a4d-4e2f-9b7a-1c5d8e0f2a6b
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./trip.yml#/components/schemas/TripCreate"
+            examples:
+              listedCountry:
+                summary: 대표 국가를 선택한 여행 생성
+                value:
+                  name: 도쿄 여행
+                  countryCode: JP
+                  baseCurrency: JPY
+                  startDate: '2026-11-05'
+                  endDate: '2026-11-07'
+                  memberCapacity: 3
+                  tripNickname: 민지
+              customCountry:
+                summary: 기타 국가를 입력한 여행 생성
+                value:
+                  name: 하노이 여행
+                  countryCode: ETC
+                  customCountryName: 베트남
+                  baseCurrency: USD
+                  startDate: '2026-12-01'
+                  endDate: '2026-12-04'
+                  memberCapacity: 4
+                  tripNickname: 민지
+      responses:
+        '201':
+          description: 여행 생성 성공. 같은 회원이 같은 키로 다시 요청해도 처음 만든 여행을 반환합니다.
+          headers:
+            Location:
+              description: 생성한 여행의 URI입니다. /api/v1/trips/{tripId} 형식입니다.
+              schema:
+                type: string
+              example: /api/v1/trips/123
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./trip.yml#/components/schemas/TripSummary"
+              examples:
+                success:
+                  summary: 대표 국가를 선택한 여행 생성 성공
+                  value:
+                    data:
+                      tripId: '123'
+                      name: 도쿄 여행
+                      countryCode: JP
+                      customCountryName: null
+                      startDate: '2026-11-05'
+                      endDate: '2026-11-07'
+                      baseCurrency: JPY
+                      memberCapacity: 3
+                      registeredMemberCount: 1
+                      status: UNCONFIRMED
+                      myRole: ADMIN
+                customCountry:
+                  summary: 기타 국가를 입력한 여행 생성 성공
+                  value:
+                    data:
+                      tripId: '124'
+                      name: 하노이 여행
+                      countryCode: ETC
+                      customCountryName: 베트남
+                      startDate: '2026-12-01'
+                      endDate: '2026-12-04'
+                      baseCurrency: USD
+                      memberCapacity: 4
+                      registeredMemberCount: 1
+                      status: UNCONFIRMED
+                      myRole: ADMIN
+        '400':
+          description: |
+            Idempotency-Key가 없거나 형식이 올바르지 않거나, 요청 본문이 필드 형식과 범위를 벗어났습니다. 종료일이 시작일보다 빠르거나, countryCode가 ETC인데 customCountryName이 없거나, ETC가 아닌데 customCountryName을 보낸 경우도 포함합니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 고유키나 요청 본문이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors: null
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '409':
+          description: |
+            다른 회원이 이미 사용한 Idempotency-Key이거나, 그 키로 만든 여행이 삭제됐습니다. 기존 여행 정보는 반환하지 않습니다.
+
+            **오류 코드:** `TRIP_IDEMPOTENCY_KEY_REUSED`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_IDEMPOTENCY_KEY_REUSED:
+                  summary: 다른 회원이 사용했거나 삭제된 여행의 고유키
+                  value:
+                    code: TRIP_IDEMPOTENCY_KEY_REUSED
+                    message: 이미 사용된 여행 생성 요청입니다. 다시 시도해주세요.
+                    errors: null
+  "/api/v1/trips/{tripId}":
+    parameters:
+    - "$ref": "./trip.yml#/components/parameters/TripId"
+    get:
+      tags:
+      - Trip
+      operationId: getTrip
+      summary: 여행 상세
+      description: |
+        여행 상세 진입에 필요한 기본 정보와 참여자 목록을 함께 조회합니다.
+
+        ### 요청 권한
+        해당 여행에 참여 중인 회원만 요청할 수 있습니다. 여행을 나간 회원은 요청할 수 없습니다.
+
+        ### 처리 조건
+        여행 종료일이 지나도 조회할 수 있습니다. 참여자 목록에는 나간 회원과 탈퇴 회원도 넣고 빈자리는 넣지 않습니다. 앱은 memberCapacity에서 registeredMemberCount를 뺀 수만큼 빈자리를 표시합니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: 여행 상세 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./trip.yml#/components/schemas/TripDetail"
+              examples:
+                success:
+                  summary: 나간 회원과 탈퇴 회원이 있는 여행 상세 조회 성공
+                  value:
+                    data:
+                      tripId: '123'
+                      name: 도쿄 여행
+                      countryCode: JP
+                      customCountryName: null
+                      startDate: '2026-11-05'
+                      endDate: '2026-11-07'
+                      baseCurrency: JPY
+                      memberCapacity: 4
+                      registeredMemberCount: 3
+                      status: CONFIRMED
+                      myRole: ADMIN
+                      participants:
+                      - tripMemberId: '501'
+                        memberId: '11'
+                        tripNickname: 민지
+                        role: ADMIN
+                        participantStatus: MEMBER
+                        shareAmountKrw: '0.00'
+                      - tripMemberId: '502'
+                        memberId: '12'
+                        tripNickname: 지훈
+                        role: MEMBER
+                        participantStatus: MEMBER
+                        shareAmountKrw: '0.00'
+                      - tripMemberId: '503'
+                        memberId: null
+                        tripNickname: 서연
+                        role: MEMBER
+                        participantStatus: GUEST
+                        shareAmountKrw: '0.00'
+                      - tripMemberId: '504'
+                        memberId: '14'
+                        tripNickname: 하준
+                        role: MEMBER
+                        participantStatus: LEFT
+                        shareAmountKrw: '0.00'
+                      - tripMemberId: '505'
+                        memberId: null
+                        tripNickname: 탈퇴한 사용자 1
+                        role: MEMBER
+                        participantStatus: WITHDRAWN
+                        shareAmountKrw: '0.00'
+        '400':
+          description: |
+            tripId가 숫자 형식의 여행 ID가 아닙니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 여행 ID 형식이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: tripId
+                      reason: 허용되지 않는 값입니다.
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          description: |
+            요청한 회원이 이 여행에 참여하지 않았거나 여행을 나갔습니다.
+
+            **오류 코드:** `COMMON_FORBIDDEN`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_FORBIDDEN:
+                  summary: 참여 중인 여행이 아님
+                  value:
+                    code: COMMON_FORBIDDEN
+                    message: 요청을 수행할 권한이 없습니다.
+                    errors: null
+        '404':
+          description: |
+            tripId에 해당하는 여행이 없거나 삭제됐습니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_NOT_FOUND:
+                  summary: 여행이 없거나 삭제됨
+                  value:
+                    code: COMMON_NOT_FOUND
+                    message: 요청한 리소스를 찾을 수 없습니다.
+                    errors: null
+    patch:
+      tags:
+      - Trip
+      operationId: updateTrip
+      summary: 여행 정보 수정
+      description: 여행 기본 정보와 정원을 일부 수정합니다. 보낸 필드만 변경하고 생략한 필드는 유지합니다. 해당 여행의 관리자만 요청할 수 있습니다. 여행명, 대표 국가, 기본 통화와 여행 기간은 확정 후에도 수정할 수 있고, 정원은 확정 전에만 변경할 수 있습니다. 수정한 정보는 기존 지출과 정산에 소급 반영하지 않습니다.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./trip.yml#/components/schemas/TripUpdate"
+            example:
+              name: 오사카 여행
+              memberCapacity: 4
+      responses:
+        '200':
+          description: 수정 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./trip.yml#/components/schemas/TripSummary"
+        '400':
+          "$ref": "../common/components.yml#/responses/BadRequest"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          "$ref": "../common/components.yml#/responses/Forbidden"
+        '404':
+          "$ref": "../common/components.yml#/responses/NotFound"
+        '409':
+          description: 정원을 바꿀 수 없음. 여행을 시작(확정)한 뒤 정원을 바꾸려 하거나, 등록 인원(회원과 비로그인 참여자)보다 정원을 줄이려 함.
+            TRIP_CAPACITY_CHANGE_NOT_ALLOWED
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+    delete:
+      tags:
+      - Trip
+      operationId: deleteTrip
+      summary: 여행 삭제
+      description: 지출과 정산 기록이 없는 여행을 삭제하고 모든 참여자의 접근을 차단합니다. 해당 여행의 관리자만 요청할 수 있습니다. 이미 삭제한 여행을
+        다시 삭제하면 404를 반환합니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          "$ref": "../common/components.yml#/responses/NoContent"
+        '400':
+          "$ref": "../common/components.yml#/responses/BadRequest"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          "$ref": "../common/components.yml#/responses/Forbidden"
+        '404':
+          description: 여행이 없거나 이미 삭제됨. 이미 삭제한 여행을 다시 삭제해도 404입니다. COMMON_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+        '409':
+          description: 삭제를 막는 지출 또는 정산 기록이 존재함. TRIP_RECORDS_EXIST
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+  "/api/v1/trips/{tripId}/invitation":
+    parameters:
+    - "$ref": "./trip.yml#/components/parameters/TripId"
+    get:
+      tags:
+      - Trip
+      operationId: getTripInvitation
+      summary: 초대 정보 조회
+      description: |
+        공유할 초대 코드와 초대 링크를 조회합니다.
+
+        ### 요청 권한
+        해당 여행의 관리자만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        확정 전 여행에서만 조회할 수 있습니다. 초대 코드는 여행을 만들 때 발급하며, 확정 전까지 시간 제한 없이 유효하고 확정하면 초대가 자동으로 종료됩니다. 초대를 수동으로 중지하거나 코드를 재발급하는 기능은 없습니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./trip.yml#/components/schemas/Invitation"
+              examples:
+                success:
+                  summary: 초대 정보 조회 성공
+                  value:
+                    data:
+                      inviteCode: A7K2PQ
+                      inviteUrl: https://example.com/invitations/A7K2PQ
+        '400':
+          description: |
+            tripId가 숫자 형식이 아닙니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 여행 ID 형식이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: tripId
+                      reason: 허용되지 않는 값입니다.
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          description: |
+            요청한 회원이 해당 여행의 관리자가 아닙니다. 여행에 참여하지 않은 회원도 포함합니다.
+
+            **오류 코드:** `COMMON_FORBIDDEN`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_FORBIDDEN:
+                  summary: 해당 여행의 관리자가 아님
+                  value:
+                    code: COMMON_FORBIDDEN
+                    message: 요청을 수행할 권한이 없습니다.
+                    errors: null
+        '404':
+          description: |
+            tripId에 해당하는 여행이 없거나 삭제됐습니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_NOT_FOUND:
+                  summary: 여행이 없거나 삭제됨
+                  value:
+                    code: COMMON_NOT_FOUND
+                    message: 요청한 리소스를 찾을 수 없습니다.
+                    errors: null
+        '409':
+          description: |
+            확정된 여행이라 초대가 종료됐습니다.
+
+            **오류 코드:** `TRIP_ALREADY_CONFIRMED`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_ALREADY_CONFIRMED:
+                  summary: 여행이 이미 확정됨
+                  value:
+                    code: TRIP_ALREADY_CONFIRMED
+                    message: 이미 확정된 여행입니다.
+                    errors: null
+  "/api/v1/trip-invitations":
+    get:
+      tags:
+      - Trip
+      operationId: searchTripInvitation
+      summary: 초대 코드 검색
+      description: |
+        초대 코드에 해당하는 여행의 참여 전 확인 정보를 조회합니다.
+
+        ### 요청 권한
+        가입을 완료한 회원만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 사용 시 주의
+        검색만으로 참여하거나 빈자리를 배정하지 않습니다. 정원이 찼거나 확정된 여행도 검색 결과를 반환하며, 앱은 registeredMemberCount, memberCapacity와 status로 참여 가능 여부를 표시합니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: code
+        in: query
+        required: true
+        description: 공유받은 초대 코드. 영문 대문자와 숫자를 조합한 6자리입니다. 서버는 앞뒤 공백을 지우고 대소문자를 구분하지 않고 비교하며, 형식이 맞지 않는 코드는 없는 코드와 같이 처리합니다.
+        schema:
+          type: string
+          minLength: 1
+          example: A7K2PQ
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./trip.yml#/components/schemas/InvitationSearch"
+              examples:
+                success:
+                  summary: 초대 코드 검색 성공
+                  value:
+                    data:
+                      tripId: '123'
+                      name: 도쿄 여행
+                      startDate: '2026-11-05'
+                      endDate: '2026-11-07'
+                      registeredMemberCount: 2
+                      memberCapacity: 3
+                      status: UNCONFIRMED
+                      isAlreadyJoined: false
+        '400':
+          description: |
+            code가 없거나 비어 있거나 공백뿐입니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 초대 코드를 입력하지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: code
+                      reason: 필수 값입니다.
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '404':
+          description: |
+            code에 해당하는 여행이 없거나 삭제됐습니다. 형식이 맞지 않는 코드도 포함합니다.
+
+            **오류 코드:** `TRIP_INVITATION_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_INVITATION_NOT_FOUND:
+                  summary: 초대 코드에 해당하는 여행이 없음
+                  value:
+                    code: TRIP_INVITATION_NOT_FOUND
+                    message: 초대 코드에 해당하는 여행을 찾을 수 없습니다.
+                    errors: null
+  "/api/v1/trip-memberships":
+    post:
+      tags:
+      - Trip
+      operationId: joinTripByInviteCode
+      summary: 여행 참여
+      description: |
+        초대 코드와 이 여행에서 사용할 여행방 닉네임으로 여행에 참여하고 본인의 참여 식별자를 반환합니다.
+
+        ### 요청 권한
+        가입을 완료한 회원만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        확정 전이고 빈자리가 있는 여행에 참여할 수 있으며, 참여하면 빈자리 하나에 배정됩니다. 여행 종료일이 지났더라도 확정 전이면 참여할 수 있습니다.
+        입력한 여행방 닉네임이 같은 여행의 로그인 참여자나 비로그인 참여자의 여행방 닉네임과 같으면 참여할 수 없습니다. 같은 이름의 비로그인 참여자 때문에 거절됐다면 관리자가 그 비로그인 참여자를 삭제한 뒤 참여할 수 있습니다.
+        나간 회원이 확정 전에 다시 참여하면 새 참여 정보를 만들지 않고 나가기 전의 tripMemberId를 다시 쓰며, 여행방 닉네임도 나가기 전에 쓰던 닉네임을 그대로 씁니다.
+
+        ### 사용 시 주의
+        이미 참여 중인 본인이 다시 요청하면 새로 등록하지 않고 기존 참여 정보를 200으로 반환합니다. 여행이 확정됐거나 정원이 찼어도, 다른 닉네임을 보내도 같습니다. 참여 응답을 받지 못해 다시 보낸 요청도 이 방식으로 실제 참여 여부를 확인할 수 있습니다.
+        동시에 요청해도 정원을 넘거나 같은 회원이 두 번 등록되지 않습니다.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./trip.yml#/components/schemas/InviteCodeInput"
+            examples:
+              request:
+                summary: 초대 코드로 여행 참여
+                value:
+                  inviteCode: A7K2PQ
+                  tripNickname: 지훈
+      responses:
+        '200':
+          description: 이미 참여 중인 본인의 재요청. 기존 참여 정보를 반환합니다. Location 헤더는 넣지 않습니다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./trip.yml#/components/schemas/Membership"
+              examples:
+                alreadyJoined:
+                  summary: 이미 참여 중
+                  value:
+                    data:
+                      tripId: '123'
+                      tripMemberId: '456'
+        '201':
+          description: 최초 참여 성공. 참여 정보를 조회할 주소가 없어 Location 헤더는 넣지 않습니다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./trip.yml#/components/schemas/Membership"
+              examples:
+                success:
+                  summary: 여행 참여 성공
+                  value:
+                    data:
+                      tripId: '123'
+                      tripMemberId: '457'
+        '400':
+          description: |
+            inviteCode가 없거나 비어 있거나 공백뿐이거나, tripNickname이 필드 형식을 벗어났습니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 닉네임 형식이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: tripNickname
+                      reason: 한글, 영문, 숫자로 1~10자여야 합니다.
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '404':
+          description: |
+            inviteCode에 해당하는 여행이 없거나 삭제됐습니다. 형식이 맞지 않는 코드도 포함합니다.
+
+            **오류 코드:** `TRIP_INVITATION_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_INVITATION_NOT_FOUND:
+                  summary: 초대 코드에 해당하는 여행이 없음
+                  value:
+                    code: TRIP_INVITATION_NOT_FOUND
+                    message: 초대 코드에 해당하는 여행을 찾을 수 없습니다.
+                    errors: null
+        '409':
+          description: |
+            신규 참여자의 요청이 여행의 현재 상태와 충돌합니다. 이미 참여 중인 본인의 요청에는 해당하지 않습니다.
+
+            | 오류 코드 | 발생 조건 |
+            | --- | --- |
+            | `TRIP_ALREADY_CONFIRMED` | 확정된 여행입니다. |
+            | `TRIP_CAPACITY_FULL` | 빈자리가 없습니다. |
+            | `TRIP_NICKNAME_DUPLICATED` | 입력한 여행방 닉네임을 같은 여행의 다른 참여자가 사용 중입니다. |
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_ALREADY_CONFIRMED:
+                  summary: 여행이 이미 확정됨
+                  value:
+                    code: TRIP_ALREADY_CONFIRMED
+                    message: 이미 확정된 여행입니다.
+                    errors: null
+                TRIP_CAPACITY_FULL:
+                  summary: 빈자리가 없음
+                  value:
+                    code: TRIP_CAPACITY_FULL
+                    message: 여행 정원이 모두 찼습니다.
+                    errors: null
+                TRIP_NICKNAME_DUPLICATED:
+                  summary: 여행방 닉네임이 겹침
+                  value:
+                    code: TRIP_NICKNAME_DUPLICATED
+                    message: 이 여행에서 이미 사용 중인 닉네임입니다.
+                    errors: null
+  "/api/v1/trips/{tripId}/guests":
+    parameters:
+    - "$ref": "./trip.yml#/components/parameters/TripId"
+    post:
+      tags:
+      - Trip
+      operationId: createTripGuest
+      summary: 비로그인 참여자 등록
+      description: 빈자리에 이름을 입력해 비로그인 참여자를 한 명씩 등록합니다. 요청 한 건은 이름 하나를 받으며 여러 명을 일괄 등록하지 않습니다. 이름은 여행방 닉네임으로 사용하므로 같은 여행의 로그인 참여자나 다른 비로그인 참여자의 여행방 닉네임과 겹칠 수 없습니다. 여행 확정 전, 해당 여행의 관리자만 요청할 수 있습니다.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./trip.yml#/components/schemas/GuestInput"
+            example:
+              name: 서연
+      responses:
+        '201':
+          description: 등록 성공
+          headers:
+            Location:
+              description: 등록한 비로그인 참여자의 URI. /api/v1/trips/{tripId}/guests/{tripMemberId} 형식입니다.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./trip.yml#/components/schemas/Guest"
+        '400':
+          "$ref": "../common/components.yml#/responses/BadRequest"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          "$ref": "../common/components.yml#/responses/Forbidden"
+        '404':
+          "$ref": "../common/components.yml#/responses/NotFound"
+        '409':
+          description: 확정 후 비로그인 참여자를 추가하려 함(TRIP_ALREADY_CONFIRMED), 등록할 빈자리가 없음(TRIP_CAPACITY_FULL) 또는 같은 여행의 다른 참여자가 이미 같은 여행방 닉네임을 사용 중임(TRIP_GUEST_NAME_DUPLICATED)
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+  "/api/v1/trips/{tripId}/guests/{tripMemberId}":
+    parameters:
+    - "$ref": "./trip.yml#/components/parameters/TripId"
+    - "$ref": "./trip.yml#/components/parameters/TripMemberId"
+    patch:
+      tags:
+      - Trip
+      operationId: updateTripGuest
+      summary: 비로그인 이름 수정
+      description: 비로그인 참여자의 이름을 수정합니다. 해당 여행의 관리자만 요청할 수 있으며 여행 확정 전과 후 모두 수정할 수 있습니다. 대상은 같은 여행의 비로그인 참여자여야 합니다. 이름은 여행방 닉네임으로 사용하므로 같은 여행의 로그인 참여자나 다른 비로그인 참여자의 여행방 닉네임과 겹칠 수 없습니다.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./trip.yml#/components/schemas/GuestInput"
+            example:
+              name: 서연
+      responses:
+        '200':
+          description: 수정 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./trip.yml#/components/schemas/Guest"
+        '400':
+          "$ref": "../common/components.yml#/responses/BadRequest"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          "$ref": "../common/components.yml#/responses/Forbidden"
+        '404':
+          "$ref": "../common/components.yml#/responses/NotFound"
+        '409':
+          description: 같은 여행의 다른 참여자가 이미 같은 여행방 닉네임을 사용 중임. TRIP_GUEST_NAME_DUPLICATED
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+    delete:
+      tags:
+      - Trip
+      operationId: deleteTripGuest
+      summary: 비로그인 참여자 삭제
+      description: 비로그인 참여자를 삭제합니다. 그 참여자의 정보를 지우고 등록 인원(registeredMemberCount)이 1 줄며 총인원(memberCapacity)은 바뀌지 않으므로 다른 회원이 참여할 수 있습니다. 참여하려는 회원의 여행방 닉네임과 같은 이름의 비로그인 참여자가 있을 때 이 API로 삭제한 뒤 회원이 참여하게 합니다. 여행 확정 전, 해당 여행의 관리자만 요청할 수 있습니다. 지정한 참여자가 이 여행의 비로그인 참여자가 아니면(회원 참여자 또는 이미 삭제한 비로그인 참여자) 404를 반환합니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          "$ref": "../common/components.yml#/responses/NoContent"
+        '400':
+          "$ref": "../common/components.yml#/responses/BadRequest"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          "$ref": "../common/components.yml#/responses/Forbidden"
+        '404':
+          description: 여행이 없거나 지정한 참여자가 이 여행의 비로그인 참여자가 아님(회원 참여자 또는 이미 삭제한 비로그인 참여자). 이미 삭제한 비로그인 참여자를 다시 삭제해도 404입니다. COMMON_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+        '409':
+          description: 확정 후 비로그인 참여자를 삭제하려 함. TRIP_ALREADY_CONFIRMED
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+  "/api/v1/trips/{tripId}/leave":
+    parameters:
+    - "$ref": "./trip.yml#/components/parameters/TripId"
+    post:
+      tags:
+      - Trip
+      operationId: leaveTrip
+      summary: 여행 나가기
+      description: 본인의 여행 참여를 종료하고 참여 중 여행 목록에서 제거합니다. 나간 상태와 과거 기록 연결은 유지합니다. 해당 여행의 일반 참여자만 요청할 수 있으며, 관리자는 나가기를 요청할 수 없고 여행을 삭제해야만 여행에서 나갈 수 있습니다. 미정산 지출이 있어도 나갈 수 있고, 나간 회원은 나가기 전과 후 언제 정산하든 자신이 포함된 지출의 정산에 포함됩니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          "$ref": "../common/components.yml#/responses/NoContent"
+        '400':
+          "$ref": "../common/components.yml#/responses/BadRequest"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          "$ref": "../common/components.yml#/responses/Forbidden"
+        '404':
+          "$ref": "../common/components.yml#/responses/NotFound"
+  "/api/v1/trips/{tripId}/confirm":
+    parameters:
+    - "$ref": "./trip.yml#/components/parameters/TripId"
+    post:
+      tags:
+      - Trip
+      operationId: confirmTrip
+      summary: 여행 확정
+      description: 여행 참여자 구성을 확정하고 지출과 정산을 시작할 수 있는 상태로 전환합니다. 해당 여행의 관리자만 요청할 수 있습니다. 빈자리가 0개일 때만 확정하며, 빈자리가 남아 있으면 여행을 바꾸지 않고 확정 전 상태를 반환합니다. 이미 확정된 여행은 확정 상태를 그대로 반환하므로 응답을 받지 못해 다시 요청해도 같은 결과를 받습니다. 앱은 응답의 status로 확정 여부를 판단합니다. 확정 후에는 신규 참여, 비로그인 참여자 등록과 정원 변경을 할 수 없고 모집으로 되돌리지 않습니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: 처리 성공. 확정했거나 이미 확정된 여행은 status가 CONFIRMED이고, 빈자리가 남아 확정하지 못한 여행은 UNCONFIRMED입니다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./trip.yml#/components/schemas/TripConfirmation"
+        '400':
+          "$ref": "../common/components.yml#/responses/BadRequest"
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          "$ref": "../common/components.yml#/responses/Forbidden"
+        '404':
+          "$ref": "../common/components.yml#/responses/NotFound"
+components:
+  parameters:
+    TripId:
+      name: tripId
+      in: path
+      required: true
+      description: 여행 ID
+      schema:
+        "$ref": "../common/components.yml#/schemas/ResourceId"
+    TripMemberId:
+      name: tripMemberId
+      in: path
+      required: true
+      description: 여행별 참여자 ID
+      schema:
+        "$ref": "../common/components.yml#/schemas/ResourceId"
+  schemas:
+    Currency:
+      type: string
+      enum:
+      - KRW
+      - JPY
+      - USD
+      - EUR
+      - CNY
+      description: 여행 기본 통화
+    CountryCode:
+      type: string
+      enum:
+      - KR
+      - JP
+      - US
+      - CN
+      - EU
+      - ETC
+      description: 대표 국가. 한국 KR, 일본 JP, 미국 US, 중국 CN, 유럽 EU, 기타 ETC입니다. 기타 국가는 국가 코드로 바꾸지 않고 ETC로 두며, 사용자가 입력한 국가명은 customCountryName에 그대로 담습니다.
+      example: JP
+    TripRole:
+      type: string
+      enum:
+      - ADMIN
+      - MEMBER
+      description: ADMIN은 이 여행의 관리자, MEMBER는 일반 참여자입니다.
+    TripStatus:
+      type: string
+      enum:
+      - UNCONFIRMED
+      - CONFIRMED
+      description: 여행 확정 상태. UNCONFIRMED는 확정 전, CONFIRMED는 확정 후입니다.
+    TripScheduleStatus:
+      type: string
+      enum:
+      - INVITING
+      - UPCOMING
+      - ONGOING
+      - ENDED
+      description: 여행 일정 상태입니다. INVITING은 참여자 초대중(확정 전 여행), UPCOMING은 여행 예정, ONGOING은 진행 중, ENDED는 여행 종료입니다. 확정 전 여행은 날짜와 관계없이 INVITING이고, 확정 후 여행만 요청의 today와 여행 시작일, 종료일로 나눕니다.
+    ParticipantStatus:
+      type: string
+      enum:
+      - MEMBER
+      - GUEST
+      - LEFT
+      - WITHDRAWN
+      description: 참여자 상태입니다. MEMBER는 참여 중인 로그인 참여자, GUEST는 비로그인 참여자, LEFT는 나간 회원, WITHDRAWN은 탈퇴 회원입니다.
+    TripSummary:
+      type: object
+      required:
+      - tripId
+      - name
+      - countryCode
+      - customCountryName
+      - startDate
+      - endDate
+      - baseCurrency
+      - memberCapacity
+      - registeredMemberCount
+      - status
+      - myRole
+      additionalProperties: false
+      properties:
+        tripId:
+          "$ref": "../common/components.yml#/schemas/ResourceId"
+        name:
+          type: string
+          example: 도쿄 여행
+        countryCode:
+          "$ref": "./trip.yml#/components/schemas/CountryCode"
+        customCountryName:
+          type: string
+          nullable: true
+          description: 기타 국가로 직접 입력한 국가명. countryCode가 ETC가 아니면 null입니다.
+        startDate:
+          type: string
+          format: date
+          example: '2026-11-05'
+        endDate:
+          type: string
+          format: date
+          example: '2026-11-07'
+        baseCurrency:
+          "$ref": "./trip.yml#/components/schemas/Currency"
+        memberCapacity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: 생성자를 포함한 총 정원
+          example: 3
+        registeredMemberCount:
+          type: integer
+          minimum: 0
+          description: 회원과 비로그인 참여자의 합. 빈자리는 제외합니다.
+          example: 3
+        status:
+          "$ref": "./trip.yml#/components/schemas/TripStatus"
+        myRole:
+          "$ref": "./trip.yml#/components/schemas/TripRole"
+    TripListItem:
+      type: object
+      description: 여행 목록 항목. 여행 카드에 필요한 필드만 담으며 여행 기본 통화(baseCurrency)는 포함하지 않습니다. 기본 필드의 정의는 TripSummary와 같고, 여행 카드에 표시할 요청자의 누적 부담액(myShareAmountKrw)을 추가합니다.
+      required:
+      - tripId
+      - name
+      - countryCode
+      - customCountryName
+      - startDate
+      - endDate
+      - memberCapacity
+      - registeredMemberCount
+      - status
+      - scheduleStatus
+      - myRole
+      - myShareAmountKrw
+      additionalProperties: false
+      properties:
+        tripId:
+          "$ref": "../common/components.yml#/schemas/ResourceId"
+        name:
+          type: string
+          example: 도쿄 여행
+        countryCode:
+          "$ref": "./trip.yml#/components/schemas/CountryCode"
+        customCountryName:
+          type: string
+          nullable: true
+          description: 기타 국가로 직접 입력한 국가명. countryCode가 ETC가 아니면 null입니다.
+        startDate:
+          type: string
+          format: date
+          example: '2026-11-05'
+        endDate:
+          type: string
+          format: date
+          example: '2026-11-07'
+        memberCapacity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 3
+        registeredMemberCount:
+          type: integer
+          minimum: 0
+          description: 참여 중인 로그인 참여자와 비로그인 참여자의 합. 나간 회원, 탈퇴 회원과 빈자리는 제외합니다.
+          example: 3
+        status:
+          "$ref": "./trip.yml#/components/schemas/TripStatus"
+        scheduleStatus:
+          "$ref": "./trip.yml#/components/schemas/TripScheduleStatus"
+        myRole:
+          "$ref": "./trip.yml#/components/schemas/TripRole"
+        myShareAmountKrw:
+          allOf:
+          - "$ref": "../common/components.yml#/schemas/DecimalString"
+          description: 요청자의 누적 부담액. 여행 전체의 지출 합계가 아니라 요청한 회원이 부담한 금액을 원화로 나타낸 값입니다.
+          example: '0.00'
+    TripDetail:
+      type: object
+      description: 여행 기본 정보와 참여자 목록. 기본 필드의 정의는 TripSummary와 같습니다.
+      required:
+      - tripId
+      - name
+      - countryCode
+      - customCountryName
+      - startDate
+      - endDate
+      - baseCurrency
+      - memberCapacity
+      - registeredMemberCount
+      - status
+      - myRole
+      - participants
+      additionalProperties: false
+      properties:
+        tripId:
+          "$ref": "../common/components.yml#/schemas/ResourceId"
+        name:
+          type: string
+          example: 도쿄 여행
+        countryCode:
+          "$ref": "./trip.yml#/components/schemas/CountryCode"
+        customCountryName:
+          type: string
+          nullable: true
+          description: 기타 국가로 직접 입력한 국가명. countryCode가 ETC가 아니면 null입니다.
+        startDate:
+          type: string
+          format: date
+          example: '2026-11-05'
+        endDate:
+          type: string
+          format: date
+          example: '2026-11-07'
+        baseCurrency:
+          "$ref": "./trip.yml#/components/schemas/Currency"
+        memberCapacity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 3
+        registeredMemberCount:
+          type: integer
+          minimum: 0
+          description: 참여 중인 로그인 참여자와 비로그인 참여자의 합. 나간 회원, 탈퇴 회원과 빈자리는 제외합니다.
+          example: 3
+        status:
+          "$ref": "./trip.yml#/components/schemas/TripStatus"
+        myRole:
+          "$ref": "./trip.yml#/components/schemas/TripRole"
+        participants:
+          type: array
+          description: 참여자 목록. 관리자, 로그인 참여자(참여한 순서), 비로그인 참여자(관리자가 추가한 순서), 나간 회원(먼저 나간 순서), 탈퇴 회원(먼저 탈퇴한 순서) 순이며 빈자리는 넣지 않습니다.
+          items:
+            "$ref": "./trip.yml#/components/schemas/Participant"
+    TripCreate:
+      description: 대표 국가(countryCode)에 따라 기타 국가명(customCountryName)을 받습니다. 기타 국가(ETC)이면 customCountryName이 필수이고, 그 외 국가이면 customCountryName을 보내지 않습니다. 함께 보내면 400입니다.
+      oneOf:
+      - "$ref": "./trip.yml#/components/schemas/ListedCountryTripCreate"
+      - "$ref": "./trip.yml#/components/schemas/CustomCountryTripCreate"
+      discriminator:
+        propertyName: countryCode
+        mapping:
+          KR: "./trip.yml#/components/schemas/ListedCountryTripCreate"
+          JP: "./trip.yml#/components/schemas/ListedCountryTripCreate"
+          US: "./trip.yml#/components/schemas/ListedCountryTripCreate"
+          CN: "./trip.yml#/components/schemas/ListedCountryTripCreate"
+          EU: "./trip.yml#/components/schemas/ListedCountryTripCreate"
+          ETC: "./trip.yml#/components/schemas/CustomCountryTripCreate"
+    ListedCountryTripCreate:
+      type: object
+      description: 한국, 일본, 미국, 중국, 유럽 중 하나를 대표 국가로 선택한 여행 생성 요청입니다. customCountryName은 보내지 않습니다.
+      required:
+      - name
+      - countryCode
+      - baseCurrency
+      - startDate
+      - endDate
+      - memberCapacity
+      - tripNickname
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          pattern: '^\s*[가-힣A-Za-z0-9]([가-힣A-Za-z0-9 ]{0,13}[가-힣A-Za-z0-9])?\s*$'
+          description: 여행 목록과 상세에 표시할 여행명입니다. 앞뒤 공백을 지운 값으로 검사하고 저장하며, 지운 값은 공백을 포함해 1~15자이고 한글, 영문, 숫자와 공백만 허용합니다. 공백만 입력하면 거절합니다.
+          example: 도쿄 여행
+        countryCode:
+          type: string
+          enum:
+          - KR
+          - JP
+          - US
+          - CN
+          - EU
+          description: 대표 국가입니다. 한국 KR, 일본 JP, 미국 US, 중국 CN, 유럽 EU입니다.
+        baseCurrency:
+          "$ref": "./trip.yml#/components/schemas/Currency"
+        startDate:
+          type: string
+          format: date
+          description: 여행 시작일입니다. 과거 날짜를 허용합니다.
+          example: '2026-11-05'
+        endDate:
+          type: string
+          format: date
+          description: 여행 종료일입니다. startDate와 같거나 이후여야 하며 당일 여행을 허용합니다.
+          example: '2026-11-07'
+        memberCapacity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: 생성자를 포함한 총인원입니다.
+          example: 3
+        tripNickname:
+          type: string
+          minLength: 1
+          maxLength: 10
+          pattern: "^[가-힣A-Za-z0-9]+$"
+          description: 생성자가 이 여행에서 사용할 여행방 닉네임입니다. 한글 완성형, 영문과 숫자만 허용하며 계정 닉네임과 같은 규칙입니다. 공백을 지우지 않고 검사합니다.
+          example: 민지
+    CustomCountryTripCreate:
+      type: object
+      description: 대표 국가를 기타(ETC)로 고르고 국가명을 직접 입력한 여행 생성 요청입니다.
+      required:
+      - name
+      - countryCode
+      - customCountryName
+      - baseCurrency
+      - startDate
+      - endDate
+      - memberCapacity
+      - tripNickname
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          pattern: '^\s*[가-힣A-Za-z0-9]([가-힣A-Za-z0-9 ]{0,13}[가-힣A-Za-z0-9])?\s*$'
+          description: 여행 목록과 상세에 표시할 여행명입니다. 앞뒤 공백을 지운 값으로 검사하고 저장하며, 지운 값은 공백을 포함해 1~15자이고 한글, 영문, 숫자와 공백만 허용합니다. 공백만 입력하면 거절합니다.
+          example: 하노이 여행
+        countryCode:
+          type: string
+          enum:
+          - ETC
+          description: 기타 국가를 나타내는 ETC입니다.
+        customCountryName:
+          type: string
+          pattern: '^\s*[가-힣A-Za-z]{1,10}\s*$'
+          description: 기타 국가로 직접 입력한 국가명입니다. 국가 코드로 바꾸지 않고 입력한 텍스트 그대로 저장합니다. 앞뒤 공백을 지운 값으로 검사하고 저장하며, 지운 값은 1~10자이고 한글과 영문만 허용합니다. 가운데 공백, 숫자와 특수문자는 거절하고 영문 대소문자를 구분합니다. 공백만 입력하면 거절합니다.
+          example: 베트남
+        baseCurrency:
+          "$ref": "./trip.yml#/components/schemas/Currency"
+        startDate:
+          type: string
+          format: date
+          description: 여행 시작일입니다. 과거 날짜를 허용합니다.
+          example: '2026-12-01'
+        endDate:
+          type: string
+          format: date
+          description: 여행 종료일입니다. startDate와 같거나 이후여야 하며 당일 여행을 허용합니다.
+          example: '2026-12-04'
+        memberCapacity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: 생성자를 포함한 총인원입니다.
+          example: 4
+        tripNickname:
+          type: string
+          minLength: 1
+          maxLength: 10
+          pattern: "^[가-힣A-Za-z0-9]+$"
+          description: 생성자가 이 여행에서 사용할 여행방 닉네임입니다. 한글 완성형, 영문과 숫자만 허용하며 계정 닉네임과 같은 규칙입니다. 공백을 지우지 않고 검사합니다.
+          example: 민지
+    TripUpdate:
+      type: object
+      description: 보낸 필드만 수정하고 생략한 필드는 유지합니다. 각 필드의 규칙은 TripCreate와 같으며, 보낸 값을 저장된 값과 합친 뒤 검증합니다.
+        모든 필드는 null을 허용하지 않으며 null을 보내면 400으로 거절합니다. 필드를 하나도 보내지 않아도 400으로 거절합니다.
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 15
+          pattern: "^[가-힣A-Za-z0-9 ]+$"
+          description: 여행명. 앞뒤 공백을 지운 값으로 검사하고 저장하며, 공백만 입력하면 거절합니다.
+        countryCode:
+          "$ref": "./trip.yml#/components/schemas/CountryCode"
+        customCountryName:
+          type: string
+          minLength: 1
+          maxLength: 10
+          pattern: "^[가-힣A-Za-z]+$"
+          description: 기타 국가로 직접 입력한 국가명. countryCode를 ETC로 바꾸면 필수입니다.
+        baseCurrency:
+          "$ref": "./trip.yml#/components/schemas/Currency"
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        memberCapacity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          description: 확정 후에는 변경할 수 없으며 등록 인원보다 작게 줄일 수 없습니다.
+    Participant:
+      type: object
+      required:
+      - tripMemberId
+      - memberId
+      - tripNickname
+      - role
+      - participantStatus
+      - shareAmountKrw
+      additionalProperties: false
+      properties:
+        tripMemberId:
+          "$ref": "../common/components.yml#/schemas/ResourceId"
+        memberId:
+          type: string
+          nullable: true
+          description: Billit 회원 계정 ID. 비로그인 참여자와 탈퇴 회원이면 null입니다.
+        tripNickname:
+          type: string
+          description: 참여자의 여행방 닉네임. 나간 회원은 나가기 전에 쓰던 닉네임이고, 탈퇴 회원은 같은 여행의 탈퇴 회원에게 먼저 탈퇴한 순서대로 1부터 붙인 '탈퇴한 사용자 N'입니다. 이름을 식별자로 사용하지 않습니다.
+          example: 민지
+        role:
+          "$ref": "./trip.yml#/components/schemas/TripRole"
+        participantStatus:
+          "$ref": "./trip.yml#/components/schemas/ParticipantStatus"
+        shareAmountKrw:
+          allOf:
+          - "$ref": "../common/components.yml#/schemas/DecimalString"
+          description: 참여자별 누적 부담액. 각 지출에 등록한 환율로 원화로 환산해 합산하며, 지출 날짜 필터와 관계없이 여행 전체 기간을 기준으로 합니다.
+          example: '0.00'
+    Invitation:
+      type: object
+      required:
+      - inviteCode
+      - inviteUrl
+      additionalProperties: false
+      properties:
+        inviteCode:
+          type: string
+          pattern: "^[A-Z0-9]{6}$"
+          description: 초대 코드. 영문 대문자와 숫자를 조합한 6자리입니다. 확정 전까지 시간 제한 없이 유효하고, 1차 MVP에서는 재발급하지 않습니다.
+          example: A7K2PQ
+        inviteUrl:
+          type: string
+          format: uri
+          description: 초대 링크. 환경별로 설정한 초대 링크 기본 주소 뒤에 초대 코드를 붙인 주소입니다. 열기만 해서는 참여하지 않습니다.
+          example: https://example.com/invitations/A7K2PQ
+    InvitationSearch:
+      type: object
+      required:
+      - tripId
+      - name
+      - startDate
+      - endDate
+      - registeredMemberCount
+      - memberCapacity
+      - status
+      - isAlreadyJoined
+      additionalProperties: false
+      properties:
+        tripId:
+          "$ref": "../common/components.yml#/schemas/ResourceId"
+        name:
+          type: string
+          example: 도쿄 여행
+        startDate:
+          type: string
+          format: date
+          example: '2026-11-05'
+        endDate:
+          type: string
+          format: date
+          example: '2026-11-07'
+        registeredMemberCount:
+          type: integer
+          minimum: 0
+          example: 2
+        memberCapacity:
+          type: integer
+          minimum: 1
+          maximum: 10
+          example: 3
+        status:
+          "$ref": "./trip.yml#/components/schemas/TripStatus"
+        isAlreadyJoined:
+          type: boolean
+          description: 요청자가 이미 참여 중인지 여부
+    InviteCodeInput:
+      type: object
+      required:
+      - inviteCode
+      - tripNickname
+      additionalProperties: false
+      properties:
+        inviteCode:
+          type: string
+          minLength: 1
+          description: 공유받은 초대 코드. 영문 대문자와 숫자로 된 6자리입니다. 서버는 앞뒤 공백을 지우고 대소문자를 구분하지 않고 비교하며, 형식이 맞지 않는 코드는 없는 코드와 같이 처리합니다.
+          example: A7K2PQ
+        tripNickname:
+          type: string
+          minLength: 1
+          maxLength: 10
+          pattern: "^[가-힣A-Za-z0-9]+$"
+          description: 이 여행에서 사용할 여행방 닉네임. 한글 완성형, 영문과 숫자만 허용하며 계정 닉네임과 같은 규칙입니다. 같은 여행의 다른 참여자와 겹칠 수 없습니다.
+          example: 지훈
+    Membership:
+      type: object
+      required:
+      - tripId
+      - tripMemberId
+      additionalProperties: false
+      properties:
+        tripId:
+          "$ref": "../common/components.yml#/schemas/ResourceId"
+        tripMemberId:
+          "$ref": "../common/components.yml#/schemas/ResourceId"
+    GuestInput:
+      type: object
+      required:
+      - name
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 10
+          pattern: "^[가-힣A-Za-z0-9]+$"
+          description: 비로그인 참여자의 여행방 닉네임. 한글 완성형, 영문과 숫자만 허용하며 계정 닉네임과 같은 규칙입니다. 같은 여행의 로그인 참여자나 다른 비로그인 참여자의 여행방 닉네임과 겹칠 수 없습니다.
+    Guest:
+      type: object
+      required:
+      - tripMemberId
+      - name
+      additionalProperties: false
+      properties:
+        tripMemberId:
+          "$ref": "../common/components.yml#/schemas/ResourceId"
+        name:
+          type: string
+          example: 서연
+    TripConfirmation:
+      type: object
+      description: 요청을 처리한 뒤의 여행 확정 상태. 확정 시각은 제공하지 않습니다.
+      required:
+      - tripId
+      - status
+      additionalProperties: false
+      properties:
+        tripId:
+          "$ref": "../common/components.yml#/schemas/ResourceId"
+        status:
+          "$ref": "./trip.yml#/components/schemas/TripStatus"

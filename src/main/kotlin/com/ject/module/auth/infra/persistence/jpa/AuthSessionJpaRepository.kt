@@ -10,7 +10,6 @@ import java.time.Instant
 import java.util.UUID
 
 interface AuthSessionJpaRepository : JpaRepository<AuthSession, UUID> {
-    @Transactional
     @Modifying
     @Query(
         """

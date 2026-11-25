@@ -9,6 +9,7 @@ import com.ject.module.member.domain.MemberStatus
 import com.ject.module.member.domain.RegistrationCompletionResult
 import com.ject.module.member.domain.RegistrationMemberResult
 import com.ject.module.member.domain.SocialMemberResult
+import com.ject.module.member.domain.WithdrawnMemberResult
 import com.ject.module.member.infra.persistence.jpa.MemberJpaRepository
 import org.hibernate.exception.ConstraintViolationException
 import org.springframework.dao.DataIntegrityViolationException
@@ -26,13 +27,12 @@ class MemberRepositoryAdapter(
         socialProviderUserId: String,
     ): SocialMemberResult? {
         val member = memberJpaRepository.findBySocialProviderAndSocialProviderUserId(socialProvider, socialProviderUserId) ?: return null
-        return SocialMemberResult(memberId = checkNotNull(member.id), status = member.status, socialDisplayName = member.socialDisplayName)
+        return SocialMemberResult(memberId = checkNotNull(member.id), status = member.status)
     }
 
     override fun createPendingMember(
         socialProvider: AuthProvider,
         socialProviderUserId: String,
-        socialDisplayName: String?,
     ): Long? {
         val member =
             Member(
@@ -48,7 +48,6 @@ class MemberRepositoryAdapter(
                 ocrAgreedAt = null,
                 status = MemberStatus.PENDING,
                 withdrawnAt = null,
-                socialDisplayName = socialDisplayName?.let(::truncateSocialDisplayName),
             )
         return try {
             checkNotNull(memberJpaRepository.saveAndFlush(member).id)
@@ -59,17 +58,6 @@ class MemberRepositoryAdapter(
             null
         }
     }
-
-    override fun fillSocialDisplayNameIfAbsent(
-        memberId: Long,
-        socialDisplayName: String,
-    ): Boolean =
-        memberJpaRepository.fillSocialDisplayNameIfAbsent(
-            id = memberId,
-            status = MemberStatus.PENDING,
-            socialDisplayName = truncateSocialDisplayName(socialDisplayName),
-            updatedAt = clock.instant(),
-        ) == 1
 
     override fun findActiveProfile(memberId: Long): MemberProfileResult? = memberJpaRepository.findProfile(memberId, MemberStatus.ACTIVE)
 
@@ -96,12 +84,11 @@ class MemberRepositoryAdapter(
         return if (updated == 1) RegistrationCompletionResult.COMPLETED else RegistrationCompletionResult.NOT_PENDING
     }
 
-    /** PostgreSQL `VARCHAR` 길이는 문자(코드 포인트) 수이므로 서로게이트 쌍을 나누지 않고 자릅니다. */
-    private fun truncateSocialDisplayName(socialDisplayName: String): String {
-        if (socialDisplayName.codePointCount(0, socialDisplayName.length) <= MemberRepository.SOCIAL_DISPLAY_NAME_MAX_LENGTH) {
-            return socialDisplayName
+    override fun findWithdrawnMembers(memberIds: Collection<Long>): List<WithdrawnMemberResult> {
+        if (memberIds.isEmpty()) {
+            return emptyList()
         }
-        return socialDisplayName.substring(0, socialDisplayName.offsetByCodePoints(0, MemberRepository.SOCIAL_DISPLAY_NAME_MAX_LENGTH))
+        return memberJpaRepository.findWithdrawnMembers(memberIds)
     }
 
     private fun isUniqueViolation(

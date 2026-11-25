@@ -6,6 +6,7 @@ import com.ject.module.member.domain.Member
 import com.ject.module.member.domain.MemberProfileResult
 import com.ject.module.member.domain.MemberStatus
 import com.ject.module.member.domain.RegistrationMemberResult
+import com.ject.module.member.domain.WithdrawnMemberResult
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
@@ -19,28 +20,9 @@ interface MemberJpaRepository : JpaRepository<Member, Long> {
         socialProviderUserId: String,
     ): Member?
 
-    @Transactional
-    @Modifying
     @Query(
         """
-        UPDATE Member m
-        SET m.socialDisplayName = :socialDisplayName,
-            m.updatedAt = :updatedAt
-        WHERE m.id = :id
-          AND m.status = :status
-          AND m.socialDisplayName IS NULL
-        """,
-    )
-    fun fillSocialDisplayNameIfAbsent(
-        @Param("id") id: Long,
-        @Param("status") status: MemberStatus,
-        @Param("socialDisplayName") socialDisplayName: String,
-        @Param("updatedAt") updatedAt: Instant,
-    ): Int
-
-    @Query(
-        """
-        SELECT new com.ject.module.member.domain.RegistrationMemberResult(m.status, m.socialDisplayName)
+        SELECT new com.ject.module.member.domain.RegistrationMemberResult(m.status)
         FROM Member m
         WHERE m.id = :id
         """,
@@ -88,4 +70,16 @@ interface MemberJpaRepository : JpaRepository<Member, Long> {
         @Param("marketingPushAgreedAt") marketingPushAgreedAt: Instant?,
         @Param("updatedAt") updatedAt: Instant,
     ): Int
+
+    @Query(
+        """
+        SELECT new com.ject.module.member.domain.WithdrawnMemberResult(m.id, m.withdrawnAt)
+        FROM Member m
+        WHERE m.id IN :ids
+          AND m.withdrawnAt IS NOT NULL
+        """,
+    )
+    fun findWithdrawnMembers(
+        @Param("ids") ids: Collection<Long>,
+    ): List<WithdrawnMemberResult>
 }

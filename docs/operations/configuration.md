@@ -138,6 +138,7 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - `app.auth.token-encryption.key`(`AUTH_TOKEN_ENCRYPTION_KEY`)는 외부 제공자 토큰(애플 Refresh Token)을 저장할 때 쓰는 AES-256-GCM 키입니다. 32바이트 임의 값을 base64로 인코딩해 넣습니다. 예: `openssl rand -base64 32`. local은 개발용 기본값, test는 설정 파일의 테스트 전용 값, dev와 prod는 기본값 없이 필수이며 환경별로 다른 값을 씁니다. 값이 없거나 32바이트가 아니면 기동이 실패합니다.
 - 토큰 암호화 키를 바꾸면 이전 키로 저장한 애플 Refresh Token을 복호화할 수 없습니다. 키를 교체하는 절차는 아직 없으므로 한 번 넣은 값을 유지합니다. 복호화하지 못한 토큰은 `apple_refresh_token_undecryptable` ERROR 로그(저장값과 키 제외)를 남기고, 애플 연결 해제는 애플을 호출하지 않고 행을 지우지 않은 채 "복호화 불가" 결과를 돌려줍니다.
 - `app.auth.refresh-token.retry-grace-period`는 네 프로필 모두 `30s`입니다. 회전 후 이 시간 안에 직전 Refresh Token이 다시 오면 응답을 받지 못한 재시도로 보고 한 번만 새 토큰을 발급합니다. 그 밖의 이미 회전한 토큰은 재사용으로 보고 해당 세션을 종료합니다. 30초와 1회는 정책서에 반영됐지만 횟수와 시간은 팀 논의가 남아 있어(Docs `policy/authentication.md`의 `논의 필요`) 설정값으로 둡니다.
+- 새 로그인 세션 발급과 토큰 갱신은 `login_history`에 회원 ID, 접속 IP 주소와 시각을 남깁니다. IP 주소는 `server.forward-headers-strategy: native`로 해석한 접속 주소입니다. `app.auth.login-history.cleanup-cron`은 네 프로필 모두 `0 30 3 * * *`(한국 시각 매일 03:30, 운영 DB 백업 04:00 전)이며 3개월이 지난 기록을 지웁니다.
 
 ## 소셜 로그인
 
@@ -191,6 +192,17 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - 값이 없거나 `http://`, `https://`로 시작하지 않으면 기동이 실패합니다.
 - 가입할 때 동의받는 약관은 이용약관(`TERMS`), 개인정보(`PRIVACY`), 마케팅 수신(`MARKETING`)이며, 종류별로 시행 시각이 지난 버전 중 가장 최근 버전을 사용합니다.
 
+## 여행 초대 링크
+
+네 프로필의 `app.trip.invitation.base-url`에서 초대 링크의 기본 주소를 설정합니다.
+
+| 환경변수 | local | test | dev, prod |
+| --- | --- | --- | --- |
+| `TRIP_INVITATION_BASE_URL` | `http://localhost:3000/invitations` | 설정 파일의 테스트 전용 값 | 필수 |
+
+- 초대 정보 조회의 `inviteUrl`은 `{기본 주소}/{초대 코드}`입니다. 예: `https://example.com/invitations/A7K2PQ`
+- 값이 없거나 `http://`, `https://`로 시작하지 않으면 기동이 실패합니다.
+
 ## 인증과 프론트 연동
 
 - 클라이언트가 전달한 `environment`로 서버 프로필이나 운영 자격증명을 선택하지 않습니다.
@@ -234,6 +246,8 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 
 스케줄러의 전역 활성화와 작업별 실행 주기는 분리합니다. 일반 통합 테스트에서는 예약 작업을 자동 실행하지 않으며, 작업을 직접 호출해 동작을 검증할 수 있도록 구성합니다.
 
+`app.scheduling.enabled`가 `true`일 때만 [SchedulingConfig](../../src/main/kotlin/com/ject/global/config/SchedulingConfig.kt)가 예약 작업을 켭니다. local, dev, prod는 `true`, test는 `false`입니다. 작업별 실행 주기는 각 작업의 설정 키에서 정합니다.
+
 필터는 servlet container와 Spring Security 중 실행 경로를 정합니다. Security 체인 전용 필터가 Spring Bean이면 servlet 자동 등록을 비활성화하고 체인 내 순서를 명시합니다. 로그 기록 기준은 [로깅](logging.md)을 따릅니다.
 
 ## 서버와 종료
@@ -259,6 +273,7 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - `management.endpoint.health.probes.enabled`를 켜고 readiness 그룹에 `readinessState,db,redis`, liveness 그룹에 `livenessState`를 포함합니다. 두 그룹은 `additional-path`로 앱 포트의 `/readyz`, `/healthz`에 연결합니다.
 - 노출하는 actuator 엔드포인트는 `health`, `prometheus`뿐이며 상태 응답에 상세 정보를 포함하지 않습니다.
 - 지표에는 `application` 태그로 `spring.application.name`을 붙입니다.
+- `local`, `dev`, `prod`에서는 `management.metrics.distribution.percentiles-histogram.http.server.requests: true`로 HTTP 응답 시간 히스토그램(`http_server_requests_seconds_bucket`)을 노출합니다. Grafana는 이 지표로 응답 시간의 95백분위수(p95)를 계산합니다.
 - 관리 포트는 `dev`, `prod`에서 `8081`, `local`에서 `${MANAGEMENT_PORT:8081}`, `test`에서 `0`입니다.
 - 인증을 적용해도 `/healthz`, `/readyz`와 관리 포트의 actuator는 인증 없이 응답해야 합니다.
 

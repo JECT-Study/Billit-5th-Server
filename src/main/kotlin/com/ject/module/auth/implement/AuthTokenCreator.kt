@@ -4,6 +4,7 @@ import com.ject.module.auth.domain.AuthSession
 import com.ject.module.auth.domain.AuthSessionRepository
 import com.ject.module.auth.domain.AuthTokenClaims
 import com.ject.module.auth.domain.AuthTokenResult
+import com.ject.module.auth.domain.LoginHistoryType
 import com.ject.module.auth.domain.TokenType
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm
 import org.springframework.security.oauth2.jwt.JwsHeader
@@ -21,12 +22,14 @@ class AuthTokenCreator(
     private val jwtEncoder: JwtEncoder,
     private val authSessionRepository: AuthSessionRepository,
     private val refreshTokenHasher: RefreshTokenHasher,
+    private val loginHistoryCreator: LoginHistoryCreator,
     private val clock: Clock,
 ) {
     /**
      * 회원 세션을 만들고 회원용 Access Token과 Refresh Token을 발급합니다.
      *
-     * 세션에는 Refresh Token의 SHA-256 해시만 저장합니다. 세션 저장과 회원 검증을 함께 커밋해야 하면 호출하는 UseCase가 트랜잭션을 엽니다.
+     * 세션에는 Refresh Token의 SHA-256 해시만 저장합니다. 새 세션은 로그인이므로 로그인 기록도 남깁니다.
+     * 세션과 로그인 기록을 함께 커밋해야 하므로 호출하는 UseCase가 트랜잭션을 엽니다.
      */
     fun createMemberTokens(memberId: Long): AuthTokenResult {
         val now = clock.instant()
@@ -41,6 +44,7 @@ class AuthTokenCreator(
                 refreshTokenExpiresAt = now.plus(REFRESH_TOKEN_TTL),
             ),
         )
+        loginHistoryCreator.create(memberId, LoginHistoryType.LOGIN, now)
 
         return tokens
     }

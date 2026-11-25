@@ -63,11 +63,15 @@ app:
     core-pool-size: ${EVENT_EXECUTOR_CORE_POOL_SIZE:2}
     max-pool-size: ${EVENT_EXECUTOR_MAX_POOL_SIZE:4}
     queue-capacity: ${EVENT_EXECUTOR_QUEUE_CAPACITY:100}
+  scheduling:
+    enabled: true
   auth:
     jwt:
       secret: ${JWT_SECRET}
     refresh-token:
       retry-grace-period: 30s
+    login-history:
+      cleanup-cron: "0 30 3 * * *"
     social:
       google:
         client-id: ${GOOGLE_CLIENT_ID}
@@ -90,6 +94,9 @@ app:
   member:
     policy:
       content-base-url: ${POLICY_CONTENT_BASE_URL}
+  trip:
+    invitation:
+      base-url: ${TRIP_INVITATION_BASE_URL}
 
 logging:
   structured:
@@ -111,6 +118,9 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
   endpoint:
     health:
       probes:
