@@ -18,7 +18,9 @@ import com.ject.module.trip.presentation.response.TripListItemResponse
 import com.ject.module.trip.presentation.response.TripSummaryResponse
 import com.ject.module.trip.usecase.ConfirmTripUseCase
 import com.ject.module.trip.usecase.CreateTripUseCase
+import com.ject.module.trip.usecase.DeleteTripUseCase
 import com.ject.module.trip.usecase.GetTripDetailUseCase
+import com.ject.module.trip.usecase.LeaveTripUseCase
 import com.ject.module.trip.usecase.ListTripsUseCase
 import com.ject.module.trip.usecase.UpdateTripUseCase
 import jakarta.validation.Valid
@@ -27,6 +29,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.WebDataBinder
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.InitBinder
 import org.springframework.web.bind.annotation.PatchMapping
@@ -49,6 +52,8 @@ class TripController(
     private val getTripDetailUseCase: GetTripDetailUseCase,
     private val updateTripUseCase: UpdateTripUseCase,
     private val confirmTripUseCase: ConfirmTripUseCase,
+    private val leaveTripUseCase: LeaveTripUseCase,
+    private val deleteTripUseCase: DeleteTripUseCase,
 ) {
     /** 빈 `filter`를 Spring 기본 변환처럼 생략(`null`)으로 처리하지 않고, 상수 이름이 아닌 값과 같이 거절합니다. */
     @InitBinder
@@ -197,6 +202,26 @@ class TripController(
         return ResponseEntity.ok(
             ApiResponse(TripConfirmationResponse(tripId = confirmation.tripId.toString(), status = confirmation.status)),
         )
+    }
+
+    @PostMapping("/{tripId}/leave")
+    fun leaveTrip(
+        @AuthenticationPrincipal accessToken: Jwt,
+        @PathVariable tripId: Long,
+    ): ResponseEntity<Void> {
+        leaveTripUseCase.leave(memberId(accessToken), tripId)
+
+        return ResponseEntity.noContent().build()
+    }
+
+    @DeleteMapping("/{tripId}")
+    fun deleteTrip(
+        @AuthenticationPrincipal accessToken: Jwt,
+        @PathVariable tripId: Long,
+    ): ResponseEntity<Void> {
+        deleteTripUseCase.delete(memberId(accessToken), tripId)
+
+        return ResponseEntity.noContent().build()
     }
 
     private fun TripSummaryResult.toResponse(): TripSummaryResponse =

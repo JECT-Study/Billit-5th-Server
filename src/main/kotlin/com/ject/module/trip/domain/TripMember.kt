@@ -29,13 +29,8 @@ class TripMember(
     /** 초대 코드로 참여한 시각입니다. 여행 생성자와 비로그인 참여자처럼 초대 코드로 참여하지 않았으면 `null`입니다. */
     @field:Column(name = "joined_at", nullable = true)
     val joinedAt: Instant?,
-    @field:Enumerated(EnumType.STRING)
-    @field:JdbcTypeCode(SqlTypes.NAMED_ENUM)
-    @field:Column(name = "status", nullable = false)
-    val status: TripMemberStatus,
-    /** 여행을 나간 시각입니다. 나가지 않았으면 `null`이며, 나갔는지는 [status]로 판단합니다. */
-    @field:Column(name = "left_at", nullable = true)
-    val leftAt: Instant?,
+    status: TripMemberStatus,
+    leftAt: Instant?,
 ) : BaseEntity() {
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -47,6 +42,29 @@ class TripMember(
     @field:Column(name = "trip_nickname", nullable = true)
     var tripNickname: String? = tripNickname
         protected set
+
+    @field:Enumerated(EnumType.STRING)
+    @field:JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @field:Column(name = "status", nullable = false)
+    var status: TripMemberStatus = status
+        protected set
+
+    /** 여행을 나간 시각입니다. 나가지 않았으면 `null`이며, 나갔는지는 [status]로 판단합니다. */
+    @field:Column(name = "left_at", nullable = true)
+    var leftAt: Instant? = leftAt
+        protected set
+
+    /** 여행을 나갑니다. 지출과 정산에서 계속 참조하도록 행은 지우지 않습니다. */
+    fun leave(leftAt: Instant) {
+        this.status = TripMemberStatus.LEFT
+        this.leftAt = leftAt
+    }
+
+    /** 나간 여행에 다시 참여합니다. 나가기 전의 참여 정보와 여행방 닉네임을 그대로 씁니다. */
+    fun rejoin() {
+        this.status = TripMemberStatus.MEMBER
+        this.leftAt = null
+    }
 
     /** 여행방 닉네임을 바꿉니다. 같은 여행의 다른 참여자와 겹치는지는 저장할 때 유니크 제약으로 확인합니다. */
     fun changeTripNickname(tripNickname: String) {
