@@ -4,6 +4,7 @@ import com.ject.module.auth.implement.AuthTokenCreator
 import com.ject.support.IntegrationTestSupport
 import io.kotest.assertions.assertSoftly
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldMatch
 import org.springframework.beans.factory.annotation.Autowired
@@ -581,6 +582,191 @@ class TripControllerTest : IntegrationTestSupport() {
                 }
             }
         }
+
+        context("PATCH /api/v1/trips/{tripId}") {
+            test("관리자가 일부 필드만 보내면 그 필드만 바꾸고 200과 바뀐 여행 정보를 받는다") {
+                // given
+                val adminMemberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, adminMemberId, "민지", "ADMIN", "MEMBER")
+
+                // when
+                val response =
+                    send("PATCH", "/api/v1/trips/$tripId", """{"name": " 오사카 여행 ", "memberCapacity": 4}""", accessToken(adminMemberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    body(response) shouldBe
+                        mapOf(
+                            "data" to
+                                mapOf(
+                                    "tripId" to tripId.toString(),
+                                    "name" to "오사카 여행",
+                                    "countryCode" to "JP",
+                                    "customCountryName" to null,
+                                    "startDate" to "2026-11-05",
+                                    "endDate" to "2026-11-07",
+                                    "baseCurrency" to "JPY",
+                                    "memberCapacity" to 4,
+                                    "registeredMemberCount" to 1,
+                                    "status" to "UNCONFIRMED",
+                                    "myRole" to "ADMIN",
+                                ),
+                        )
+                    findTripRow(tripId)["name"] shouldBe "오사카 여행"
+                    findTripRow(tripId)["member_capacity"] shouldBe 4
+                }
+            }
+
+            test("확정된 여행도 기본 정보는 바꿀 수 있고, 기타 국가에서 다른 국가로 바꾸면 국가명을 비우고 기본 통화는 그대로 둔다") {
+                // given
+                val adminMemberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "CONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = "베트남")
+                addTripMember(tripId, adminMemberId, "민지", "ADMIN", "MEMBER")
+
+                // when
+                val response =
+                    send("PATCH", "/api/v1/trips/$tripId", """{"countryCode": "JP", "memberCapacity": 3}""", accessToken(adminMemberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    findTripRow(tripId)["country_code"] shouldBe "JP"
+                    findTripRow(tripId)["custom_country_name"].shouldBeNull()
+                    findTripRow(tripId)["base_currency"] shouldBe "JPY"
+                }
+            }
+
+            test("확정된 여행의 총인원을 바꾸거나 등록 인원보다 줄이면 409 TRIP_CAPACITY_CHANGE_NOT_ALLOWED를 받는다") {
+                // given
+                val adminMemberId = createMember("ACTIVE")
+                val confirmedTripId =
+                    createTrip(status = "CONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(confirmedTripId, adminMemberId, "민지", "ADMIN", "MEMBER")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, adminMemberId, "민지", "ADMIN", "MEMBER")
+                addTripMember(tripId, null, "서연", "MEMBER", "GUEST")
+
+                // when
+                val confirmed = send("PATCH", "/api/v1/trips/$confirmedTripId", """{"memberCapacity": 4}""", accessToken(adminMemberId))
+                val reduced = send("PATCH", "/api/v1/trips/$tripId", """{"memberCapacity": 1}""", accessToken(adminMemberId))
+
+                // then
+                assertSoftly {
+                    confirmed.statusCode() shouldBe 409
+                    body(confirmed)["code"] shouldBe "TRIP_CAPACITY_CHANGE_NOT_ALLOWED"
+                    reduced.statusCode() shouldBe 409
+                    body(reduced)["code"] shouldBe "TRIP_CAPACITY_CHANGE_NOT_ALLOWED"
+                    findTripRow(tripId)["member_capacity"] shouldBe 3
+                }
+            }
+
+            test("필드를 하나도 보내지 않거나 null을 보내거나 저장된 시작일보다 앞선 종료일만 보내면 400 COMMON_INVALID_REQUEST를 받는다") {
+                // given
+                val adminMemberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, adminMemberId, "민지", "ADMIN", "MEMBER")
+                val requestBodies =
+                    listOf(
+                        "{}",
+                        """{"name": null}""",
+                        """{"endDate": "2026-11-04"}""",
+                        """{"countryCode": "ETC"}""",
+                        """{"customCountryName": "베트남"}""",
+                    )
+
+                // when
+                val responses = requestBodies.map { send("PATCH", "/api/v1/trips/$tripId", it, accessToken(adminMemberId)) }
+
+                // then
+                assertSoftly {
+                    responses.map { it.statusCode() } shouldBe List(requestBodies.size) { 400 }
+                    responses.map { body(it)["code"] } shouldBe List(requestBodies.size) { "COMMON_INVALID_REQUEST" }
+                    findTripRow(tripId)["end_date"].toString() shouldBe "2026-11-07"
+                }
+            }
+
+            test("관리자가 아닌 참여자가 바꾸면 403을 받는다") {
+                // given
+                val memberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, createMember("ACTIVE"), "민지", "ADMIN", "MEMBER")
+                addTripMember(tripId, memberId, "지훈", "MEMBER", "MEMBER")
+
+                // when
+                val response = send("PATCH", "/api/v1/trips/$tripId", """{"name": "오사카 여행"}""", accessToken(memberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 403
+                    findTripRow(tripId)["name"] shouldBe "하노이 여행"
+                }
+            }
+        }
+
+        context("POST /api/v1/trips/{tripId}/confirm") {
+            test("빈자리가 없는 여행을 관리자가 확정하면 200과 CONFIRMED를 받고 확정 시각을 저장한다. 다시 요청해도 CONFIRMED를 받는다") {
+                // given
+                val adminMemberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, adminMemberId, "민지", "ADMIN", "MEMBER")
+                addTripMember(tripId, createMember("ACTIVE"), "지훈", "MEMBER", "MEMBER")
+                addTripMember(tripId, null, "서연", "MEMBER", "GUEST")
+
+                // when
+                val first = send("POST", "/api/v1/trips/$tripId/confirm", null, accessToken(adminMemberId))
+                val confirmedAt = findTripRow(tripId)["confirmed_at"]
+                val second = send("POST", "/api/v1/trips/$tripId/confirm", null, accessToken(adminMemberId))
+
+                // then
+                assertSoftly {
+                    first.statusCode() shouldBe 200
+                    body(first) shouldBe mapOf("data" to mapOf("tripId" to tripId.toString(), "status" to "CONFIRMED"))
+                    confirmedAt.shouldNotBeNull()
+                    second.statusCode() shouldBe 200
+                    body(second) shouldBe mapOf("data" to mapOf("tripId" to tripId.toString(), "status" to "CONFIRMED"))
+                    findTripRow(tripId)["confirmed_at"] shouldBe confirmedAt
+                }
+            }
+
+            test("빈자리가 남은 여행을 확정하면 200과 UNCONFIRMED를 받고 여행은 바뀌지 않는다") {
+                // given
+                val adminMemberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, adminMemberId, "민지", "ADMIN", "MEMBER")
+                addTripMember(tripId, createMember("ACTIVE"), "지훈", "MEMBER", "LEFT")
+
+                // when
+                val response = send("POST", "/api/v1/trips/$tripId/confirm", null, accessToken(adminMemberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    body(response) shouldBe mapOf("data" to mapOf("tripId" to tripId.toString(), "status" to "UNCONFIRMED"))
+                    findTripRow(tripId)["status"] shouldBe "UNCONFIRMED"
+                    findTripRow(tripId)["confirmed_at"].shouldBeNull()
+                }
+            }
+
+            test("관리자가 아닌 참여자가 확정하면 403을 받는다") {
+                // given
+                val memberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, createMember("ACTIVE"), "민지", "ADMIN", "MEMBER")
+                addTripMember(tripId, memberId, "지훈", "MEMBER", "MEMBER")
+                addTripMember(tripId, null, "서연", "MEMBER", "GUEST")
+
+                // when
+                val response = send("POST", "/api/v1/trips/$tripId/confirm", null, accessToken(memberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 403
+                    findTripRow(tripId)["status"] shouldBe "UNCONFIRMED"
+                }
+            }
+        }
     }
 
     private fun createMember(status: String): Long {
@@ -722,6 +908,30 @@ class TripControllerTest : IntegrationTestSupport() {
         }
         return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString())
     }
+
+    private fun send(
+        method: String,
+        path: String,
+        requestBody: String?,
+        token: String,
+    ): HttpResponse<String> {
+        val publisher = if (requestBody == null) HttpRequest.BodyPublishers.noBody() else HttpRequest.BodyPublishers.ofString(requestBody)
+        val request =
+            HttpRequest
+                .newBuilder(URI.create("http://localhost:${environment.getRequiredProperty("local.server.port")}$path"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer $token")
+                .method(method, publisher)
+                .build()
+        return httpClient.send(request, HttpResponse.BodyHandlers.ofString())
+    }
+
+    private fun findTripRow(tripId: Long): Map<String, Any?> =
+        jdbc.queryForMap(
+            "SELECT name, country_code, custom_country_name, base_currency, end_date, member_capacity, status::text AS status, " +
+                "confirmed_at, deleted_at FROM trip WHERE id = ?",
+            tripId,
+        )
 
     private fun body(response: HttpResponse<String>): Map<*, *> = jsonMapper.readValue(response.body(), Map::class.java)
 

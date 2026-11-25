@@ -410,7 +410,14 @@ paths:
                   data:
                     "$ref": "./trip.yml#/components/schemas/TripSummary"
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
+          description: |
+            필드에 null을 보냈거나 필드를 하나도 보내지 않았거나, 필드 형식을 벗어났습니다. 보낸 값을 저장된 값과 합친 결과에서 종료일이 시작일보다 빠르거나, 대표 국가가 ETC인데 국가명이 없거나 ETC가 아닌데 국가명을 보낸 경우도 포함합니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
         '403':
@@ -418,12 +425,22 @@ paths:
         '404':
           "$ref": "../common/components.yml#/responses/NotFound"
         '409':
-          description: 정원을 바꿀 수 없음. 여행을 시작(확정)한 뒤 정원을 바꾸려 하거나, 등록 인원(회원과 비로그인 참여자)보다 정원을 줄이려 함.
-            TRIP_CAPACITY_CHANGE_NOT_ALLOWED
+          description: |
+            정원을 바꿀 수 없습니다. 확정한 여행의 정원을 바꾸려 하거나, 등록 인원(회원과 비로그인 참여자)보다 정원을 줄이려 했습니다. 지금과 같은 정원을 보내면 바꾸는 요청으로 보지 않습니다.
+            여행 확정과 동시에 요청돼 확정이 먼저 처리된 경우도 포함합니다.
+
+            **오류 코드:** `TRIP_CAPACITY_CHANGE_NOT_ALLOWED`
           content:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_CAPACITY_CHANGE_NOT_ALLOWED:
+                  summary: 정원을 바꿀 수 없음
+                  value:
+                    code: TRIP_CAPACITY_CHANGE_NOT_ALLOWED
+                    message: 총인원을 바꿀 수 없습니다. 확정된 여행이거나 등록된 참여자 수보다 적습니다.
+                    errors: null
     delete:
       tags:
       - Trip
@@ -1100,6 +1117,19 @@ paths:
                 properties:
                   data:
                     "$ref": "./trip.yml#/components/schemas/TripConfirmation"
+              examples:
+                confirmed:
+                  summary: 확정했거나 이미 확정된 여행
+                  value:
+                    data:
+                      tripId: '123'
+                      status: CONFIRMED
+                unconfirmed:
+                  summary: 빈자리가 남아 확정하지 못한 여행
+                  value:
+                    data:
+                      tripId: '123'
+                      status: UNCONFIRMED
         '400':
           "$ref": "../common/components.yml#/responses/BadRequest"
         '401':
