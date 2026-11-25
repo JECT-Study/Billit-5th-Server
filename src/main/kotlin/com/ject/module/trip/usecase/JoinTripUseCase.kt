@@ -59,7 +59,7 @@ class JoinTripUseCase(
 
         val tripMemberId =
             try {
-                tripRepository.saveJoinedTripMember(
+                tripRepository.saveParticipant(
                     TripMember(
                         tripId = tripId,
                         memberId = memberId,
