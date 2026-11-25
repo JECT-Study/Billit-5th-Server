@@ -23,12 +23,6 @@ paths:
     $ref: './domains/member.yml#/paths/~1api~1v1~1me~1registration'
   '/api/v1/me':
     $ref: './domains/member.yml#/paths/~1api~1v1~1me'
-  '/api/v1/me/profile-image':
-    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1profile-image'
-  '/api/v1/me/withdrawal-preview':
-    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1withdrawal-preview'
-  '/api/v1/me/withdrawal':
-    $ref: './domains/member.yml#/paths/~1api~1v1~1me~1withdrawal'
   '/api/v1/trips':
     $ref: './domains/trip.yml#/paths/~1api~1v1~1trips'
   '/api/v1/trips/{tripId}':
