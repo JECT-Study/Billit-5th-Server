@@ -767,6 +767,154 @@ class TripControllerTest : IntegrationTestSupport() {
                 }
             }
         }
+
+        context("POST /api/v1/trips/{tripId}/leave") {
+            test("일반 참여자가 나가면 204를 받고 나간 회원으로 남으며 내 여행 목록에서 빠진다") {
+                // given
+                val memberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "CONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, createMember("ACTIVE"), "민지", "ADMIN", "MEMBER")
+                val tripMemberId = addTripMember(tripId, memberId, "지훈", "MEMBER", "MEMBER")
+
+                // when
+                val response = send("POST", "/api/v1/trips/$tripId/leave", null, accessToken(memberId))
+
+                // then
+                val myTrips = get("/api/v1/trips?today=2026-11-06", accessToken(memberId))
+                val tripMember = jdbc.queryForMap("SELECT status::text AS status, left_at FROM trip_member WHERE id = ?", tripMemberId)
+                assertSoftly {
+                    response.statusCode() shouldBe 204
+                    tripMember["status"] shouldBe "LEFT"
+                    tripMember["left_at"].shouldNotBeNull()
+                    body(myTrips)["data"] shouldBe emptyList<Any>()
+                }
+            }
+
+            test("관리자나 이미 나간 회원이 나가기를 요청하면 403을 받는다") {
+                // given
+                val adminMemberId = createMember("ACTIVE")
+                val leftMemberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, adminMemberId, "민지", "ADMIN", "MEMBER")
+                addTripMember(tripId, leftMemberId, "지훈", "MEMBER", "LEFT")
+
+                // when
+                val admin = send("POST", "/api/v1/trips/$tripId/leave", null, accessToken(adminMemberId))
+                val left = send("POST", "/api/v1/trips/$tripId/leave", null, accessToken(leftMemberId))
+
+                // then
+                assertSoftly {
+                    admin.statusCode() shouldBe 403
+                    left.statusCode() shouldBe 403
+                    countRegisteredMembersOf(tripId) shouldBe 1
+                }
+            }
+
+            test("나간 회원이 확정 전 여행에 다시 참여하면 201과 나가기 전의 tripMemberId를 받고 나가기 전 닉네임을 그대로 쓴다") {
+                // given
+                val memberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, createMember("ACTIVE"), "민지", "ADMIN", "MEMBER")
+                val tripMemberId = addTripMember(tripId, memberId, "지훈", "MEMBER", "MEMBER")
+                send("POST", "/api/v1/trips/$tripId/leave", null, accessToken(memberId))
+
+                val inviteCode = assignInviteCode(tripId)
+
+                // when
+                val response =
+                    send(
+                        "POST",
+                        "/api/v1/trip-memberships",
+                        """{"inviteCode": "$inviteCode", "tripNickname": "하린"}""",
+                        accessToken(memberId),
+                    )
+
+                // then
+                val tripMember =
+                    jdbc.queryForMap(
+                        "SELECT trip_nickname, status::text AS status, left_at FROM trip_member WHERE id = ?",
+                        tripMemberId,
+                    )
+                assertSoftly {
+                    response.statusCode() shouldBe 201
+                    body(response) shouldBe mapOf("data" to mapOf("tripId" to tripId.toString(), "tripMemberId" to tripMemberId.toString()))
+                    tripMember["trip_nickname"] shouldBe "지훈"
+                    tripMember["status"] shouldBe "MEMBER"
+                    tripMember["left_at"].shouldBeNull()
+                    countTripMembers(memberId) shouldBe 1
+                }
+            }
+
+            test("나간 회원은 확정된 여행에 다시 참여할 수 없어 409 TRIP_ALREADY_CONFIRMED를 받는다") {
+                // given
+                val memberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "CONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, createMember("ACTIVE"), "민지", "ADMIN", "MEMBER")
+                addTripMember(tripId, memberId, "지훈", "MEMBER", "LEFT")
+
+                val inviteCode = assignInviteCode(tripId)
+
+                // when
+                val response =
+                    send(
+                        "POST",
+                        "/api/v1/trip-memberships",
+                        """{"inviteCode": "$inviteCode", "tripNickname": "지훈"}""",
+                        accessToken(memberId),
+                    )
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 409
+                    body(response)["code"] shouldBe "TRIP_ALREADY_CONFIRMED"
+                }
+            }
+        }
+
+        context("DELETE /api/v1/trips/{tripId}") {
+            test("관리자가 다른 참여자가 있는 여행을 삭제하면 204를 받고, 상세와 초대 코드로 들어올 수 없으며 다시 삭제하면 404를 받는다") {
+                // given
+                val adminMemberId = createMember("ACTIVE")
+                val memberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, adminMemberId, "민지", "ADMIN", "MEMBER")
+                addTripMember(tripId, memberId, "지훈", "MEMBER", "MEMBER")
+
+                val inviteCode = assignInviteCode(tripId)
+
+                // when
+                val response = send("DELETE", "/api/v1/trips/$tripId", null, accessToken(adminMemberId))
+
+                // then
+                val detail = get("/api/v1/trips/$tripId", accessToken(memberId))
+                val search = get("/api/v1/trip-invitations?code=$inviteCode", accessToken(createMember("ACTIVE")))
+                val again = send("DELETE", "/api/v1/trips/$tripId", null, accessToken(adminMemberId))
+                assertSoftly {
+                    response.statusCode() shouldBe 204
+                    findTripRow(tripId)["deleted_at"].shouldNotBeNull()
+                    detail.statusCode() shouldBe 404
+                    search.statusCode() shouldBe 404
+                    again.statusCode() shouldBe 404
+                }
+            }
+
+            test("관리자가 아닌 참여자가 삭제하면 403을 받고 여행은 남는다") {
+                // given
+                val memberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, createMember("ACTIVE"), "민지", "ADMIN", "MEMBER")
+                addTripMember(tripId, memberId, "지훈", "MEMBER", "MEMBER")
+
+                // when
+                val response = send("DELETE", "/api/v1/trips/$tripId", null, accessToken(memberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 403
+                    findTripRow(tripId)["deleted_at"].shouldBeNull()
+                }
+            }
+        }
     }
 
     private fun createMember(status: String): Long {
@@ -925,6 +1073,28 @@ class TripControllerTest : IntegrationTestSupport() {
                 .build()
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString())
     }
+
+    /** 초대 코드 형식(영문 대문자와 숫자 6자)에 맞는 새 코드를 여행에 저장하고 반환합니다. [createTrip]의 코드는 형식에 맞지 않아 참여와 검색에 쓰지 못합니다. */
+    private fun assignInviteCode(tripId: Long): String {
+        val inviteCode =
+            UUID
+                .randomUUID()
+                .toString()
+                .replace("-", "")
+                .take(6)
+                .uppercase()
+        jdbc.update("UPDATE trip SET invite_code = ? WHERE id = ?", inviteCode, tripId)
+        return inviteCode
+    }
+
+    private fun countRegisteredMembersOf(tripId: Long): Int =
+        checkNotNull(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM trip_member WHERE trip_id = ? AND status IN ('MEMBER', 'GUEST')",
+                Int::class.java,
+                tripId,
+            ),
+        )
 
     private fun findTripRow(tripId: Long): Map<String, Any?> =
         jdbc.queryForMap(

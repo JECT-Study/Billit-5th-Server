@@ -108,6 +108,11 @@ class Trip(
         this.memberCapacity = memberCapacity
     }
 
+    /** 여행을 삭제합니다. 행은 남기고 삭제 시각만 저장하며, 삭제한 여행은 조회, 초대와 참여에서 제외합니다. */
+    fun delete(deletedAt: Instant) {
+        this.deletedAt = deletedAt
+    }
+
     /** 참여자 구성을 확정합니다. 확정 전으로 되돌리지 않습니다. */
     fun confirm(confirmedAt: Instant) {
         this.status = TripStatus.CONFIRMED
