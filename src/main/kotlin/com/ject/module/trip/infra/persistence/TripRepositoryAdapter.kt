@@ -77,7 +77,7 @@ class TripRepositoryAdapter(
     override fun countTripMembers(tripId: Long): Int =
         Math.toIntExact(tripMemberJpaRepository.countByTripIdAndStatusIn(tripId, TripMemberStatus.REGISTERED))
 
-    override fun saveJoinedTripMember(tripMember: TripMember): Long =
+    override fun saveParticipant(tripMember: TripMember): Long =
         try {
             checkNotNull(tripMemberJpaRepository.saveAndFlush(tripMember).id)
         } catch (exception: DataIntegrityViolationException) {
@@ -86,6 +86,13 @@ class TripRepositoryAdapter(
             }
             throw TripNicknameDuplicatedException(exception)
         }
+
+    override fun findTripForUpdate(tripId: Long): Trip? = tripJpaRepository.findByIdAndDeletedAtIsNullForUpdate(tripId)
+
+    override fun deleteTripMember(tripMember: TripMember) {
+        tripMemberJpaRepository.delete(tripMember)
+        tripMemberJpaRepository.flush()
+    }
 
     companion object {
         private const val IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT = "uq_trip_idempotency_key"

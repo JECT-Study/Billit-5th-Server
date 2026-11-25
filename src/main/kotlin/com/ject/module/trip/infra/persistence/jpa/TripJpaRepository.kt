@@ -50,4 +50,11 @@ interface TripJpaRepository : JpaRepository<Trip, Long> {
     fun findByInviteCodeAndDeletedAtIsNullForUpdate(
         @Param("inviteCode") inviteCode: String,
     ): Trip?
+
+    /** 같은 조건의 여행 행을 `SELECT ... FOR UPDATE` 계열 잠금으로 조회합니다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT t FROM Trip t WHERE t.id = :id AND t.deletedAt IS NULL")
+    fun findByIdAndDeletedAtIsNullForUpdate(
+        @Param("id") id: Long,
+    ): Trip?
 }

@@ -796,7 +796,15 @@ paths:
       - Trip
       operationId: createTripGuest
       summary: 비로그인 참여자 등록
-      description: 빈자리에 이름을 입력해 비로그인 참여자를 한 명씩 등록합니다. 요청 한 건은 이름 하나를 받으며 여러 명을 일괄 등록하지 않습니다. 이름은 여행방 닉네임으로 사용하므로 같은 여행의 로그인 참여자나 다른 비로그인 참여자의 여행방 닉네임과 겹칠 수 없습니다. 여행 확정 전, 해당 여행의 관리자만 요청할 수 있습니다.
+      description: |
+        빈자리 하나에 이름을 입력해 비로그인 참여자를 한 명 등록합니다. 요청 한 건은 이름 하나를 받으며 여러 명을 일괄 등록하지 않습니다.
+
+        ### 요청 권한
+        해당 여행의 관리자만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        확정 전이고 빈자리가 있는 여행에만 등록할 수 있습니다. 이름은 여행방 닉네임으로 사용하므로 같은 여행의 로그인 참여자나 다른 비로그인 참여자의 여행방 닉네임과 겹칠 수 없습니다.
+        여행 참여, 확정과 정원 변경이 동시에 요청돼도 정원을 넘거나 확정한 여행에 등록되지 않습니다. 확정이 먼저 처리되면 409 `TRIP_ALREADY_CONFIRMED`입니다.
       security:
       - bearerAuth: []
       requestBody:
@@ -805,8 +813,11 @@ paths:
           application/json:
             schema:
               "$ref": "./trip.yml#/components/schemas/GuestInput"
-            example:
-              name: 서연
+            examples:
+              request:
+                summary: 비로그인 참여자 등록
+                value:
+                  tripNickname: 서연
       responses:
         '201':
           description: 등록 성공
@@ -815,6 +826,7 @@ paths:
               description: 등록한 비로그인 참여자의 URI. /api/v1/trips/{tripId}/guests/{tripMemberId} 형식입니다.
               schema:
                 type: string
+              example: /api/v1/trips/123/guests/458
           content:
             application/json:
               schema:
@@ -825,20 +837,76 @@ paths:
                 properties:
                   data:
                     "$ref": "./trip.yml#/components/schemas/Guest"
+              examples:
+                success:
+                  summary: 등록 성공
+                  value:
+                    data:
+                      tripMemberId: '458'
+                      tripNickname: 서연
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
+          description: |
+            tripNickname이 없거나 필드 형식을 벗어났습니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 이름 형식이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: tripNickname
+                      reason: 한글, 영문, 숫자로 1~10자여야 합니다.
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
         '403':
           "$ref": "../common/components.yml#/responses/Forbidden"
         '404':
-          "$ref": "../common/components.yml#/responses/NotFound"
-        '409':
-          description: 확정 후 비로그인 참여자를 추가하려 함(TRIP_ALREADY_CONFIRMED), 등록할 빈자리가 없음(TRIP_CAPACITY_FULL) 또는 같은 여행의 다른 참여자가 이미 같은 여행방 닉네임을 사용 중임(TRIP_GUEST_NAME_DUPLICATED)
+          description: |
+            여행이 없거나 삭제됐습니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
           content:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+        '409':
+          description: |
+            등록 요청이 여행의 현재 상태와 충돌합니다.
+
+            | 오류 코드 | 발생 조건 |
+            | --- | --- |
+            | `TRIP_ALREADY_CONFIRMED` | 확정된 여행입니다. |
+            | `TRIP_CAPACITY_FULL` | 빈자리가 없습니다. |
+            | `TRIP_NICKNAME_DUPLICATED` | 입력한 이름을 같은 여행의 다른 참여자가 여행방 닉네임으로 사용 중입니다. |
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_ALREADY_CONFIRMED:
+                  summary: 여행이 이미 확정됨
+                  value:
+                    code: TRIP_ALREADY_CONFIRMED
+                    message: 이미 확정된 여행입니다.
+                    errors: null
+                TRIP_CAPACITY_FULL:
+                  summary: 빈자리가 없음
+                  value:
+                    code: TRIP_CAPACITY_FULL
+                    message: 여행 정원이 모두 찼습니다.
+                    errors: null
+                TRIP_NICKNAME_DUPLICATED:
+                  summary: 이름이 다른 참여자와 겹침
+                  value:
+                    code: TRIP_NICKNAME_DUPLICATED
+                    message: 이 여행에서 이미 사용 중인 닉네임입니다.
+                    errors: null
   "/api/v1/trips/{tripId}/guests/{tripMemberId}":
     parameters:
     - "$ref": "./trip.yml#/components/parameters/TripId"
@@ -848,7 +916,14 @@ paths:
       - Trip
       operationId: updateTripGuest
       summary: 비로그인 이름 수정
-      description: 비로그인 참여자의 이름을 수정합니다. 해당 여행의 관리자만 요청할 수 있으며 여행 확정 전과 후 모두 수정할 수 있습니다. 대상은 같은 여행의 비로그인 참여자여야 합니다. 이름은 여행방 닉네임으로 사용하므로 같은 여행의 로그인 참여자나 다른 비로그인 참여자의 여행방 닉네임과 겹칠 수 없습니다.
+      description: |
+        비로그인 참여자의 이름을 수정합니다.
+
+        ### 요청 권한
+        해당 여행의 관리자만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        여행 확정 전과 후 모두 수정할 수 있습니다. 대상은 같은 여행의 비로그인 참여자여야 합니다. 이름은 여행방 닉네임으로 사용하므로 같은 여행의 로그인 참여자나 다른 비로그인 참여자의 여행방 닉네임과 겹칠 수 없습니다.
       security:
       - bearerAuth: []
       requestBody:
@@ -857,8 +932,11 @@ paths:
           application/json:
             schema:
               "$ref": "./trip.yml#/components/schemas/GuestInput"
-            example:
-              name: 서연
+            examples:
+              request:
+                summary: 비로그인 이름 수정
+                value:
+                  tripNickname: 서연
       responses:
         '200':
           description: 수정 성공
@@ -872,26 +950,74 @@ paths:
                 properties:
                   data:
                     "$ref": "./trip.yml#/components/schemas/Guest"
+              examples:
+                success:
+                  summary: 수정 성공
+                  value:
+                    data:
+                      tripMemberId: '458'
+                      tripNickname: 서연
         '400':
-          "$ref": "../common/components.yml#/responses/BadRequest"
+          description: |
+            tripNickname이 없거나 필드 형식을 벗어났습니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 이름 형식이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: tripNickname
+                      reason: 한글, 영문, 숫자로 1~10자여야 합니다.
         '401':
           "$ref": "../common/components.yml#/responses/Unauthorized"
         '403':
           "$ref": "../common/components.yml#/responses/Forbidden"
         '404':
-          "$ref": "../common/components.yml#/responses/NotFound"
-        '409':
-          description: 같은 여행의 다른 참여자가 이미 같은 여행방 닉네임을 사용 중임. TRIP_GUEST_NAME_DUPLICATED
+          description: |
+            여행이 없거나 삭제됐거나, 지정한 참여자가 이 여행의 비로그인 참여자가 아닙니다. 회원 참여자나 이미 삭제한 비로그인 참여자도 포함합니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
           content:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+        '409':
+          description: |
+            입력한 이름을 같은 여행의 다른 참여자가 여행방 닉네임으로 사용 중입니다.
+
+            **오류 코드:** `TRIP_NICKNAME_DUPLICATED`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_NICKNAME_DUPLICATED:
+                  summary: 이름이 다른 참여자와 겹침
+                  value:
+                    code: TRIP_NICKNAME_DUPLICATED
+                    message: 이 여행에서 이미 사용 중인 닉네임입니다.
+                    errors: null
     delete:
       tags:
       - Trip
       operationId: deleteTripGuest
       summary: 비로그인 참여자 삭제
-      description: 비로그인 참여자를 삭제합니다. 그 참여자의 정보를 지우고 등록 인원(registeredMemberCount)이 1 줄며 총인원(memberCapacity)은 바뀌지 않으므로 다른 회원이 참여할 수 있습니다. 참여하려는 회원의 여행방 닉네임과 같은 이름의 비로그인 참여자가 있을 때 이 API로 삭제한 뒤 회원이 참여하게 합니다. 여행 확정 전, 해당 여행의 관리자만 요청할 수 있습니다. 지정한 참여자가 이 여행의 비로그인 참여자가 아니면(회원 참여자 또는 이미 삭제한 비로그인 참여자) 404를 반환합니다.
+      description: |
+        비로그인 참여자를 삭제합니다. 그 참여자의 정보를 지우고 등록 인원(registeredMemberCount)이 1 줄며 총인원(memberCapacity)은 바뀌지 않으므로 다른 회원이 참여할 수 있습니다.
+
+        ### 요청 권한
+        해당 여행의 관리자만 요청할 수 있습니다. 가입 전용 토큰으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        확정 전 여행의 비로그인 참여자만 삭제할 수 있습니다. 참여하려는 회원의 여행방 닉네임과 같은 이름의 비로그인 참여자가 있을 때 이 API로 삭제한 뒤 회원이 참여하게 합니다.
+        여행 확정과 동시에 요청돼 확정이 먼저 처리되면 409 `TRIP_ALREADY_CONFIRMED`입니다.
       security:
       - bearerAuth: []
       responses:
@@ -904,17 +1030,30 @@ paths:
         '403':
           "$ref": "../common/components.yml#/responses/Forbidden"
         '404':
-          description: 여행이 없거나 지정한 참여자가 이 여행의 비로그인 참여자가 아님(회원 참여자 또는 이미 삭제한 비로그인 참여자). 이미 삭제한 비로그인 참여자를 다시 삭제해도 404입니다. COMMON_NOT_FOUND
+          description: |
+            여행이 없거나 삭제됐거나, 지정한 참여자가 이 여행의 비로그인 참여자가 아닙니다. 회원 참여자나 이미 삭제한 비로그인 참여자도 포함합니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
           content:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
         '409':
-          description: 확정 후 비로그인 참여자를 삭제하려 함. TRIP_ALREADY_CONFIRMED
+          description: |
+            확정된 여행의 비로그인 참여자는 삭제할 수 없습니다.
+
+            **오류 코드:** `TRIP_ALREADY_CONFIRMED`
           content:
             application/json:
               schema:
                 "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                TRIP_ALREADY_CONFIRMED:
+                  summary: 여행이 이미 확정됨
+                  value:
+                    code: TRIP_ALREADY_CONFIRMED
+                    message: 이미 확정된 여행입니다.
+                    errors: null
   "/api/v1/trips/{tripId}/leave":
     parameters:
     - "$ref": "./trip.yml#/components/parameters/TripId"
@@ -1476,10 +1615,10 @@ components:
     GuestInput:
       type: object
       required:
-      - name
+      - tripNickname
       additionalProperties: false
       properties:
-        name:
+        tripNickname:
           type: string
           minLength: 1
           maxLength: 10
@@ -1489,13 +1628,14 @@ components:
       type: object
       required:
       - tripMemberId
-      - name
+      - tripNickname
       additionalProperties: false
       properties:
         tripMemberId:
           "$ref": "../common/components.yml#/schemas/ResourceId"
-        name:
+        tripNickname:
           type: string
+          description: 비로그인 참여자의 여행방 닉네임
           example: 서연
     TripConfirmation:
       type: object

@@ -21,9 +21,7 @@ class TripMember(
     /** 참여한 회원입니다. 비로그인 참여자이면 `null`입니다. */
     @field:Column(name = "member_id", nullable = true)
     val memberId: Long?,
-    /** 여행방 닉네임입니다. 로그인 참여자와 비로그인 참여자 모두 저장하며 같은 여행 안에서 겹칠 수 없습니다. */
-    @field:Column(name = "trip_nickname", nullable = true)
-    val tripNickname: String?,
+    tripNickname: String?,
     @field:Enumerated(EnumType.STRING)
     @field:JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @field:Column(name = "role", nullable = false)
@@ -44,4 +42,14 @@ class TripMember(
     @field:Column(name = "id")
     var id: Long? = null
         protected set
+
+    /** 여행방 닉네임입니다. 로그인 참여자와 비로그인 참여자 모두 저장하며 같은 여행 안에서 겹칠 수 없습니다. */
+    @field:Column(name = "trip_nickname", nullable = true)
+    var tripNickname: String? = tripNickname
+        protected set
+
+    /** 여행방 닉네임을 바꿉니다. 같은 여행의 다른 참여자와 겹치는지는 저장할 때 유니크 제약으로 확인합니다. */
+    fun changeTripNickname(tripNickname: String) {
+        this.tripNickname = tripNickname
+    }
 }
