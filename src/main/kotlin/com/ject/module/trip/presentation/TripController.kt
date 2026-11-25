@@ -1,18 +1,26 @@
 package com.ject.module.trip.presentation
 
+import com.ject.global.error.BusinessException
+import com.ject.global.error.CommonErrorCode
 import com.ject.global.pagination.PageResponse
 import com.ject.global.response.ApiResponse
 import com.ject.module.trip.domain.CreateTripCommand
 import com.ject.module.trip.domain.TripScheduleStatus
+import com.ject.module.trip.domain.TripSummaryResult
+import com.ject.module.trip.domain.UpdateTripCommand
 import com.ject.module.trip.presentation.request.CreateTripRequest
 import com.ject.module.trip.presentation.request.ListTripsRequest
+import com.ject.module.trip.presentation.request.UpdateTripRequest
 import com.ject.module.trip.presentation.response.ParticipantResponse
+import com.ject.module.trip.presentation.response.TripConfirmationResponse
 import com.ject.module.trip.presentation.response.TripDetailResponse
 import com.ject.module.trip.presentation.response.TripListItemResponse
 import com.ject.module.trip.presentation.response.TripSummaryResponse
+import com.ject.module.trip.usecase.ConfirmTripUseCase
 import com.ject.module.trip.usecase.CreateTripUseCase
 import com.ject.module.trip.usecase.GetTripDetailUseCase
 import com.ject.module.trip.usecase.ListTripsUseCase
+import com.ject.module.trip.usecase.UpdateTripUseCase
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Pattern
 import org.springframework.http.ResponseEntity
@@ -21,6 +29,7 @@ import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.WebDataBinder
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.InitBinder
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -38,6 +47,8 @@ class TripController(
     private val createTripUseCase: CreateTripUseCase,
     private val listTripsUseCase: ListTripsUseCase,
     private val getTripDetailUseCase: GetTripDetailUseCase,
+    private val updateTripUseCase: UpdateTripUseCase,
+    private val confirmTripUseCase: ConfirmTripUseCase,
 ) {
     /** 빈 `filter`를 Spring 기본 변환처럼 생략(`null`)으로 처리하지 않고, 상수 이름이 아닌 값과 같이 거절합니다. */
     @InitBinder
@@ -146,24 +157,62 @@ class TripController(
 
         return ResponseEntity
             .created(URI.create("/api/v1/trips/${trip.tripId}"))
-            .body(
-                ApiResponse(
-                    TripSummaryResponse(
-                        tripId = trip.tripId.toString(),
-                        name = trip.name,
-                        countryCode = trip.countryCode,
-                        customCountryName = trip.customCountryName,
-                        startDate = trip.startDate,
-                        endDate = trip.endDate,
-                        baseCurrency = trip.baseCurrency,
-                        memberCapacity = trip.memberCapacity,
-                        registeredMemberCount = trip.registeredMemberCount,
-                        status = trip.status,
-                        myRole = trip.myRole,
-                    ),
-                ),
-            )
+            .body(ApiResponse(trip.toResponse()))
     }
+
+    /** 필드를 하나도 보내지 않은 요청은 바꿀 내용이 없으므로 400으로 거절합니다. */
+    @PatchMapping("/{tripId}")
+    fun updateTrip(
+        @AuthenticationPrincipal accessToken: Jwt,
+        @PathVariable tripId: Long,
+        @Valid @RequestBody request: UpdateTripRequest,
+    ): ResponseEntity<ApiResponse<TripSummaryResponse>> {
+        if (request.isEmpty()) {
+            throw BusinessException(CommonErrorCode.INVALID_REQUEST)
+        }
+        val command =
+            UpdateTripCommand(
+                name = request.name?.trim(),
+                countryCode = request.countryCode,
+                customCountryName = request.customCountryName?.trim(),
+                baseCurrency = request.baseCurrency,
+                startDate = request.startDate,
+                endDate = request.endDate,
+                memberCapacity = request.memberCapacity,
+            )
+
+        val trip = updateTripUseCase.update(memberId(accessToken), tripId, command)
+
+        return ResponseEntity.ok(ApiResponse(trip.toResponse()))
+    }
+
+    /** 확정했는지와 관계없이 200으로 처리 뒤의 확정 상태를 응답합니다. */
+    @PostMapping("/{tripId}/confirm")
+    fun confirmTrip(
+        @AuthenticationPrincipal accessToken: Jwt,
+        @PathVariable tripId: Long,
+    ): ResponseEntity<ApiResponse<TripConfirmationResponse>> {
+        val confirmation = confirmTripUseCase.confirm(memberId(accessToken), tripId)
+
+        return ResponseEntity.ok(
+            ApiResponse(TripConfirmationResponse(tripId = confirmation.tripId.toString(), status = confirmation.status)),
+        )
+    }
+
+    private fun TripSummaryResult.toResponse(): TripSummaryResponse =
+        TripSummaryResponse(
+            tripId = tripId.toString(),
+            name = name,
+            countryCode = countryCode,
+            customCountryName = customCountryName,
+            startDate = startDate,
+            endDate = endDate,
+            baseCurrency = baseCurrency,
+            memberCapacity = memberCapacity,
+            registeredMemberCount = registeredMemberCount,
+            status = status,
+            myRole = myRole,
+        )
 
     private fun memberId(accessToken: Jwt): Long = checkNotNull(accessToken.subject).toLong()
 
