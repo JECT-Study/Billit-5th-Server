@@ -39,4 +39,7 @@ interface MemberRepository {
         isTreasurer: Boolean?,
         marketingPushAgreedAt: Instant?,
     ): RegistrationCompletionResult
+
+    /** [memberIds] 중 탈퇴 시각이 기록된 회원과 그 탈퇴 시각을 조회합니다. 탈퇴 시각이 없거나 없는 회원은 결과에서 빠지며 순서는 보장하지 않습니다. */
+    fun findWithdrawnMembers(memberIds: Collection<Long>): List<WithdrawnMemberResult>
 }

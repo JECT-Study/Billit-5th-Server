@@ -148,6 +148,23 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                 }
             }
 
+            test("나간 회원은 등록 인원에 세지 않고, 나간 회원이 검색하면 참여 중이 아닌 것으로 받는다") {
+                // given
+                val trip = createTrip(memberCapacity = 3)
+                val leftMemberId = createMember("ACTIVE")
+                addMember(trip.id, leftMemberId, "하준", status = "LEFT")
+
+                // when
+                val response = search(trip.inviteCode, accessToken(leftMemberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    (body(response)["data"] as Map<*, *>)["registeredMemberCount"] shouldBe 1
+                    (body(response)["data"] as Map<*, *>)["isAlreadyJoined"] shouldBe false
+                }
+            }
+
             test("앞뒤 공백과 소문자가 섞인 코드로도 같은 여행을 찾는다") {
                 // given
                 val trip = createTrip(memberCapacity = 3)
@@ -251,6 +268,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                         mapOf("data" to mapOf("tripId" to trip.id.toString(), "tripMemberId" to joined["id"].toString()))
                     joined["trip_nickname"] shouldBe "지훈"
                     joined["role"] shouldBe "MEMBER"
+                    joined["status"] shouldBe "MEMBER"
                     joined["joined_at"].shouldNotBeNull()
                     countTripMembers(trip.id) shouldBe 2
                 }
@@ -309,6 +327,23 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
                     fullResponse.statusCode() shouldBe 409
                     body(fullResponse)["code"] shouldBe "TRIP_CAPACITY_FULL"
                     countMemberParticipations(memberId) shouldBe 0
+                }
+            }
+
+            test("나간 회원과 탈퇴 회원은 정원에 세지 않아 그 자리로 신규 참여할 수 있다") {
+                // given
+                val trip = createTrip(memberCapacity = 2)
+                addMember(trip.id, createMember("ACTIVE"), "하준", status = "LEFT")
+                addMember(trip.id, createMember("ACTIVE"), "도윤", status = "WITHDRAWN")
+                val memberId = createMember("ACTIVE")
+
+                // when
+                val response = join(trip.inviteCode, "지훈", accessToken(memberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 201
+                    findTripMember(trip.id, memberId).shouldNotBeNull()["status"] shouldBe "MEMBER"
                 }
             }
 
@@ -435,8 +470,8 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
         tripIds.add(tripId)
         val adminMemberId = createMember("ACTIVE")
         jdbc.update(
-            "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, created_at, updated_at) " +
-                "VALUES (?, ?, ?, 'ADMIN', now(), now())",
+            "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, status, created_at, updated_at) " +
+                "VALUES (?, ?, ?, 'ADMIN', 'MEMBER', now(), now())",
             tripId,
             adminMemberId,
             ADMIN_NICKNAME,
@@ -448,15 +483,17 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
         tripId: Long,
         memberId: Long,
         tripNickname: String,
+        status: String = "MEMBER",
     ): Long =
         checkNotNull(
             jdbc.queryForObject(
-                "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, joined_at, created_at, updated_at) " +
-                    "VALUES (?, ?, ?, 'MEMBER', now(), now(), now()) RETURNING id",
+                "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, joined_at, status, created_at, updated_at) " +
+                    "VALUES (?, ?, ?, 'MEMBER', now(), ?::trip_member_status, now(), now()) RETURNING id",
                 Long::class.java,
                 tripId,
                 memberId,
                 tripNickname,
+                status,
             ),
         )
 
@@ -465,7 +502,8 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
         name: String,
     ) {
         jdbc.update(
-            "INSERT INTO trip_member (trip_id, trip_nickname, role, created_at, updated_at) VALUES (?, ?, 'MEMBER', now(), now())",
+            "INSERT INTO trip_member (trip_id, trip_nickname, role, status, created_at, updated_at) " +
+                "VALUES (?, ?, 'MEMBER', 'GUEST', now(), now())",
             tripId,
             name,
         )
@@ -502,7 +540,7 @@ class TripInvitationControllerTest : IntegrationTestSupport() {
     ): Map<String, Any?>? =
         jdbc
             .queryForList(
-                "SELECT id, trip_nickname, role::text AS role, joined_at FROM trip_member WHERE trip_id = ? AND member_id = ?",
+                "SELECT id, trip_nickname, role::text AS role, status::text AS status, joined_at FROM trip_member WHERE trip_id = ? AND member_id = ?",
                 tripId,
                 memberId,
             ).singleOrNull()

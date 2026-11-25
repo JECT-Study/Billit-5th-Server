@@ -8,6 +8,7 @@ import com.ject.module.member.domain.MemberStatus
 import com.ject.module.member.domain.RegistrationCompletionResult
 import com.ject.module.member.domain.RegistrationMemberResult
 import com.ject.module.member.domain.SocialMemberResult
+import com.ject.module.member.domain.WithdrawnMemberResult
 import com.ject.module.member.infra.persistence.jpa.MemberJpaRepository
 import org.hibernate.exception.ConstraintViolationException
 import org.springframework.dao.DataIntegrityViolationException
@@ -78,6 +79,13 @@ class MemberRepositoryAdapter(
                 updatedAt = clock.instant(),
             )
         return if (updated == 1) RegistrationCompletionResult.COMPLETED else RegistrationCompletionResult.NOT_PENDING
+    }
+
+    override fun findWithdrawnMembers(memberIds: Collection<Long>): List<WithdrawnMemberResult> {
+        if (memberIds.isEmpty()) {
+            return emptyList()
+        }
+        return memberJpaRepository.findWithdrawnMembers(memberIds)
     }
 
     private fun isUniqueViolation(

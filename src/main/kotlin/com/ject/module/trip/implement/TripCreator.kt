@@ -5,6 +5,7 @@ import com.ject.module.trip.domain.Trip
 import com.ject.module.trip.domain.TripCreationConflictException
 import com.ject.module.trip.domain.TripMember
 import com.ject.module.trip.domain.TripMemberRole
+import com.ject.module.trip.domain.TripMemberStatus
 import com.ject.module.trip.domain.TripRepository
 import com.ject.module.trip.domain.TripStatus
 import com.ject.module.trip.domain.TripSummaryResult
@@ -53,6 +54,8 @@ class TripCreator(
                 tripNickname = command.tripNickname,
                 role = TripMemberRole.ADMIN,
                 joinedAt = null,
+                status = TripMemberStatus.MEMBER,
+                leftAt = null,
             ),
         )
 

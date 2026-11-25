@@ -121,8 +121,8 @@ class JoinTripUseCaseTest : IntegrationTestSupport() {
             )
         tripIds.add(tripId)
         jdbc.update(
-            "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, created_at, updated_at) " +
-                "VALUES (?, ?, '민지', 'ADMIN', now(), now())",
+            "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, status, created_at, updated_at) " +
+                "VALUES (?, ?, '민지', 'ADMIN', 'MEMBER', now(), now())",
             tripId,
             createMember(),
         )

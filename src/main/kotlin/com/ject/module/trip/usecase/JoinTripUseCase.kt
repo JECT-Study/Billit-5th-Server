@@ -4,6 +4,7 @@ import com.ject.global.error.BusinessException
 import com.ject.module.trip.domain.TripErrorCode
 import com.ject.module.trip.domain.TripMember
 import com.ject.module.trip.domain.TripMemberRole
+import com.ject.module.trip.domain.TripMemberStatus
 import com.ject.module.trip.domain.TripMembershipResult
 import com.ject.module.trip.domain.TripNicknameDuplicatedException
 import com.ject.module.trip.domain.TripRepository
@@ -65,6 +66,8 @@ class JoinTripUseCase(
                         tripNickname = tripNickname,
                         role = TripMemberRole.MEMBER,
                         joinedAt = clock.instant(),
+                        status = TripMemberStatus.MEMBER,
+                        leftAt = null,
                     ),
                 )
             } catch (exception: TripNicknameDuplicatedException) {

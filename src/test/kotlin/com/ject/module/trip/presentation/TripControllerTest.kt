@@ -30,9 +30,15 @@ class TripControllerTest : IntegrationTestSupport() {
     private val httpClient = HttpClient.newHttpClient()
     private val memberIds = mutableListOf<Long>()
     private val idempotencyKeys = mutableListOf<String>()
+    private val tripIds = mutableListOf<Long>()
 
     init {
         afterEach {
+            tripIds.forEach { id ->
+                jdbc.update("DELETE FROM trip_member WHERE trip_id = ?", id)
+                jdbc.update("DELETE FROM trip WHERE id = ?", id)
+            }
+            tripIds.clear()
             idempotencyKeys.forEach { key ->
                 jdbc.update("DELETE FROM trip_member WHERE trip_id IN (SELECT id FROM trip WHERE idempotency_key = ?::uuid)", key)
                 jdbc.update("DELETE FROM trip WHERE idempotency_key = ?::uuid", key)
@@ -95,7 +101,16 @@ class TripControllerTest : IntegrationTestSupport() {
                     trip["deleted_at"].shouldBeNull()
                     (trip["invite_code"] as String) shouldMatch "[A-Z0-9]{6}"
                     tripMembers shouldBe
-                        listOf(mapOf("member_id" to memberId, "trip_nickname" to "민지", "role" to "ADMIN", "joined_at" to null))
+                        listOf(
+                            mapOf(
+                                "member_id" to memberId,
+                                "trip_nickname" to "민지",
+                                "role" to "ADMIN",
+                                "joined_at" to null,
+                                "status" to "MEMBER",
+                                "left_at" to null,
+                            ),
+                        )
                 }
             }
 
@@ -295,8 +310,8 @@ class TripControllerTest : IntegrationTestSupport() {
                 val tripId = findTrip(idempotencyKey)["id"] as Long
                 // 처음 응답 뒤에 비로그인 참여자가 한 명 등록된 상태를 만듭니다.
                 jdbc.update(
-                    "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, joined_at, created_at, updated_at) " +
-                        "VALUES (?, NULL, '서연', 'MEMBER'::trip_member_role, NULL, now(), now())",
+                    "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, joined_at, status, created_at, updated_at) " +
+                        "VALUES (?, NULL, '서연', 'MEMBER'::trip_member_role, NULL, 'GUEST'::trip_member_status, now(), now())",
                     tripId,
                 )
 
@@ -396,6 +411,176 @@ class TripControllerTest : IntegrationTestSupport() {
                 }
             }
         }
+
+        context("GET /api/v1/trips") {
+            test("참여 중인 여행을 오늘 날짜로 계산한 일정 상태와 페이지 정보와 함께 반환한다") {
+                // given
+                val memberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "CONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = "베트남")
+                addTripMember(tripId, memberId, "민지", role = "ADMIN", status = "MEMBER")
+                addTripMember(tripId, null, "서연", role = "MEMBER", status = "GUEST")
+
+                // when
+                val response = get("/api/v1/trips?today=2026-11-07&filter=ONGOING&page=0&size=1", accessToken(memberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    body(response) shouldBe
+                        mapOf(
+                            "data" to
+                                listOf(
+                                    mapOf(
+                                        "tripId" to tripId.toString(),
+                                        "name" to "하노이 여행",
+                                        "countryCode" to "ETC",
+                                        "customCountryName" to "베트남",
+                                        "startDate" to "2026-11-05",
+                                        "endDate" to "2026-11-07",
+                                        "memberCapacity" to 3,
+                                        "registeredMemberCount" to 2,
+                                        "status" to "CONFIRMED",
+                                        "scheduleStatus" to "ONGOING",
+                                        "myRole" to "ADMIN",
+                                        "myShareAmountKrw" to "0.00",
+                                    ),
+                                ),
+                            "page" to mapOf("page" to 0, "size" to 1, "totalElements" to 1, "hasNext" to false),
+                        )
+                }
+            }
+
+            test("참여 중인 여행이 없으면 빈 목록과 기본 페이지 정보를 반환한다") {
+                // given
+                val memberId = createMember("ACTIVE")
+
+                // when
+                val response = get("/api/v1/trips?today=2026-11-07", accessToken(memberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    body(response) shouldBe
+                        mapOf(
+                            "data" to emptyList<Any>(),
+                            "page" to mapOf("page" to 0, "size" to 20, "totalElements" to 0, "hasNext" to false),
+                        )
+                }
+            }
+
+            test("today가 없거나 YYYY-MM-DD 날짜가 아니거나 페이지 조건과 필터가 범위를 벗어나면 400 COMMON_INVALID_REQUEST를 반환한다") {
+                // given
+                val accessToken = accessToken(createMember("ACTIVE"))
+                val queries =
+                    mapOf(
+                        "today 누락" to "",
+                        "빈 today" to "today=",
+                        "자릿수가 모자란 날짜" to "today=2026-1-5",
+                        "없는 날짜" to "today=2026-02-30",
+                        "구분자 없는 날짜" to "today=20261105",
+                        "시각이 붙은 날짜" to "today=2026-11-05T00:00:00Z",
+                        "음수 page" to "today=2026-11-05&page=-1",
+                        "숫자가 아닌 page" to "today=2026-11-05&page=first",
+                        "size 0" to "today=2026-11-05&size=0",
+                        "size 101" to "today=2026-11-05&size=101",
+                        "허용하지 않는 filter" to "today=2026-11-05&filter=ALL",
+                        "소문자 filter" to "today=2026-11-05&filter=ongoing",
+                        "빈 filter" to "today=2026-11-05&filter=",
+                    )
+
+                // when
+                val responses = queries.mapValues { get("/api/v1/trips?${it.value}", accessToken) }
+
+                // then
+                assertSoftly {
+                    responses.mapValues { it.value.statusCode() } shouldBe queries.mapValues { 400 }
+                    responses.mapValues { body(it.value)["code"] } shouldBe queries.mapValues { "COMMON_INVALID_REQUEST" }
+                    body(responses.getValue("today 누락"))["errors"] shouldBe listOf(mapOf("field" to "today", "reason" to "필수 값입니다."))
+                    body(responses.getValue("빈 filter"))["errors"] shouldBe listOf(mapOf("field" to "filter", "reason" to "허용되지 않는 값입니다."))
+                }
+            }
+
+            test("Access Token이 없으면 401 COMMON_UNAUTHORIZED를 반환한다") {
+                // when
+                val response = get("/api/v1/trips?today=2026-11-05", token = null)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 401
+                    body(response)["code"] shouldBe "COMMON_UNAUTHORIZED"
+                }
+            }
+        }
+
+        context("GET /api/v1/trips/{tripId}") {
+            test("참여 중인 회원은 여행 기본 정보와 참여자 목록을 받는다") {
+                // given
+                val adminId = createMember("ACTIVE")
+                val memberId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                val adminTripMemberId = addTripMember(tripId, adminId, "민지", role = "ADMIN", status = "MEMBER")
+                val memberTripMemberId = addTripMember(tripId, memberId, "지훈", role = "MEMBER", status = "MEMBER")
+                val guestTripMemberId = addTripMember(tripId, null, "서연", role = "MEMBER", status = "GUEST")
+
+                // when
+                val response = get("/api/v1/trips/$tripId", accessToken(memberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    body(response) shouldBe
+                        mapOf(
+                            "data" to
+                                mapOf(
+                                    "tripId" to tripId.toString(),
+                                    "name" to "하노이 여행",
+                                    "countryCode" to "JP",
+                                    "customCountryName" to null,
+                                    "startDate" to "2026-11-05",
+                                    "endDate" to "2026-11-07",
+                                    "baseCurrency" to "JPY",
+                                    "memberCapacity" to 3,
+                                    "registeredMemberCount" to 3,
+                                    "status" to "UNCONFIRMED",
+                                    "myRole" to "MEMBER",
+                                    "participants" to
+                                        listOf(
+                                            participant(adminTripMemberId, adminId, "민지", "ADMIN", "MEMBER"),
+                                            participant(memberTripMemberId, memberId, "지훈", "MEMBER", "MEMBER"),
+                                            participant(guestTripMemberId, null, "서연", "MEMBER", "GUEST"),
+                                        ),
+                                ),
+                        )
+                }
+            }
+
+            test("여행이 없으면 404, 참여하지 않은 회원이면 403, 여행 ID가 숫자가 아니면 400을 반환한다") {
+                // given
+                val adminId = createMember("ACTIVE")
+                val outsiderId = createMember("ACTIVE")
+                val tripId = createTrip(status = "UNCONFIRMED", startDate = "2026-11-05", endDate = "2026-11-07", customCountryName = null)
+                addTripMember(tripId, adminId, "민지", role = "ADMIN", status = "MEMBER")
+                val requests =
+                    mapOf(
+                        "없는 여행" to ("/api/v1/trips/${tripId + 1_000_000}" to accessToken(adminId)),
+                        "참여하지 않은 회원" to ("/api/v1/trips/$tripId" to accessToken(outsiderId)),
+                        "숫자가 아닌 여행 ID" to ("/api/v1/trips/trip-1" to accessToken(adminId)),
+                    )
+
+                // when
+                val responses = requests.mapValues { get(it.value.first, it.value.second) }
+
+                // then
+                assertSoftly {
+                    responses.mapValues { it.value.statusCode() } shouldBe
+                        mapOf("없는 여행" to 404, "참여하지 않은 회원" to 403, "숫자가 아닌 여행 ID" to 400)
+                    responses.mapValues { body(it.value)["code"] } shouldBe
+                        mapOf("없는 여행" to "COMMON_NOT_FOUND", "참여하지 않은 회원" to "COMMON_FORBIDDEN", "숫자가 아닌 여행 ID" to "COMMON_INVALID_REQUEST")
+                    body(responses.getValue("숫자가 아닌 여행 ID"))["errors"] shouldBe
+                        listOf(mapOf("field" to "tripId", "reason" to "허용되지 않는 값입니다."))
+                }
+            }
+        }
     }
 
     private fun createMember(status: String): Long {
@@ -411,6 +596,70 @@ class TripControllerTest : IntegrationTestSupport() {
         memberIds.add(id)
         return id
     }
+
+    /** 테스트가 끝나면 지웁니다. 확정 상태와 날짜를 직접 정해야 해서 여행 생성 API 대신 DB에 바로 넣습니다. */
+    private fun createTrip(
+        status: String,
+        startDate: String,
+        endDate: String,
+        customCountryName: String?,
+    ): Long {
+        val key = UUID.randomUUID()
+        val id =
+            checkNotNull(
+                jdbc.queryForObject(
+                    "INSERT INTO trip (name, start_date, end_date, country_code, custom_country_name, base_currency, member_capacity, " +
+                        "status, invite_code, idempotency_key, created_at, updated_at) " +
+                        "VALUES ('하노이 여행', ?::date, ?::date, ?, ?, 'JPY', 3, ?::trip_status, ?, ?, now(), now()) RETURNING id",
+                    Long::class.java,
+                    startDate,
+                    endDate,
+                    if (customCountryName == null) "JP" else "ETC",
+                    customCountryName,
+                    status,
+                    key.toString().replace("-", "").take(20),
+                    key,
+                ),
+            )
+        tripIds.add(id)
+        return id
+    }
+
+    private fun addTripMember(
+        tripId: Long,
+        memberId: Long?,
+        tripNickname: String,
+        role: String,
+        status: String,
+    ): Long =
+        checkNotNull(
+            jdbc.queryForObject(
+                "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, status, created_at, updated_at) " +
+                    "VALUES (?, ?, ?, ?::trip_member_role, ?::trip_member_status, now(), now()) RETURNING id",
+                Long::class.java,
+                tripId,
+                memberId,
+                tripNickname,
+                role,
+                status,
+            ),
+        )
+
+    private fun participant(
+        tripMemberId: Long,
+        memberId: Long?,
+        tripNickname: String,
+        role: String,
+        participantStatus: String,
+    ): Map<String, Any?> =
+        mapOf(
+            "tripMemberId" to tripMemberId.toString(),
+            "memberId" to memberId?.toString(),
+            "tripNickname" to tripNickname,
+            "role" to role,
+            "participantStatus" to participantStatus,
+            "shareAmountKrw" to "0.00",
+        )
 
     private fun accessToken(memberId: Long): String = authTokenCreator.createMemberTokens(memberId).accessToken
 
@@ -430,7 +679,8 @@ class TripControllerTest : IntegrationTestSupport() {
 
     private fun findTripMembers(tripId: Long): List<Map<String, Any?>> =
         jdbc.queryForList(
-            "SELECT member_id, trip_nickname, role::text AS role, joined_at FROM trip_member WHERE trip_id = ? ORDER BY id",
+            "SELECT member_id, trip_nickname, role::text AS role, joined_at, status::text AS status, left_at " +
+                "FROM trip_member WHERE trip_id = ? ORDER BY id",
             tripId,
         )
 
@@ -455,6 +705,20 @@ class TripControllerTest : IntegrationTestSupport() {
         }
         if (idempotencyKey != null) {
             request.header("Idempotency-Key", idempotencyKey)
+        }
+        return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString())
+    }
+
+    private fun get(
+        path: String,
+        token: String?,
+    ): HttpResponse<String> {
+        val request =
+            HttpRequest
+                .newBuilder(URI.create("http://localhost:${environment.getRequiredProperty("local.server.port")}$path"))
+                .GET()
+        if (token != null) {
+            request.header("Authorization", "Bearer $token")
         }
         return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString())
     }

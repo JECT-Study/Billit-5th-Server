@@ -31,6 +31,13 @@ class TripMember(
     /** 초대 코드로 참여한 시각입니다. 여행 생성자와 비로그인 참여자처럼 초대 코드로 참여하지 않았으면 `null`입니다. */
     @field:Column(name = "joined_at", nullable = true)
     val joinedAt: Instant?,
+    @field:Enumerated(EnumType.STRING)
+    @field:JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @field:Column(name = "status", nullable = false)
+    val status: TripMemberStatus,
+    /** 여행을 나간 시각입니다. 나가지 않았으면 `null`이며, 나갔는지는 [status]로 판단합니다. */
+    @field:Column(name = "left_at", nullable = true)
+    val leftAt: Instant?,
 ) : BaseEntity() {
     @field:Id
     @field:GeneratedValue(strategy = GenerationType.IDENTITY)

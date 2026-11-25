@@ -5,20 +5,26 @@ import com.ject.module.trip.domain.IdempotentTripResult
 import com.ject.module.trip.domain.Trip
 import com.ject.module.trip.domain.TripCreationConflict
 import com.ject.module.trip.domain.TripCreationConflictException
+import com.ject.module.trip.domain.TripListItemResult
 import com.ject.module.trip.domain.TripMember
 import com.ject.module.trip.domain.TripMemberRole
+import com.ject.module.trip.domain.TripMemberStatus
 import com.ject.module.trip.domain.TripNicknameDuplicatedException
 import com.ject.module.trip.domain.TripRepository
+import com.ject.module.trip.domain.TripScheduleStatus
+import com.ject.module.trip.infra.persistence.jdsl.TripJdslRepository
 import com.ject.module.trip.infra.persistence.jpa.TripJpaRepository
 import com.ject.module.trip.infra.persistence.jpa.TripMemberJpaRepository
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Repository
+import java.time.LocalDate
 import java.util.UUID
 
 @Repository
 class TripRepositoryAdapter(
     private val tripJpaRepository: TripJpaRepository,
     private val tripMemberJpaRepository: TripMemberJpaRepository,
+    private val tripJdslRepository: TripJdslRepository,
 ) : TripRepository {
     override fun saveTrip(trip: Trip): Long =
         try {
@@ -38,7 +44,23 @@ class TripRepositoryAdapter(
     }
 
     override fun findByIdempotencyKey(idempotencyKey: UUID): IdempotentTripResult? =
-        tripJpaRepository.findIdempotentTrip(idempotencyKey, TripMemberRole.ADMIN)
+        tripJpaRepository.findIdempotentTrip(idempotencyKey, TripMemberRole.ADMIN, TripMemberStatus.REGISTERED)
+
+    override fun findMyTrips(
+        memberId: Long,
+        filter: TripScheduleStatus?,
+        today: LocalDate,
+        offset: Int,
+        limit: Int,
+    ): List<TripListItemResult> = tripJdslRepository.findMyTrips(memberId, filter, today, offset, limit)
+
+    override fun countMyTrips(
+        memberId: Long,
+        filter: TripScheduleStatus?,
+        today: LocalDate,
+    ): Long = tripJdslRepository.countMyTrips(memberId, filter, today)
+
+    override fun findTripMembers(tripId: Long): List<TripMember> = tripMemberJpaRepository.findByTripId(tripId)
 
     override fun findTrip(tripId: Long): Trip? = tripJpaRepository.findByIdAndDeletedAtIsNull(tripId)
 
@@ -52,7 +74,8 @@ class TripRepositoryAdapter(
         memberId: Long,
     ): TripMember? = tripMemberJpaRepository.findByTripIdAndMemberId(tripId, memberId)
 
-    override fun countTripMembers(tripId: Long): Int = Math.toIntExact(tripMemberJpaRepository.countByTripId(tripId))
+    override fun countTripMembers(tripId: Long): Int =
+        Math.toIntExact(tripMemberJpaRepository.countByTripIdAndStatusIn(tripId, TripMemberStatus.REGISTERED))
 
     override fun saveJoinedTripMember(tripMember: TripMember): Long =
         try {
