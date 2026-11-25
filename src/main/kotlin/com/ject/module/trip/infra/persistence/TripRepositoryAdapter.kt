@@ -74,7 +74,8 @@ class TripRepositoryAdapter(
         memberId: Long,
     ): TripMember? = tripMemberJpaRepository.findByTripIdAndMemberId(tripId, memberId)
 
-    override fun countTripMembers(tripId: Long): Int = Math.toIntExact(tripMemberJpaRepository.countByTripId(tripId))
+    override fun countTripMembers(tripId: Long): Int =
+        Math.toIntExact(tripMemberJpaRepository.countByTripIdAndStatusIn(tripId, TripMemberStatus.REGISTERED))
 
     override fun saveJoinedTripMember(tripMember: TripMember): Long =
         try {

@@ -59,13 +59,13 @@ interface TripRepository {
      */
     fun findTripByInviteCodeForUpdate(inviteCode: String): Trip?
 
-    /** 회원의 여행 참여 정보를 조회합니다. 참여하지 않았으면 `null`입니다. */
+    /** 회원의 여행 참여 정보를 조회합니다. 나간 회원의 참여 정보도 반환하며, 참여한 적이 없으면 `null`입니다. */
     fun findTripMember(
         tripId: Long,
         memberId: Long,
     ): TripMember?
 
-    /** 여행에 등록된 로그인 참여자와 비로그인 참여자의 수입니다. */
+    /** 여행에 등록된 로그인 참여자(`MEMBER`)와 비로그인 참여자(`GUEST`)의 수입니다. 나간 회원과 탈퇴 회원은 세지 않습니다. */
     fun countTripMembers(tripId: Long): Int
 
     /**

@@ -3,6 +3,7 @@ package com.ject.module.trip.usecase
 import com.ject.global.error.BusinessException
 import com.ject.module.trip.domain.TripErrorCode
 import com.ject.module.trip.domain.TripInvitationSearchResult
+import com.ject.module.trip.domain.TripMemberStatus
 import com.ject.module.trip.domain.TripRepository
 import com.ject.module.trip.implement.TripInviteCodeGenerator
 import org.springframework.stereotype.Service
@@ -29,7 +30,7 @@ class SearchTripInvitationUseCase(
         val trip = tripRepository.findTripByInviteCode(inviteCode) ?: throw BusinessException(TripErrorCode.INVITATION_NOT_FOUND)
         val tripId = checkNotNull(trip.id)
         val registeredMemberCount = tripRepository.countTripMembers(tripId)
-        val isAlreadyJoined = tripRepository.findTripMember(tripId, memberId) != null
+        val isAlreadyJoined = tripRepository.findTripMember(tripId, memberId)?.status == TripMemberStatus.MEMBER
 
         return TripInvitationSearchResult(
             tripId = tripId,
