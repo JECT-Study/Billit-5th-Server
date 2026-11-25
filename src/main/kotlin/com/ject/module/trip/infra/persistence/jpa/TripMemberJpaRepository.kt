@@ -5,4 +5,11 @@ import org.springframework.data.jpa.repository.JpaRepository
 
 interface TripMemberJpaRepository : JpaRepository<TripMember, Long> {
     fun findByTripId(tripId: Long): List<TripMember>
+
+    fun findByTripIdAndMemberId(
+        tripId: Long,
+        memberId: Long,
+    ): TripMember?
+
+    fun countByTripId(tripId: Long): Long
 }

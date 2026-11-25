@@ -1,5 +1,6 @@
 package com.ject.module.trip.infra.persistence
 
+import com.ject.global.persistence.violatedUniqueConstraint
 import com.ject.module.trip.domain.IdempotentTripResult
 import com.ject.module.trip.domain.Trip
 import com.ject.module.trip.domain.TripCreationConflict
@@ -8,12 +9,12 @@ import com.ject.module.trip.domain.TripListItemResult
 import com.ject.module.trip.domain.TripMember
 import com.ject.module.trip.domain.TripMemberRole
 import com.ject.module.trip.domain.TripMemberStatus
+import com.ject.module.trip.domain.TripNicknameDuplicatedException
 import com.ject.module.trip.domain.TripRepository
 import com.ject.module.trip.domain.TripScheduleStatus
 import com.ject.module.trip.infra.persistence.jdsl.TripJdslRepository
 import com.ject.module.trip.infra.persistence.jpa.TripJpaRepository
 import com.ject.module.trip.infra.persistence.jpa.TripMemberJpaRepository
-import org.hibernate.exception.ConstraintViolationException
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Repository
 import java.time.LocalDate
@@ -29,7 +30,12 @@ class TripRepositoryAdapter(
         try {
             checkNotNull(tripJpaRepository.saveAndFlush(trip).id)
         } catch (exception: DataIntegrityViolationException) {
-            val conflict = findCreationConflict(exception) ?: throw exception
+            val conflict =
+                when (exception.violatedUniqueConstraint()) {
+                    IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT -> TripCreationConflict.IDEMPOTENCY_KEY_DUPLICATED
+                    INVITE_CODE_UNIQUE_CONSTRAINT -> TripCreationConflict.INVITE_CODE_DUPLICATED
+                    else -> throw exception
+                }
             throw TripCreationConflictException(conflict, exception)
         }
 
@@ -54,30 +60,35 @@ class TripRepositoryAdapter(
         today: LocalDate,
     ): Long = tripJdslRepository.countMyTrips(memberId, filter, today)
 
-    override fun findByIdAndDeletedAtIsNull(tripId: Long): Trip? = tripJpaRepository.findByIdAndDeletedAtIsNull(tripId)
-
     override fun findTripMembers(tripId: Long): List<TripMember> = tripMemberJpaRepository.findByTripId(tripId)
 
-    /** 고유키나 초대 코드의 유니크 제약 위반이면 해당 충돌을, 다른 무결성 오류이면 `null`을 반환합니다. */
-    private fun findCreationConflict(exception: DataIntegrityViolationException): TripCreationConflict? {
-        val violation =
-            generateSequence(exception.cause) { it.cause }
-                .filterIsInstance<ConstraintViolationException>()
-                .firstOrNull() ?: return null
-        if (violation.sqlState != UNIQUE_VIOLATION_SQL_STATE) {
-            return null
+    override fun findTrip(tripId: Long): Trip? = tripJpaRepository.findByIdAndDeletedAtIsNull(tripId)
+
+    override fun findTripByInviteCode(inviteCode: String): Trip? = tripJpaRepository.findByInviteCodeAndDeletedAtIsNull(inviteCode)
+
+    override fun findTripByInviteCodeForUpdate(inviteCode: String): Trip? =
+        tripJpaRepository.findByInviteCodeAndDeletedAtIsNullForUpdate(inviteCode)
+
+    override fun findTripMember(
+        tripId: Long,
+        memberId: Long,
+    ): TripMember? = tripMemberJpaRepository.findByTripIdAndMemberId(tripId, memberId)
+
+    override fun countTripMembers(tripId: Long): Int = Math.toIntExact(tripMemberJpaRepository.countByTripId(tripId))
+
+    override fun saveJoinedTripMember(tripMember: TripMember): Long =
+        try {
+            checkNotNull(tripMemberJpaRepository.saveAndFlush(tripMember).id)
+        } catch (exception: DataIntegrityViolationException) {
+            if (exception.violatedUniqueConstraint() != NICKNAME_UNIQUE_CONSTRAINT) {
+                throw exception
+            }
+            throw TripNicknameDuplicatedException(exception)
         }
-        val constraintName = violation.constraintName
-        return when {
-            constraintName.equals(IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT, ignoreCase = true) -> TripCreationConflict.IDEMPOTENCY_KEY_DUPLICATED
-            constraintName.equals(INVITE_CODE_UNIQUE_CONSTRAINT, ignoreCase = true) -> TripCreationConflict.INVITE_CODE_DUPLICATED
-            else -> null
-        }
-    }
 
     companion object {
-        private const val UNIQUE_VIOLATION_SQL_STATE = "23505"
         private const val IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT = "uq_trip_idempotency_key"
         private const val INVITE_CODE_UNIQUE_CONSTRAINT = "uq_trip_invite_code"
+        private const val NICKNAME_UNIQUE_CONSTRAINT = "uq_trip_member_trip_id_trip_nickname"
     }
 }

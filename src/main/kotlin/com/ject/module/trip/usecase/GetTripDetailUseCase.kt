@@ -35,7 +35,7 @@ class GetTripDetailUseCase(
         memberId: Long,
         tripId: Long,
     ): TripDetailResult {
-        val trip = tripRepository.findByIdAndDeletedAtIsNull(tripId) ?: throw BusinessException(CommonErrorCode.NOT_FOUND)
+        val trip = tripRepository.findTrip(tripId) ?: throw BusinessException(CommonErrorCode.NOT_FOUND)
         val tripMembers = tripRepository.findTripMembers(tripId)
         val me =
             tripMembers.firstOrNull { it.memberId == memberId && it.status == TripMemberStatus.MEMBER }
