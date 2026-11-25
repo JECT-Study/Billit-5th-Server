@@ -119,6 +119,63 @@ class MemberControllerTest : IntegrationTestSupport() {
             }
         }
 
+        context("GET /api/v1/me") {
+            test("가입을 마친 회원의 Access Token이면 200과 회원 ID, 닉네임, 프로필 이미지, 소셜 제공자를 반환한다") {
+                // given
+                val nickname = "여행하는고래"
+                val memberId = createMember("ACTIVE", nickname = nickname)
+                val accessToken = authTokenCreator.createMemberTokens(memberId).accessToken
+
+                // when
+                val response = get(MY_PROFILE_PATH, accessToken)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    body(response) shouldBe
+                        mapOf(
+                            "data" to
+                                mapOf(
+                                    "memberId" to memberId.toString(),
+                                    "nickname" to nickname,
+                                    "profileImageUrl" to null,
+                                    "socialProvider" to "GOOGLE",
+                                ),
+                        )
+                }
+            }
+
+            test("유효한 Access Token이어도 회원이 가입 완료 상태가 아니면 401 COMMON_UNAUTHORIZED를 반환한다") {
+                // given
+                val memberId = createMember("ACTIVE", nickname = "여행하는고래")
+                val accessToken = authTokenCreator.createMemberTokens(memberId).accessToken
+                jdbc.update("UPDATE member SET status = 'WITHDRAWN'::member_status WHERE id = ?", memberId)
+
+                // when
+                val response = get(MY_PROFILE_PATH, accessToken)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 401
+                    body(response)["code"] shouldBe "COMMON_UNAUTHORIZED"
+                }
+            }
+
+            test("가입 전용 토큰이면 401 COMMON_UNAUTHORIZED를 반환한다") {
+                // given
+                val registrationToken = authTokenCreator.createRegistrationToken(createMember("PENDING"))
+
+                // when
+                val response = get(MY_PROFILE_PATH, registrationToken)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 401
+                    body(response)["code"] shouldBe "COMMON_UNAUTHORIZED"
+                }
+            }
+        }
+
         context("POST /api/v1/me/registration") {
             test("필수 약관에 동의한 가입 완료 요청은 200과 회원용 Access Token, Refresh Token만 반환한다") {
                 // given
@@ -344,5 +401,6 @@ class MemberControllerTest : IntegrationTestSupport() {
 
     companion object {
         private const val REGISTRATION_PATH = "/api/v1/me/registration"
+        private const val MY_PROFILE_PATH = "/api/v1/me"
     }
 }

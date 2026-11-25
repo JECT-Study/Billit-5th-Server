@@ -3,6 +3,7 @@ package com.ject.module.member.infra.persistence
 import com.ject.module.member.domain.AuthProvider
 import com.ject.module.member.domain.Gender
 import com.ject.module.member.domain.Member
+import com.ject.module.member.domain.MemberProfileResult
 import com.ject.module.member.domain.MemberRepository
 import com.ject.module.member.domain.MemberStatus
 import com.ject.module.member.domain.RegistrationCompletionResult
@@ -57,6 +58,8 @@ class MemberRepositoryAdapter(
             null
         }
     }
+
+    override fun findActiveProfile(memberId: Long): MemberProfileResult? = memberJpaRepository.findProfile(memberId, MemberStatus.ACTIVE)
 
     override fun findRegistrationMember(memberId: Long): RegistrationMemberResult? = memberJpaRepository.findRegistrationMember(memberId)
 

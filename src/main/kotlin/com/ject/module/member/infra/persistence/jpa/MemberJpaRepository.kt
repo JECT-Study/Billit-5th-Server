@@ -3,6 +3,7 @@ package com.ject.module.member.infra.persistence.jpa
 import com.ject.module.member.domain.AuthProvider
 import com.ject.module.member.domain.Gender
 import com.ject.module.member.domain.Member
+import com.ject.module.member.domain.MemberProfileResult
 import com.ject.module.member.domain.MemberStatus
 import com.ject.module.member.domain.RegistrationMemberResult
 import com.ject.module.member.domain.WithdrawnMemberResult
@@ -29,6 +30,20 @@ interface MemberJpaRepository : JpaRepository<Member, Long> {
     fun findRegistrationMember(
         @Param("id") id: Long,
     ): RegistrationMemberResult?
+
+    @Query(
+        """
+        SELECT new com.ject.module.member.domain.MemberProfileResult(m.id, m.nickname, m.socialProvider)
+        FROM Member m
+        WHERE m.id = :id
+          AND m.status = :status
+          AND m.nickname IS NOT NULL
+        """,
+    )
+    fun findProfile(
+        @Param("id") id: Long,
+        @Param("status") status: MemberStatus,
+    ): MemberProfileResult?
 
     @Transactional
     @Modifying

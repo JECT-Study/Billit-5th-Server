@@ -3,10 +3,12 @@ package com.ject.module.member.presentation
 import com.ject.global.response.ApiResponse
 import com.ject.module.member.domain.CompleteRegistrationCommand
 import com.ject.module.member.presentation.request.CompleteRegistrationRequest
+import com.ject.module.member.presentation.response.MemberProfileResponse
 import com.ject.module.member.presentation.response.RegistrationCompletedResponse
 import com.ject.module.member.presentation.response.RegistrationInfoResponse
 import com.ject.module.member.presentation.response.RegistrationStatus
 import com.ject.module.member.usecase.CompleteRegistrationUseCase
+import com.ject.module.member.usecase.GetMyProfileUseCase
 import com.ject.module.member.usecase.GetRegistrationUseCase
 import jakarta.validation.Valid
 import org.springframework.security.core.annotation.AuthenticationPrincipal
@@ -17,12 +19,13 @@ import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
-/** 가입 API입니다. 두 API 모두 가입 전용 토큰으로 호출합니다. */
+/** 회원 API입니다. 가입 API 두 개는 가입 전용 토큰으로, 내 프로필 조회는 회원용 Access Token으로 호출합니다. */
 @RestController
 @RequestMapping("/api/v1")
 class MemberController(
     private val getRegistrationUseCase: GetRegistrationUseCase,
     private val completeRegistrationUseCase: CompleteRegistrationUseCase,
+    private val getMyProfileUseCase: GetMyProfileUseCase,
 ) {
     @GetMapping("/me/registration")
     fun getRegistration(
@@ -68,6 +71,22 @@ class MemberController(
         val tokens = completeRegistrationUseCase.complete(memberId(registrationToken), command)
 
         return ApiResponse(RegistrationCompletedResponse(accessToken = tokens.accessToken, refreshToken = tokens.refreshToken))
+    }
+
+    @GetMapping("/me")
+    fun getMyProfile(
+        @AuthenticationPrincipal accessToken: Jwt,
+    ): ApiResponse<MemberProfileResponse> {
+        val profile = getMyProfileUseCase.get(memberId(accessToken))
+
+        return ApiResponse(
+            MemberProfileResponse(
+                memberId = profile.memberId.toString(),
+                nickname = profile.nickname,
+                profileImageUrl = null,
+                socialProvider = profile.socialProvider,
+            ),
+        )
     }
 
     private fun memberId(registrationToken: Jwt): Long = checkNotNull(registrationToken.subject).toLong()
