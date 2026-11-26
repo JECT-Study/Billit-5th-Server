@@ -45,6 +45,8 @@ paths:
     $ref: './domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1confirm'
   '/api/v1/trips/{tripId}/expenses':
     $ref: './domains/expense.yml#/paths/~1api~1v1~1trips~1{tripId}~1expenses'
+  '/api/v1/trips/{tripId}/expenses/{expenseId}':
+    $ref: './domains/expense.yml#/paths/~1api~1v1~1trips~1{tripId}~1expenses~1{expenseId}'
 components:
   securitySchemes:
     registrationBearerAuth:

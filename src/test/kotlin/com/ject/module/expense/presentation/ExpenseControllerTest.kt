@@ -49,7 +49,7 @@ class ExpenseControllerTest : IntegrationTestSupport() {
         }
 
         context("POST /api/v1/trips/{tripId}/expenses") {
-            test("전체 1/N 지출을 등록하면 201과 Location 없이 금액을 소수점 이하 2자리 문자열로 담은 지출 상세를 받는다") {
+            test("전체 1/N 지출을 등록하면 201, 지출 상세 Location과 금액을 소수점 이하 2자리 문자열로 담은 지출 상세를 받는다") {
                 // given
                 val trip = createTrip()
                 val requestBody =
@@ -75,7 +75,7 @@ class ExpenseControllerTest : IntegrationTestSupport() {
                 val expenseId = findExpenseIds(trip.tripId).single()
                 assertSoftly {
                     response.statusCode() shouldBe 201
-                    response.headers().firstValue("Location").isPresent shouldBe false
+                    response.headers().firstValue("Location").orElse(null) shouldBe "/api/v1/trips/${trip.tripId}/expenses/$expenseId"
                     body(response) shouldBe
                         mapOf(
                             "data" to
@@ -355,6 +355,111 @@ class ExpenseControllerTest : IntegrationTestSupport() {
                 }
             }
         }
+
+        context("GET /api/v1/trips/{tripId}/expenses") {
+            test("지출 목록을 결제 날짜의 역순으로 받고 금액은 소수점 이하 2자리 문자열, 페이지 정보는 최상위 page로 받는다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                post(trip.tripId, validRequestBody(trip), accessToken, UUID.randomUUID().toString())
+                post(
+                    trip.tripId,
+                    jsonMapper.writeValueAsString(validRequest(trip) + ("paidDate" to "2026-11-06")),
+                    accessToken,
+                    UUID.randomUUID().toString(),
+                )
+                val later = findExpenseIds(trip.tripId).max()
+
+                // when
+                val response = get("/api/v1/trips/${trip.tripId}/expenses?size=1", accessToken)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    body(response) shouldBe
+                        mapOf(
+                            "data" to
+                                listOf(
+                                    mapOf(
+                                        "expenseId" to later.toString(),
+                                        "name" to "식사",
+                                        "paidDate" to "2026-11-06",
+                                        "currency" to "KRW",
+                                        "amount" to "12000.00",
+                                        "payerTripMemberId" to trip.adminId.toString(),
+                                        "settlementId" to null,
+                                        "isEditLocked" to false,
+                                    ),
+                                ),
+                            "page" to mapOf("page" to 0, "size" to 1, "totalElements" to 2, "hasNext" to true),
+                        )
+                }
+            }
+
+            test("페이지 조건이나 날짜 형식이 올바르지 않거나 fromDate가 toDate보다 뒤면 400 COMMON_INVALID_REQUEST를 반환한다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                val queries =
+                    mapOf(
+                        "음수 페이지" to "page=-1",
+                        "0인 크기" to "size=0",
+                        "100을 넘는 크기" to "size=101",
+                        "형식이 다른 날짜" to "fromDate=2026/11/05",
+                        "없는 날짜" to "toDate=2026-02-30",
+                        "뒤집힌 기간" to "fromDate=2026-11-06&toDate=2026-11-05",
+                    )
+
+                // when
+                val responses = queries.mapValues { get("/api/v1/trips/${trip.tripId}/expenses?${it.value}", accessToken) }
+
+                // then
+                assertSoftly {
+                    responses.mapValues { it.value.statusCode() } shouldBe queries.mapValues { 400 }
+                    responses.mapValues { body(it.value)["code"] } shouldBe queries.mapValues { "COMMON_INVALID_REQUEST" }
+                }
+            }
+        }
+
+        context("GET /api/v1/trips/{tripId}/expenses/{expenseId}") {
+            test("등록 응답의 Location으로 조회하면 등록 응답과 같은 지출 상세를 받는다") {
+                // given
+                val trip = createTrip()
+                val created = post(trip.tripId, validRequestBody(trip), accessToken(trip.adminMemberId), UUID.randomUUID().toString())
+                val otherMemberId = createMember()
+                addTripMember(trip.tripId, otherMemberId, "지훈", "MEMBER", "MEMBER")
+
+                // when
+                val response = get(created.headers().firstValue("Location").get(), accessToken(otherMemberId))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    body(response) shouldBe body(created)
+                }
+            }
+
+            test("숫자가 아닌 지출 ID는 400, 다른 여행의 지출은 404 COMMON_NOT_FOUND를 반환한다") {
+                // given
+                val trip = createTrip()
+                val otherTrip = createTrip()
+                post(otherTrip.tripId, validRequestBody(otherTrip), accessToken(otherTrip.adminMemberId), UUID.randomUUID().toString())
+                val otherTripExpenseId = findExpenseIds(otherTrip.tripId).single()
+                val accessToken = accessToken(trip.adminMemberId)
+
+                // when
+                val invalid = get("/api/v1/trips/${trip.tripId}/expenses/expense-a", accessToken)
+                val notFound = get("/api/v1/trips/${trip.tripId}/expenses/$otherTripExpenseId", accessToken)
+
+                // then
+                assertSoftly {
+                    invalid.statusCode() shouldBe 400
+                    body(invalid)["code"] shouldBe "COMMON_INVALID_REQUEST"
+                    notFound.statusCode() shouldBe 404
+                    body(notFound) shouldBe errorBody("COMMON_NOT_FOUND", "요청한 리소스를 찾을 수 없습니다.")
+                }
+            }
+        }
     }
 
     /** 테스트가 끝나면 지웁니다. 확정 상태를 직접 정하려고 여행 생성 API 대신 DB에 바로 넣습니다. */
@@ -461,6 +566,19 @@ class ExpenseControllerTest : IntegrationTestSupport() {
         }
         return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString())
     }
+
+    private fun get(
+        path: String,
+        token: String,
+    ): HttpResponse<String> =
+        httpClient.send(
+            HttpRequest
+                .newBuilder(URI.create("http://localhost:${environment.getRequiredProperty("local.server.port")}$path"))
+                .header("Authorization", "Bearer $token")
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString(),
+        )
 
     private fun body(response: HttpResponse<String>): Map<*, *> = jsonMapper.readValue(response.body(), Map::class.java)
 

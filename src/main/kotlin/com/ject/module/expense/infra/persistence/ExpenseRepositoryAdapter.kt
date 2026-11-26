@@ -7,6 +7,7 @@ import com.ject.module.expense.domain.ExpenseItem
 import com.ject.module.expense.domain.ExpenseItemMember
 import com.ject.module.expense.domain.ExpenseRepository
 import com.ject.module.expense.domain.ExpenseShareAmount
+import com.ject.module.expense.infra.persistence.jdsl.ExpenseJdslRepository
 import com.ject.module.expense.infra.persistence.jpa.ExpenseItemJpaRepository
 import com.ject.module.expense.infra.persistence.jpa.ExpenseItemMemberJpaRepository
 import com.ject.module.expense.infra.persistence.jpa.ExpenseJpaRepository
@@ -14,6 +15,7 @@ import com.ject.module.expense.infra.persistence.jpa.ExpenseShareAmountJpaReposi
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Repository
+import java.time.LocalDate
 import java.util.UUID
 
 @Repository
@@ -22,6 +24,7 @@ class ExpenseRepositoryAdapter(
     private val expenseItemJpaRepository: ExpenseItemJpaRepository,
     private val expenseItemMemberJpaRepository: ExpenseItemMemberJpaRepository,
     private val expenseShareAmountJpaRepository: ExpenseShareAmountJpaRepository,
+    private val expenseJdslRepository: ExpenseJdslRepository,
 ) : ExpenseRepository {
     override fun saveExpense(expense: Expense): Long =
         try {
@@ -53,6 +56,20 @@ class ExpenseRepositoryAdapter(
 
     override fun findShareAmounts(expenseId: Long): List<ExpenseShareAmount> =
         expenseShareAmountJpaRepository.findByExpenseIdOrderByTripMemberId(expenseId)
+
+    override fun findExpenses(
+        tripId: Long,
+        fromDate: LocalDate?,
+        toDate: LocalDate?,
+        offset: Int,
+        limit: Int,
+    ): List<Expense> = expenseJdslRepository.findExpenses(tripId, fromDate, toDate, offset, limit)
+
+    override fun countExpenses(
+        tripId: Long,
+        fromDate: LocalDate?,
+        toDate: LocalDate?,
+    ): Long = expenseJdslRepository.countExpenses(tripId, fromDate, toDate)
 
     companion object {
         private const val IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT = "uq_expense_idempotency_key"
