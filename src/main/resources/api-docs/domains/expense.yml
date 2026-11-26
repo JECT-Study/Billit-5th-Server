@@ -527,6 +527,318 @@ paths:
                     code: COMMON_NOT_FOUND
                     message: 요청한 리소스를 찾을 수 없습니다.
                     errors: null
+  "/api/v1/trips/{tripId}/expenses/{expenseId}/edit-lock":
+    parameters:
+    - "$ref": "./trip.yml#/components/parameters/TripId"
+    - "$ref": "./expense.yml#/components/parameters/ExpenseId"
+    post:
+      tags:
+      - Expense
+      operationId: acquireExpenseEditLock
+      summary: 지출 수정 잠금 획득
+      description: |
+        지출 수정을 시작하며 다른 참여자가 같은 지출을 수정하거나 삭제하지 못하게 잠그고, 이 수정 작업의 잠금 토큰과 만료 시각을 발급합니다.
+
+        ### 요청 권한
+        이 여행에 참여 중인 로그인 참여자 중 지출을 기록한 회원이나 여행 관리자만 요청할 수 있습니다. 결제자라는 이유만으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        정산에 포함되지 않았고 만료되지 않은 수정 잠금이 없는 지출만 잠글 수 있습니다. 만료된 잠금은 새 잠금으로 바꿉니다.
+        잠금은 서버 시각 기준으로 획득 후 5분 동안 유효하며, 만료 시각은 초 단위로 내립니다. 잠금 획득은 지출의 수정 시각을 바꾸지 않습니다.
+
+        ### 사용 시 주의
+        요청할 때마다 새 잠금 토큰을 발급하며, 같은 회원이라도 유효한 잠금이 있으면 새 토큰으로 바꾸지 않고 409 EXPENSE_EDIT_LOCKED로 거절합니다. 앱은 받은 토큰으로 잠금을 연장합니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '201':
+          description: 수정 잠금 획득 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./expense.yml#/components/schemas/EditLock"
+              examples:
+                success:
+                  summary: 수정 잠금 획득 성공
+                  value:
+                    data:
+                      lockToken: 5f0c7a2e-9b1d-4c3e-8a6f-2d4b6c8e0a1f
+                      expiresAt: '2026-11-05T03:05:00Z'
+        '400':
+          description: |
+            tripId나 expenseId가 숫자 ID가 아닙니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 숫자가 아닌 지출 ID
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors: null
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          description: |
+            요청한 회원이 이 여행에 참여하지 않았거나 여행을 나갔거나, 지출 기록자도 여행 관리자도 아닙니다.
+
+            **오류 코드:** `COMMON_FORBIDDEN`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_FORBIDDEN:
+                  summary: 수정할 수 있는 참여자가 아님
+                  value:
+                    code: COMMON_FORBIDDEN
+                    message: 요청을 수행할 권한이 없습니다.
+                    errors: null
+        '404':
+          description: |
+            tripId에 해당하는 여행이 없거나 삭제됐거나, expenseId에 해당하는 지출이 없거나 삭제됐거나 이 여행의 지출이 아닙니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_NOT_FOUND:
+                  summary: 여행이나 지출이 없거나 삭제됨
+                  value:
+                    code: COMMON_NOT_FOUND
+                    message: 요청한 리소스를 찾을 수 없습니다.
+                    errors: null
+        '409':
+          description: |
+            지출이 정산이나 다른 수정 작업으로 잠겨 있습니다.
+
+            | 오류 코드 | 발생 조건 |
+            | --- | --- |
+            | `EXPENSE_SETTLEMENT_LOCKED` | 지출이 준비 중이거나 발행된 정산에 포함돼 있습니다. |
+            | `EXPENSE_EDIT_LOCKED` | 만료되지 않은 수정 잠금이 있습니다. 요청한 회원의 잠금이어도 같습니다. |
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                EXPENSE_SETTLEMENT_LOCKED:
+                  summary: 정산에 포함된 지출
+                  value:
+                    code: EXPENSE_SETTLEMENT_LOCKED
+                    message: 정산 중이거나 정산한 지출은 수정할 수 없습니다.
+                    errors: null
+                EXPENSE_EDIT_LOCKED:
+                  summary: 다른 수정 작업이 진행 중
+                  value:
+                    code: EXPENSE_EDIT_LOCKED
+                    message: 다른 참여자가 수정 중인 지출입니다.
+                    errors: null
+    patch:
+      tags:
+      - Expense
+      operationId: extendExpenseEditLock
+      summary: 지출 수정 잠금 연장
+      description: |
+        현재 수정 작업의 잠금 만료 시각을 늦춥니다.
+
+        ### 요청 권한
+        이 여행에 참여 중인 로그인 참여자 중 지출을 기록한 회원이나 여행 관리자만 요청할 수 있으며, 요청한 회원이 획득한 잠금의 토큰을 보내야 합니다.
+
+        ### 처리 조건
+        만료되기 전의 잠금만 연장할 수 있습니다. 요청할 때마다 기존 만료 시각에 2분을 더하며, 연장 횟수와 총 시간의 상한은 없습니다. 연장은 지출의 수정 시각을 바꾸지 않습니다.
+
+        ### 사용 시 주의
+        만료된 잠금은 되살리지 않으므로 앱은 잠금을 다시 획득해야 합니다. 같은 잠금에 연장 요청이 여러 번 도착하면 요청마다 2분씩 늘어나며, 응답의 expiresAt은 그 요청을 반영한 뒤의 만료 시각입니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "./expense.yml#/components/parameters/LockToken"
+      responses:
+        '200':
+          description: 수정 잠금 연장 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./expense.yml#/components/schemas/LockExpiry"
+              examples:
+                success:
+                  summary: 수정 잠금 연장 성공
+                  value:
+                    data:
+                      expiresAt: '2026-11-05T03:07:00Z'
+        '400':
+          description: |
+            X-Lock-Token이 없거나 UUID 형식이 아니거나, tripId나 expenseId가 숫자 ID가 아닙니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 잠금 토큰이 없거나 형식이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors: null
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          description: |
+            요청한 회원이 이 여행에 참여하지 않았거나 여행을 나갔거나, 지출 기록자도 여행 관리자도 아닙니다.
+
+            **오류 코드:** `COMMON_FORBIDDEN`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_FORBIDDEN:
+                  summary: 수정할 수 있는 참여자가 아님
+                  value:
+                    code: COMMON_FORBIDDEN
+                    message: 요청을 수행할 권한이 없습니다.
+                    errors: null
+        '404':
+          description: |
+            tripId에 해당하는 여행이 없거나 삭제됐거나, expenseId에 해당하는 지출이 없거나 삭제됐거나 이 여행의 지출이 아닙니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_NOT_FOUND:
+                  summary: 여행이나 지출이 없거나 삭제됨
+                  value:
+                    code: COMMON_NOT_FOUND
+                    message: 요청한 리소스를 찾을 수 없습니다.
+                    errors: null
+        '409':
+          description: |
+            요청한 회원의 잠금이 아니거나, 토큰이 현재 수정 작업과 다르거나, 잠금이 없거나 만료됐습니다.
+
+            **오류 코드:** `EXPENSE_EDIT_LOCK_INVALID`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                EXPENSE_EDIT_LOCK_INVALID:
+                  summary: 만료됐거나 다른 수정 작업의 잠금
+                  value:
+                    code: EXPENSE_EDIT_LOCK_INVALID
+                    message: 수정 가능 시간이 지났거나 다른 화면에서 수정을 시작했습니다. 다시 수정해주세요.
+                    errors: null
+    delete:
+      tags:
+      - Expense
+      operationId: releaseExpenseEditLock
+      summary: 지출 수정 잠금 해제
+      description: |
+        현재 수정 작업을 끝내고 잠금을 해제합니다.
+
+        ### 요청 권한
+        이 여행에 참여 중인 로그인 참여자 중 지출을 기록한 회원이나 여행 관리자만 요청할 수 있으며, 요청한 회원이 획득한 잠금의 토큰을 보내야 합니다.
+
+        ### 처리 조건
+        요청한 회원의 잠금이고 토큰이 같으면 만료 여부와 관계없이 해제합니다. 해제는 지출의 수정 시각을 바꾸지 않습니다.
+
+        ### 사용 시 주의
+        이미 해제됐거나 만료돼 유효한 잠금이 없으면 같은 요청을 다시 보낸 것으로 보고 204로 응답합니다. 이전 수정 작업의 토큰으로 보낸 요청은 새 수정 작업의 잠금을 해제하지 않습니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "./expense.yml#/components/parameters/LockToken"
+      responses:
+        '204':
+          description: 수정 잠금 해제 성공. 유효한 잠금이 이미 없을 때도 같습니다.
+        '400':
+          description: |
+            X-Lock-Token이 없거나 UUID 형식이 아니거나, tripId나 expenseId가 숫자 ID가 아닙니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 잠금 토큰이 없거나 형식이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors: null
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          description: |
+            요청한 회원이 이 여행에 참여하지 않았거나 여행을 나갔거나, 지출 기록자도 여행 관리자도 아닙니다.
+
+            **오류 코드:** `COMMON_FORBIDDEN`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_FORBIDDEN:
+                  summary: 수정할 수 있는 참여자가 아님
+                  value:
+                    code: COMMON_FORBIDDEN
+                    message: 요청을 수행할 권한이 없습니다.
+                    errors: null
+        '404':
+          description: |
+            tripId에 해당하는 여행이 없거나 삭제됐거나, expenseId에 해당하는 지출이 없거나 삭제됐거나 이 여행의 지출이 아닙니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_NOT_FOUND:
+                  summary: 여행이나 지출이 없거나 삭제됨
+                  value:
+                    code: COMMON_NOT_FOUND
+                    message: 요청한 리소스를 찾을 수 없습니다.
+                    errors: null
+        '409':
+          description: |
+            다른 토큰이나 다른 회원의 만료되지 않은 잠금이 있습니다. 그 잠금은 그대로 둡니다.
+
+            **오류 코드:** `EXPENSE_EDIT_LOCK_INVALID`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                EXPENSE_EDIT_LOCK_INVALID:
+                  summary: 다른 수정 작업의 유효한 잠금
+                  value:
+                    code: EXPENSE_EDIT_LOCK_INVALID
+                    message: 수정 가능 시간이 지났거나 다른 화면에서 수정을 시작했습니다. 다시 수정해주세요.
+                    errors: null
 components:
   parameters:
     ExpenseId:
@@ -536,6 +848,16 @@ components:
       description: 지출 ID
       schema:
         "$ref": "../common/components.yml#/schemas/ResourceId"
+    LockToken:
+      name: X-Lock-Token
+      in: header
+      required: true
+      description: 수정 잠금 획득 응답의 lockToken입니다. 하이픈으로 구분한 8-4-4-4-12자리 16진수 표기만 받습니다.
+      schema:
+        type: string
+        format: uuid
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        example: 5f0c7a2e-9b1d-4c3e-8a6f-2d4b6c8e0a1f
   schemas:
     ExpenseCurrency:
       type: string
@@ -918,3 +1240,33 @@ components:
           allOf:
           - "$ref": "../common/components.yml#/schemas/DecimalString"
           description: 원화로 환산한 최종 부담액입니다. 1원 단위라 소수 부분은 .00입니다.
+    EditLock:
+      type: object
+      description: 새로 발급한 수정 잠금입니다.
+      required:
+      - lockToken
+      - expiresAt
+      additionalProperties: false
+      properties:
+        lockToken:
+          type: string
+          format: uuid
+          description: 이 수정 작업의 잠금 토큰입니다. 연장과 해제 요청의 X-Lock-Token으로 보냅니다.
+          example: 5f0c7a2e-9b1d-4c3e-8a6f-2d4b6c8e0a1f
+        expiresAt:
+          type: string
+          format: date-time
+          description: 잠금 만료 시각(UTC)입니다. 이 시각부터 잠금은 유효하지 않습니다.
+          example: '2026-11-05T03:05:00Z'
+    LockExpiry:
+      type: object
+      description: 연장한 수정 잠금의 만료 시각입니다.
+      required:
+      - expiresAt
+      additionalProperties: false
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+          description: 기존 만료 시각에 2분을 더한 잠금 만료 시각(UTC)입니다. 이 시각부터 잠금은 유효하지 않습니다.
+          example: '2026-11-05T03:07:00Z'

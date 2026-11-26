@@ -15,6 +15,8 @@ import com.ject.module.expense.infra.persistence.jpa.ExpenseShareAmountJpaReposi
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Repository
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
@@ -70,6 +72,36 @@ class ExpenseRepositoryAdapter(
         fromDate: LocalDate?,
         toDate: LocalDate?,
     ): Long = expenseJdslRepository.countExpenses(tripId, fromDate, toDate)
+
+    override fun acquireEditLock(
+        expenseId: Long,
+        tripId: Long,
+        ownerTripMemberId: Long,
+        token: UUID,
+        expiresAt: Instant,
+        now: Instant,
+    ): Boolean = expenseJpaRepository.acquireEditLock(expenseId, tripId, ownerTripMemberId, token, expiresAt, now) == 1
+
+    override fun extendEditLock(
+        expenseId: Long,
+        tripId: Long,
+        ownerTripMemberId: Long,
+        token: UUID,
+        extension: Duration,
+        now: Instant,
+    ): Instant? =
+        // 갱신이 영속성 컨텍스트를 비웠으므로 이어지는 조회는 같은 트랜잭션에서 방금 바꾼 DB 값을 읽습니다.
+        expenseJpaRepository
+            .extendEditLock(expenseId, tripId, ownerTripMemberId, token, extension.seconds, now)
+            .takeIf { it == 1 }
+            ?.let { expenseJpaRepository.findByIdOrNull(expenseId)?.editLockExpiresAt }
+
+    override fun releaseEditLock(
+        expenseId: Long,
+        tripId: Long,
+        ownerTripMemberId: Long,
+        token: UUID,
+    ): Boolean = expenseJpaRepository.releaseEditLock(expenseId, tripId, ownerTripMemberId, token) == 1
 
     companion object {
         private const val IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT = "uq_expense_idempotency_key"

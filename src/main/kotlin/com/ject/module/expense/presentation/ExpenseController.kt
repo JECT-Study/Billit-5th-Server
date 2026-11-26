@@ -10,16 +10,24 @@ import com.ject.module.expense.domain.SplitType
 import com.ject.module.expense.presentation.request.CreateExpenseRequest
 import com.ject.module.expense.presentation.request.ListExpensesRequest
 import com.ject.module.expense.presentation.response.ExpenseDetailResponse
+import com.ject.module.expense.presentation.response.ExpenseEditLockExpiryResponse
+import com.ject.module.expense.presentation.response.ExpenseEditLockResponse
 import com.ject.module.expense.presentation.response.ExpenseSummaryResponse
+import com.ject.module.expense.usecase.AcquireExpenseEditLockUseCase
 import com.ject.module.expense.usecase.CreateExpenseUseCase
+import com.ject.module.expense.usecase.ExtendExpenseEditLockUseCase
 import com.ject.module.expense.usecase.GetExpenseDetailUseCase
 import com.ject.module.expense.usecase.ListExpensesUseCase
+import com.ject.module.expense.usecase.ReleaseExpenseEditLockUseCase
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Pattern
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
@@ -37,6 +45,9 @@ class ExpenseController(
     private val createExpenseUseCase: CreateExpenseUseCase,
     private val listExpensesUseCase: ListExpensesUseCase,
     private val getExpenseDetailUseCase: GetExpenseDetailUseCase,
+    private val acquireExpenseEditLockUseCase: AcquireExpenseEditLockUseCase,
+    private val extendExpenseEditLockUseCase: ExtendExpenseEditLockUseCase,
+    private val releaseExpenseEditLockUseCase: ReleaseExpenseEditLockUseCase,
 ) {
     /** 처음 만든 요청과 같은 회원이 같은 고유키로 다시 보낸 요청 모두 201과 `Location`으로 응답합니다. */
     @PostMapping
@@ -120,6 +131,44 @@ class ExpenseController(
     ): ResponseEntity<ApiResponse<ExpenseDetailResponse>> =
         ResponseEntity.ok(ApiResponse(getExpenseDetailUseCase.get(memberId(accessToken), tripId, expenseId).toResponse()))
 
+    /** 잠금은 따로 조회하는 API가 없어 `Location` 없이 201로 응답합니다. */
+    @PostMapping("/{expenseId}/edit-lock")
+    fun acquireExpenseEditLock(
+        @AuthenticationPrincipal accessToken: Jwt,
+        @PathVariable tripId: Long,
+        @PathVariable expenseId: Long,
+    ): ResponseEntity<ApiResponse<ExpenseEditLockResponse>> {
+        val lock = acquireExpenseEditLockUseCase.acquire(memberId(accessToken), tripId, expenseId)
+
+        return ResponseEntity
+            .status(HttpStatus.CREATED)
+            .body(ApiResponse(ExpenseEditLockResponse(lockToken = lock.lockToken.toString(), expiresAt = lock.expiresAt)))
+    }
+
+    @PatchMapping("/{expenseId}/edit-lock")
+    fun extendExpenseEditLock(
+        @AuthenticationPrincipal accessToken: Jwt,
+        @PathVariable tripId: Long,
+        @PathVariable expenseId: Long,
+        @RequestHeader(LOCK_TOKEN_HEADER) @Pattern(regexp = UUID_PATTERN) lockToken: String,
+    ): ResponseEntity<ApiResponse<ExpenseEditLockExpiryResponse>> {
+        val expiresAt = extendExpenseEditLockUseCase.extend(memberId(accessToken), tripId, expenseId, UUID.fromString(lockToken))
+
+        return ResponseEntity.ok(ApiResponse(ExpenseEditLockExpiryResponse(expiresAt = expiresAt)))
+    }
+
+    @DeleteMapping("/{expenseId}/edit-lock")
+    fun releaseExpenseEditLock(
+        @AuthenticationPrincipal accessToken: Jwt,
+        @PathVariable tripId: Long,
+        @PathVariable expenseId: Long,
+        @RequestHeader(LOCK_TOKEN_HEADER) @Pattern(regexp = UUID_PATTERN) lockToken: String,
+    ): ResponseEntity<Void> {
+        releaseExpenseEditLockUseCase.release(memberId(accessToken), tripId, expenseId, UUID.fromString(lockToken))
+
+        return ResponseEntity.noContent().build<Void>()
+    }
+
     /** 숫자가 아닌 ID는 어떤 참여자도 가리킬 수 없으므로 경로의 숫자 ID와 같이 400으로 거절합니다. */
     private fun id(value: String): Long = value.toLongOrNull() ?: throw BusinessException(CommonErrorCode.INVALID_REQUEST)
 
@@ -173,6 +222,7 @@ class ExpenseController(
 
     companion object {
         private const val IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
+        private const val LOCK_TOKEN_HEADER = "X-Lock-Token"
 
         /** 8-4-4-4-12자리 16진수 표기만 받습니다. `UUID.fromString`은 자릿수가 모자란 값도 받으므로 형식을 먼저 확인합니다. */
         private const val UUID_PATTERN = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
