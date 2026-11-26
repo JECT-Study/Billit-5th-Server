@@ -25,7 +25,11 @@ abstract class IntegrationTestSupport : FunSpec() {
     companion object {
         private const val STORAGE_BUCKET = "billit-test"
 
-        private val postgres = PostgreSQLContainer("postgres:17-alpine").apply { start() }
+        // 캐시된 Spring 컨텍스트마다 커넥션 풀(기본 10개)을 두므로, 컨텍스트가 10개를 넘어도 기본 한도(100)에 막히지 않게 늘립니다.
+        private val postgres =
+            PostgreSQLContainer("postgres:17-alpine")
+                .withCommand("postgres", "-c", "fsync=off", "-c", "max_connections=300")
+                .apply { start() }
 
         private val redis =
             GenericContainer("redis:7.4-alpine")
