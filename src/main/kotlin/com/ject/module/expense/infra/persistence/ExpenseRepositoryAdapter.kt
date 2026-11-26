@@ -52,6 +52,8 @@ class ExpenseRepositoryAdapter(
 
     override fun findExpense(expenseId: Long): Expense? = expenseJpaRepository.findByIdOrNull(expenseId)
 
+    override fun existsActiveExpense(tripId: Long): Boolean = expenseJpaRepository.existsByTripIdAndDeletedAtIsNull(tripId)
+
     override fun findItems(expenseId: Long): List<ExpenseItem> = expenseItemJpaRepository.findByExpenseIdOrderBySortOrder(expenseId)
 
     override fun findItemMembers(expenseId: Long): List<ExpenseItemMember> = expenseItemMemberJpaRepository.findByExpenseId(expenseId)
