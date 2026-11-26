@@ -97,6 +97,15 @@ app:
   trip:
     invitation:
       base-url: ${TRIP_INVITATION_BASE_URL}
+  expense:
+    receipt-recognition:
+      provider: ${RECEIPT_RECOGNITION_PROVIDER:gemini}
+  gemini:
+    api-key: "${GEMINI_API_KEY:}"
+    model: ${GEMINI_MODEL:gemini-3.8-flash}
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+    connect-timeout: ${GEMINI_CONNECT_TIMEOUT:2s}
+    read-timeout: ${GEMINI_READ_TIMEOUT:20s}
 
 logging:
   structured:

@@ -203,6 +203,24 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - 초대 정보 조회의 `inviteUrl`은 `{기본 주소}/{초대 코드}`입니다. 예: `https://example.com/invitations/A7K2PQ`
 - 값이 없거나 `http://`, `https://`로 시작하지 않으면 기동이 실패합니다.
 
+## 영수증 인식
+
+네 프로필의 `app.expense.receipt-recognition.provider`로 영수증 인식 엔진을 고르고, `app.gemini`에서 Gemini API 호출 값을 설정합니다.
+
+| 설정 | 환경변수 | local, dev, prod 기본값 | test |
+| --- | --- | --- | --- |
+| `app.expense.receipt-recognition.provider` | `RECEIPT_RECOGNITION_PROVIDER` | `gemini` | `gemini` |
+| `app.gemini.api-key` | `GEMINI_API_KEY` | 빈 값 | 빈 값 |
+| `app.gemini.model` | `GEMINI_MODEL` | `gemini-3.8-flash` | 테스트 전용 값 |
+| `app.gemini.base-url` | `GEMINI_BASE_URL` | `https://generativelanguage.googleapis.com` | 접속할 수 없는 주소 |
+| `app.gemini.connect-timeout` | `GEMINI_CONNECT_TIMEOUT` | `2s` | `2s` |
+| `app.gemini.read-timeout` | `GEMINI_READ_TIMEOUT` | `20s` | `20s` |
+
+- `provider`는 `gemini`와 `none`을 받습니다. `none`이거나 `gemini`인데 API 키가 비어 있으면 기동 시 `receipt_recognition_unavailable` WARN 로그를 한 번 남기고, 영수증 인식은 Gemini를 호출하지 않고 503 `EXPENSE_RECOGNITION_UNAVAILABLE`로 응답합니다.
+- API 키는 결제를 연결한 Google Cloud 프로젝트의 유료 등급 키를 넣습니다. 키가 없어도 기동은 실패하지 않습니다.
+- 모델은 이미지 입력과 구조화 출력을 지원하는 모델 코드를 넣습니다. 기본값은 2026-11-26에 Gemini API 모델 문서에서 안정(Stable) 버전으로 확인한 값입니다.
+- Gemini 호출은 재시도하지 않습니다. 장애, 타임아웃과 오류 응답은 503 `EXPENSE_RECOGNITION_UNAVAILABLE`로 응답합니다.
+
 ## 인증과 프론트 연동
 
 - 클라이언트가 전달한 `environment`로 서버 프로필이나 운영 자격증명을 선택하지 않습니다.
