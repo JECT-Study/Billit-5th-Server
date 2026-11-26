@@ -12,6 +12,8 @@ tags:
   description: 회원 계정과 프로필
 - name: Trip
   description: 여행
+- name: Expense
+  description: 지출
 paths:
   '/api/v1/auth/social-logins':
     $ref: './domains/auth.yml#/paths/~1api~1v1~1auth~1social-logins'
@@ -41,6 +43,8 @@ paths:
     $ref: './domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1leave'
   '/api/v1/trips/{tripId}/confirm':
     $ref: './domains/trip.yml#/paths/~1api~1v1~1trips~1{tripId}~1confirm'
+  '/api/v1/trips/{tripId}/expenses':
+    $ref: './domains/expense.yml#/paths/~1api~1v1~1trips~1{tripId}~1expenses'
 components:
   securitySchemes:
     registrationBearerAuth:
