@@ -47,6 +47,8 @@ paths:
     $ref: './domains/expense.yml#/paths/~1api~1v1~1trips~1{tripId}~1expenses'
   '/api/v1/trips/{tripId}/expenses/{expenseId}':
     $ref: './domains/expense.yml#/paths/~1api~1v1~1trips~1{tripId}~1expenses~1{expenseId}'
+  '/api/v1/trips/{tripId}/expenses/{expenseId}/edit-lock':
+    $ref: './domains/expense.yml#/paths/~1api~1v1~1trips~1{tripId}~1expenses~1{expenseId}~1edit-lock'
 components:
   securitySchemes:
     registrationBearerAuth:

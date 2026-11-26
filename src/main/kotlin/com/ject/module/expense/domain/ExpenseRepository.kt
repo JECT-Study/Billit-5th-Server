@@ -1,5 +1,7 @@
 package com.ject.module.expense.domain
 
+import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
@@ -55,4 +57,39 @@ interface ExpenseRepository {
         fromDate: LocalDate?,
         toDate: LocalDate?,
     ): Long
+
+    /**
+     * 정산이 점유하지 않았고 [now]보다 늦게 만료되는 잠금이 없는 지출에 잠금을 걸면 `true`입니다. 만료된 잠금은 소유자와 관계없이 바꾸고, 같은 소유자의 유효한 잠금은 바꾸지 않습니다.
+     * 잠금 칼럼만 바꾸며 수정 시각(`updated_at`)은 그대로 둡니다. 호출하는 쪽의 트랜잭션에서 조건부 UPDATE 한 번으로 실행해 경쟁하는 요청 중 하나만 성공하며,
+     * 실행 뒤 영속성 컨텍스트를 비우므로 이후 조회는 DB 값을 읽습니다.
+     */
+    fun acquireEditLock(
+        expenseId: Long,
+        tripId: Long,
+        ownerTripMemberId: Long,
+        token: UUID,
+        expiresAt: Instant,
+        now: Instant,
+    ): Boolean
+
+    /**
+     * 소유자와 토큰이 같고 [now]보다 늦게 만료되는 잠금의 만료 시각에 [extension]을 더하고, 갱신 뒤 DB에 저장된 만료 시각을 반환합니다.
+     * 잠금이 없거나 소유자나 토큰이 다르거나 만료됐으면 `null`입니다. 수정 시각과 트랜잭션은 [acquireEditLock]과 같습니다.
+     */
+    fun extendEditLock(
+        expenseId: Long,
+        tripId: Long,
+        ownerTripMemberId: Long,
+        token: UUID,
+        extension: Duration,
+        now: Instant,
+    ): Instant?
+
+    /** 소유자와 토큰이 같은 잠금을 만료 여부와 관계없이 비우면 `true`입니다. 수정 시각과 트랜잭션은 [acquireEditLock]과 같습니다. */
+    fun releaseEditLock(
+        expenseId: Long,
+        tripId: Long,
+        ownerTripMemberId: Long,
+        token: UUID,
+    ): Boolean
 }

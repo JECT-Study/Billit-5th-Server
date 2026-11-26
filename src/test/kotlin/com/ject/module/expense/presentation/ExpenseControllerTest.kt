@@ -12,6 +12,8 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.time.Duration
+import java.time.Instant
 import java.util.UUID
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -421,6 +423,100 @@ class ExpenseControllerTest : IntegrationTestSupport() {
             }
         }
 
+        context("/api/v1/trips/{tripId}/expenses/{expenseId}/edit-lock") {
+            test("잠금을 획득하면 201과 Location 없이 잠금 토큰과 초 단위 UTC 만료 시각을 받고, 지출 상세의 isEditLocked가 true가 된다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                post(trip.tripId, validRequestBody(trip), accessToken, UUID.randomUUID().toString())
+                val path = "/api/v1/trips/${trip.tripId}/expenses/${findExpenseIds(trip.tripId).single()}"
+
+                // when
+                val response = send("POST", "$path/edit-lock", accessToken)
+
+                // then
+                val data = body(response)["data"] as Map<*, *>
+                assertSoftly {
+                    response.statusCode() shouldBe 201
+                    response.headers().firstValue("Location").isPresent shouldBe false
+                    data.keys shouldBe setOf("lockToken", "expiresAt")
+                    UUID.fromString(data["lockToken"] as String).toString() shouldBe data["lockToken"]
+                    (data["expiresAt"] as String).matches(Regex("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z")) shouldBe true
+                    (body(get(path, accessToken))["data"] as Map<*, *>)["isEditLocked"] shouldBe true
+                }
+            }
+
+            test("유효한 잠금이 있는 지출의 잠금을 다시 획득하면 409 EXPENSE_EDIT_LOCKED와 안내 문구를 받는다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                post(trip.tripId, validRequestBody(trip), accessToken, UUID.randomUUID().toString())
+                val path = "/api/v1/trips/${trip.tripId}/expenses/${findExpenseIds(trip.tripId).single()}/edit-lock"
+                send("POST", path, accessToken)
+
+                // when
+                val response = send("POST", path, accessToken)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 409
+                    body(response) shouldBe errorBody("EXPENSE_EDIT_LOCKED", "다른 참여자가 수정 중인 지출입니다.")
+                }
+            }
+
+            test("X-Lock-Token으로 연장하면 200과 2분 늘어난 만료 시각, 해제하면 본문 없는 204를 받고 같은 해제를 다시 보내도 204를 받는다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                post(trip.tripId, validRequestBody(trip), accessToken, UUID.randomUUID().toString())
+                val path = "/api/v1/trips/${trip.tripId}/expenses/${findExpenseIds(trip.tripId).single()}/edit-lock"
+                val lock = body(send("POST", path, accessToken))["data"] as Map<*, *>
+                val lockToken = lock["lockToken"] as String
+
+                // when
+                val extended = send("PATCH", path, accessToken, lockToken)
+                val released = send("DELETE", path, accessToken, lockToken)
+                val releasedAgain = send("DELETE", path, accessToken, lockToken)
+                val extendedAfterRelease = send("PATCH", path, accessToken, lockToken)
+
+                // then
+                assertSoftly {
+                    extended.statusCode() shouldBe 200
+                    body(extended)["data"] shouldBe
+                        mapOf("expiresAt" to Instant.parse(lock["expiresAt"] as String).plus(Duration.ofMinutes(2)).toString())
+                    released.statusCode() shouldBe 204
+                    released.body() shouldBe ""
+                    releasedAgain.statusCode() shouldBe 204
+                    extendedAfterRelease.statusCode() shouldBe 409
+                    body(extendedAfterRelease)["code"] shouldBe "EXPENSE_EDIT_LOCK_INVALID"
+                }
+            }
+
+            test("X-Lock-Token이 없거나 UUID 형식이 아니면 400 COMMON_INVALID_REQUEST를 받는다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                post(trip.tripId, validRequestBody(trip), accessToken, UUID.randomUUID().toString())
+                val path = "/api/v1/trips/${trip.tripId}/expenses/${findExpenseIds(trip.tripId).single()}/edit-lock"
+                val requests =
+                    mapOf(
+                        "연장, 헤더 없음" to Pair("PATCH", null),
+                        "연장, 형식 오류" to Pair("PATCH", "lock-token"),
+                        "해제, 헤더 없음" to Pair("DELETE", null),
+                        "해제, 하이픈 없는 UUID" to Pair("DELETE", "5f0c7a2e9b1d4c3e8a6f2d4b6c8e0a1f"),
+                    )
+
+                // when
+                val responses = requests.mapValues { send(it.value.first, path, accessToken, it.value.second) }
+
+                // then
+                assertSoftly {
+                    responses.mapValues { it.value.statusCode() } shouldBe requests.mapValues { 400 }
+                    responses.mapValues { body(it.value)["code"] } shouldBe requests.mapValues { "COMMON_INVALID_REQUEST" }
+                }
+            }
+        }
+
         context("GET /api/v1/trips/{tripId}/expenses/{expenseId}") {
             test("등록 응답의 Location으로 조회하면 등록 응답과 같은 지출 상세를 받는다") {
                 // given
@@ -579,6 +675,23 @@ class ExpenseControllerTest : IntegrationTestSupport() {
                 .build(),
             HttpResponse.BodyHandlers.ofString(),
         )
+
+    private fun send(
+        method: String,
+        path: String,
+        token: String,
+        lockToken: String? = null,
+    ): HttpResponse<String> {
+        val request =
+            HttpRequest
+                .newBuilder(URI.create("http://localhost:${environment.getRequiredProperty("local.server.port")}$path"))
+                .header("Authorization", "Bearer $token")
+                .method(method, HttpRequest.BodyPublishers.noBody())
+        if (lockToken != null) {
+            request.header("X-Lock-Token", lockToken)
+        }
+        return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString())
+    }
 
     private fun body(response: HttpResponse<String>): Map<*, *> = jsonMapper.readValue(response.body(), Map::class.java)
 

@@ -99,9 +99,9 @@ class TripRepositoryAdapter(
     override fun findTripStatus(tripId: Long): TripStatus? = findTrip(tripId)?.status
 
     override fun findParticipants(tripId: Long): List<TripParticipantResult> =
-        findTripMembers(
-            tripId,
-        ).map { TripParticipantResult(tripMemberId = checkNotNull(it.id), memberId = it.memberId, status = it.status) }
+        findTripMembers(tripId).map {
+            TripParticipantResult(tripMemberId = checkNotNull(it.id), memberId = it.memberId, role = it.role, status = it.status)
+        }
 
     companion object {
         private const val IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT = "uq_trip_idempotency_key"
