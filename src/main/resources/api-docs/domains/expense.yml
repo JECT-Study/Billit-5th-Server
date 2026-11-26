@@ -839,6 +839,245 @@ paths:
                     code: EXPENSE_EDIT_LOCK_INVALID
                     message: 수정 가능 시간이 지났거나 다른 화면에서 수정을 시작했습니다. 다시 수정해주세요.
                     errors: null
+  "/api/v1/trips/{tripId}/receipt-recognitions":
+    parameters:
+    - "$ref": "./trip.yml#/components/parameters/TripId"
+    post:
+      tags:
+      - Expense
+      operationId: recognizeReceipt
+      summary: 영수증 인식
+      description: |
+        영수증 이미지 한 장에서 지출 입력값을 읽어, 회원이 확인하고 고칠 인식 결과를 같은 요청의 응답으로 반환합니다.
+
+        ### 요청 권한
+        이 여행에 참여 중인 로그인 참여자만 요청할 수 있습니다.
+
+        ### 처리 조건
+        확정된 여행에서만 요청할 수 있습니다. 인식만 하고 지출은 저장하지 않습니다.
+        일부 값만 읽어도 읽은 값을 200으로 반환하며, 읽지 못한 값은 null, 읽은 품목이 없으면 items는 빈 배열입니다. 아무 값도 읽지 못해도 빈 결과를 200으로 반환합니다. 읽지 못한 값을 0이나 다른 값으로 채우지 않습니다.
+        splitType이 EQUAL이면 items는 항상 빈 배열이고, 품목에 적힌 상품 할인은 discountAmount(전체 할인)에 더합니다. BY_ITEM이면 품목과 품목별 할인을 그대로 반환합니다.
+        통화가 KRW, JPY, USD, EUR, CNY가 아니면 currency는 null입니다. 0 미만이거나 정수부가 10자리를 넘거나 소수점 이하가 2자리를 넘는 금액은 null입니다.
+        카드번호, 카드 승인번호, 영수증 번호, 카드사, 가맹점 사업자번호, 주소와 전화번호는 응답에 넣지 않습니다.
+
+        ### 사용 시 주의
+        서버는 이미지를 저장하지 않고 외부 AI 인식 서비스(Gemini API)로 보낸 뒤 버립니다. 인식은 재시도하지 않으며, 외부 서비스 장애나 시간 초과는 빈 결과 대신 503으로 응답합니다.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        description: |
+          image 파트에 영수증 이미지 한 장을, request 파트에 JSON을 보냅니다. 이미지는 JPEG, PNG, HEIC, WEBP 중 하나이며 최대 15 MiB(15,728,640바이트)이고, 요청 전체는 최대 16 MiB입니다. image 파트의 Content-Type과 파일 내용의 형식이 같아야 합니다.
+
+          ```bash
+          curl 'https://example.com/api/v1/trips/123/receipt-recognitions' \
+            --header 'Authorization: Bearer {accessToken}' \
+            --form 'image=@./receipt.jpg;type=image/jpeg' \
+            --form 'request={"splitType":"BY_ITEM"};type=application/json'
+          ```
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - image
+              - request
+              additionalProperties: false
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: 인식할 영수증 이미지 한 장입니다.
+                request:
+                  "$ref": "./expense.yml#/components/schemas/ReceiptRecognitionRequest"
+            encoding:
+              image:
+                contentType: image/jpeg, image/png, image/heic, image/webp
+              request:
+                contentType: application/json
+      responses:
+        '200':
+          description: 영수증 인식 성공. 일부나 전부를 읽지 못해도 같습니다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./expense.yml#/components/schemas/RecognitionResult"
+              examples:
+                byItem:
+                  summary: 품목별 인식 성공
+                  value:
+                    data:
+                      name: Sushi Bar
+                      paidDate: '2026-11-05'
+                      currency: JPY
+                      originalAmount: '1200.00'
+                      discountAmount: null
+                      items:
+                      - name: Sushi
+                        amount: '1000.00'
+                        discountAmount: '100.00'
+                      - name: Tea
+                        amount: '200.00'
+                        discountAmount: null
+                equal:
+                  summary: 전체 1/N 인식 성공
+                  description: 품목의 상품 할인 100엔을 전체 할인에 더하고 품목은 반환하지 않습니다.
+                  value:
+                    data:
+                      name: Sushi Bar
+                      paidDate: '2026-11-05'
+                      currency: JPY
+                      originalAmount: '1200.00'
+                      discountAmount: '100.00'
+                      items: []
+                emptyResult:
+                  summary: 아무 값도 읽지 못함
+                  value:
+                    data:
+                      name: null
+                      paidDate: null
+                      currency: null
+                      originalAmount: null
+                      discountAmount: null
+                      items: []
+        '400':
+          description: |
+            요청이 올바르지 않거나 이미지가 영수증이 아닙니다.
+
+            | 오류 코드 | 발생 조건 |
+            | --- | --- |
+            | `COMMON_INVALID_REQUEST` | image나 request 파트가 없거나, request가 JSON 형식이 아니거나 splitType이 EQUAL, BY_ITEM이 아니거나 정의하지 않은 필드가 있습니다. |
+            | `EXPENSE_NOT_RECEIPT` | 인식 서비스가 이미지를 영수증이 아니라고 판단했습니다. 영수증이지만 일부만 읽은 경우는 200입니다. |
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 파트가 없거나 request가 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors: null
+                EXPENSE_NOT_RECEIPT:
+                  summary: 영수증이 아닌 이미지
+                  value:
+                    code: EXPENSE_NOT_RECEIPT
+                    message: 영수증을 찾지 못했습니다. 영수증 사진을 다시 선택해주세요.
+                    errors: null
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          description: |
+            요청한 회원이 이 여행에 참여하지 않았거나 여행을 나갔습니다.
+
+            **오류 코드:** `COMMON_FORBIDDEN`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_FORBIDDEN:
+                  summary: 참여 중인 여행이 아님
+                  value:
+                    code: COMMON_FORBIDDEN
+                    message: 요청을 수행할 권한이 없습니다.
+                    errors: null
+        '404':
+          description: |
+            tripId에 해당하는 여행이 없거나 삭제됐습니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_NOT_FOUND:
+                  summary: 여행이 없거나 삭제됨
+                  value:
+                    code: COMMON_NOT_FOUND
+                    message: 요청한 리소스를 찾을 수 없습니다.
+                    errors: null
+        '409':
+          description: |
+            확정 전 여행입니다.
+
+            **오류 코드:** `EXPENSE_TRIP_NOT_CONFIRMED`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                EXPENSE_TRIP_NOT_CONFIRMED:
+                  summary: 여행이 확정 전임
+                  value:
+                    code: EXPENSE_TRIP_NOT_CONFIRMED
+                    message: 여행을 확정한 뒤에 지출을 등록할 수 있습니다.
+                    errors: null
+        '413':
+          description: |
+            이미지가 15 MiB를 넘거나 요청 전체가 16 MiB를 넘습니다. 서버 앞단에서 먼저 거절하면 이 본문 없이 413이 올 수 있습니다.
+
+            **오류 코드:** `EXPENSE_RECEIPT_TOO_LARGE`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                EXPENSE_RECEIPT_TOO_LARGE:
+                  summary: 이미지가 너무 큼
+                  value:
+                    code: EXPENSE_RECEIPT_TOO_LARGE
+                    message: 15MB 이하의 영수증 이미지를 선택해주세요.
+                    errors: null
+        '415':
+          description: |
+            요청이나 파트의 형식이 맞지 않습니다.
+
+            | 오류 코드 | 발생 조건 |
+            | --- | --- |
+            | `EXPENSE_RECEIPT_UNSUPPORTED` | image 파트의 Content-Type이 JPEG, PNG, HEIC, WEBP가 아니거나, 파일 내용이 그 형식이 아니거나 비어 있습니다. |
+            | `COMMON_UNSUPPORTED_MEDIA_TYPE` | 요청이 multipart/form-data가 아니거나 request 파트의 Content-Type이 application/json이 아닙니다. |
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                EXPENSE_RECEIPT_UNSUPPORTED:
+                  summary: 지원하지 않는 이미지 형식
+                  value:
+                    code: EXPENSE_RECEIPT_UNSUPPORTED
+                    message: JPG, PNG, HEIC, WEBP 형식의 영수증 이미지를 선택해주세요.
+                    errors: null
+                COMMON_UNSUPPORTED_MEDIA_TYPE:
+                  summary: multipart 요청이 아님
+                  value:
+                    code: COMMON_UNSUPPORTED_MEDIA_TYPE
+                    message: 지원하지 않는 미디어 타입입니다.
+                    errors: null
+        '503':
+          description: |
+            인식 기능이 꺼져 있거나, 외부 인식 서비스의 장애, 시간 초과, 오류 응답이나 해석할 수 없는 응답으로 인식을 마치지 못했습니다. 서버 앞단에서 동시 요청 수를 넘겨도 같은 본문으로 응답합니다.
+
+            **오류 코드:** `EXPENSE_RECOGNITION_UNAVAILABLE`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                EXPENSE_RECOGNITION_UNAVAILABLE:
+                  summary: 인식 서비스를 쓸 수 없음
+                  value:
+                    code: EXPENSE_RECOGNITION_UNAVAILABLE
+                    message: 영수증 인식을 잠시 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.
+                    errors: null
 components:
   parameters:
     ExpenseId:
@@ -1270,3 +1509,94 @@ components:
           format: date-time
           description: 기존 만료 시각에 2분을 더한 잠금 만료 시각(UTC)입니다. 이 시각부터 잠금은 유효하지 않습니다.
           example: '2026-11-05T03:07:00Z'
+    ReceiptRecognitionRequest:
+      type: object
+      description: 영수증 인식 요청의 JSON 파트입니다.
+      required:
+      - splitType
+      additionalProperties: false
+      properties:
+        splitType:
+          type: string
+          enum:
+          - EQUAL
+          - BY_ITEM
+          description: 인식 결과를 채울 지출 입력의 분배 방식입니다. EQUAL은 전체 1/N, BY_ITEM은 품목별 분배입니다.
+          example: BY_ITEM
+    RecognitionResult:
+      type: object
+      description: 영수증에서 읽은 지출 입력값입니다. 회원이 확인하고 고치기 전의 값입니다.
+      required:
+      - name
+      - paidDate
+      - currency
+      - originalAmount
+      - discountAmount
+      - items
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          nullable: true
+          description: 지출명으로 쓸 가맹점 이름입니다. 읽지 못하면 null입니다. 지출명 최대 길이(50자)를 넘을 수 있습니다.
+          example: Sushi Bar
+        paidDate:
+          type: string
+          format: date
+          nullable: true
+          description: 영수증의 결제 날짜입니다. 시각은 반환하지 않으며 읽지 못하면 null입니다.
+          example: '2026-11-05'
+        currency:
+          type: string
+          nullable: true
+          enum:
+          - KRW
+          - JPY
+          - USD
+          - EUR
+          - CNY
+          - null
+          description: 결제 통화입니다. 읽지 못했거나 KRW, JPY, USD, EUR, CNY가 아니면 null입니다.
+          example: JPY
+        originalAmount:
+          type: string
+          nullable: true
+          pattern: '^(0|[1-9][0-9]{0,9})\.[0-9]{2}$'
+          description: 할인 전 결제 총액입니다. 읽지 못하면 null입니다.
+          example: '1200.00'
+        discountAmount:
+          type: string
+          nullable: true
+          pattern: '^(0|[1-9][0-9]{0,9})\.[0-9]{2}$'
+          description: 전체 할인액입니다. splitType이 EQUAL이면 품목의 상품 할인을 더한 값입니다. 할인이 없거나 읽지 못하면 null입니다.
+          example: '100.00'
+        items:
+          type: array
+          description: 읽은 품목입니다. splitType이 EQUAL이거나 품목을 읽지 못하면 빈 배열입니다.
+          items:
+            "$ref": "./expense.yml#/components/schemas/RecognizedItem"
+    RecognizedItem:
+      type: object
+      required:
+      - name
+      - amount
+      - discountAmount
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          nullable: true
+          description: 품목명입니다. 읽지 못하면 null입니다.
+          example: Sushi
+        amount:
+          type: string
+          nullable: true
+          pattern: '^(0|[1-9][0-9]{0,9})\.[0-9]{2}$'
+          description: 상품 할인 전 품목 금액입니다. 읽지 못하면 null입니다.
+          example: '1000.00'
+        discountAmount:
+          type: string
+          nullable: true
+          pattern: '^(0|[1-9][0-9]{0,9})\.[0-9]{2}$'
+          description: 이 품목의 상품 할인액입니다. 할인이 없거나 읽지 못하면 null입니다.
+          example: '100.00'

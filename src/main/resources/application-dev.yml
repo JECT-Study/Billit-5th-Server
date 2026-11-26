@@ -12,6 +12,12 @@ spring:
         fail-on-numbers-for-enums: true
         read-enums-using-to-string: false
         write-enums-using-to-string: false
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 16MB
+      file-size-threshold: 16MB
+      resolve-lazily: true
   lifecycle:
     timeout-per-shutdown-phase: 20s
   datasource:

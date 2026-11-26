@@ -220,6 +220,7 @@ Frankfurter URL은 `https://api.frankfurter.dev`, 연결 타임아웃은 2초, �
 - API 키는 결제를 연결한 Google Cloud 프로젝트의 유료 등급 키를 넣습니다. 키가 없어도 기동은 실패하지 않습니다.
 - 모델은 이미지 입력과 구조화 출력을 지원하는 모델 코드를 넣습니다. 기본값은 2026-11-26에 Gemini API 모델 문서에서 안정(Stable) 버전으로 확인한 값입니다.
 - Gemini 호출은 재시도하지 않습니다. 장애, 타임아웃과 오류 응답은 503 `EXPENSE_RECOGNITION_UNAVAILABLE`로 응답합니다.
+- 네 프로필의 `spring.servlet.multipart`는 파일 15MB(`max-file-size`), 요청 전체 16MB(`max-request-size`)까지 받습니다. `file-size-threshold`를 요청 전체 상한과 같은 16MB로 두어 업로드를 Tomcat 임시 파일 없이 메모리에서만 받습니다. `resolve-lazily: true`로 multipart를 Controller가 읽을 때 해석해, 상한을 넘으면 영수증 인식 API가 413 `EXPENSE_RECEIPT_TOO_LARGE`로 응답합니다. 15MB는 Nginx 요청 본문 한도와 같습니다.
 
 ## 인증과 프론트 연동
 
