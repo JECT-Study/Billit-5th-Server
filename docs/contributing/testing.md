@@ -60,7 +60,7 @@ DB 동작은 운영과 같은 종류와 가능한 한 가까운 버전의 DB를 
 
 ## 이름과 구조
 
-테스트 클래스는 검증 대상 클래스별로 나누고 `<대상 클래스명>Test`로 이름을 짓습니다. 서로 다른 UseCase의 테스트를 업무별 통합 테스트 클래스 하나에 모으지 않습니다. Controller의 HTTP 계약 검증은 해당 Controller 테스트에 둡니다. 실제 DB나 Spring 컨텍스트를 사용하는 통합 테스트에도 같은 분리 기준을 적용합니다.
+테스트 클래스는 검증 대상 클래스별로 나누고 `<대상 클래스명>Test`로 이름을 짓습니다. 검증 대상 클래스가 없는 명세와 구현의 교차 검사는 [ApiDocsConsistencyTest](../../src/test/kotlin/com/ject/global/config/ApiDocsConsistencyTest.kt)처럼 검사 대상과 목적을 이름으로 짓습니다. 서로 다른 UseCase의 테스트를 업무별 통합 테스트 클래스 하나에 모으지 않습니다. Controller의 HTTP 계약 검증은 해당 Controller 테스트에 둡니다. 실제 DB나 Spring 컨텍스트를 사용하는 통합 테스트에도 같은 분리 기준을 적용합니다.
 
 테스트는 Kotest의 `FunSpec`으로 작성합니다. `test("조건과 기대 결과")`에 한국어 이름을 작성하고, 영문 테스트 메서드나 `@DisplayName`을 별도로 두지 않습니다. DCI 구조나 `DescribeSpec`, `BehaviorSpec`은 사용하지 않습니다.
 

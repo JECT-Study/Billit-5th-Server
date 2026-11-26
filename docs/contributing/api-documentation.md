@@ -460,6 +460,7 @@ curl 'https://example.com/api/v1/example-files/sample/content' \
 - 도메인 YAML의 계약을 먼저 변경하면 기존 Controller와 관련 구현, HTTP 테스트도 같은 변경에서 해당 계약에 맞춥니다.
 - 구현하지 않은 API는 도메인 YAML에 작성하지 않습니다. 문서 저장소 API 스펙의 계약을 기준으로 Controller, 요청과 응답 DTO와 검증을 구현하는 변경에서 YAML에 추가하고, HTTP 테스트로 계약 일치 여부를 확인합니다.
 - 클래스 분리나 이름 변경처럼 HTTP API 계약에 영향이 없는 내부 변경은 명세 수정 대상에서 제외합니다.
+- [ApiDocsConsistencyTest](../../src/test/kotlin/com/ject/global/config/ApiDocsConsistencyTest.kt)가 Controller와 도메인 YAML의 경로와 HTTP 메서드, 오류 예제와 오류 코드 정의의 코드와 메시지, 루트 명세의 경로 참조가 일치하는지 검사합니다. 파라미터, 요청과 응답 스키마, 상태 코드는 검사하지 않으므로 HTTP 테스트로 확인합니다.
 
 ## 분류
 
