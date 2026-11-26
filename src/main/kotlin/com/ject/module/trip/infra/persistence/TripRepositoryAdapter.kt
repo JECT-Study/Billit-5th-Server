@@ -10,8 +10,10 @@ import com.ject.module.trip.domain.TripMember
 import com.ject.module.trip.domain.TripMemberRole
 import com.ject.module.trip.domain.TripMemberStatus
 import com.ject.module.trip.domain.TripNicknameDuplicatedException
+import com.ject.module.trip.domain.TripParticipantResult
 import com.ject.module.trip.domain.TripRepository
 import com.ject.module.trip.domain.TripScheduleStatus
+import com.ject.module.trip.domain.TripStatus
 import com.ject.module.trip.infra.persistence.jdsl.TripJdslRepository
 import com.ject.module.trip.infra.persistence.jpa.TripJpaRepository
 import com.ject.module.trip.infra.persistence.jpa.TripMemberJpaRepository
@@ -93,6 +95,13 @@ class TripRepositoryAdapter(
         tripMemberJpaRepository.delete(tripMember)
         tripMemberJpaRepository.flush()
     }
+
+    override fun findTripStatus(tripId: Long): TripStatus? = findTrip(tripId)?.status
+
+    override fun findParticipants(tripId: Long): List<TripParticipantResult> =
+        findTripMembers(
+            tripId,
+        ).map { TripParticipantResult(tripMemberId = checkNotNull(it.id), memberId = it.memberId, status = it.status) }
 
     companion object {
         private const val IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT = "uq_trip_idempotency_key"

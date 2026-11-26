@@ -86,4 +86,10 @@ interface TripRepository {
 
     /** 여행 참여자 행을 지웁니다. 비로그인 참여자 삭제에만 씁니다. 트랜잭션은 호출하는 쪽이 엽니다. */
     fun deleteTripMember(tripMember: TripMember)
+
+    /** 삭제되지 않은 여행의 확정 상태입니다. 없거나 삭제된 여행이면 `null`입니다. 다른 업무가 여행을 확인할 때 씁니다. */
+    fun findTripStatus(tripId: Long): TripStatus?
+
+    /** 여행의 모든 참여자를 값으로 조회합니다. 나간 회원과 탈퇴 회원도 포함하며 순서는 보장하지 않습니다. 다른 업무가 참여 여부를 판단할 때 씁니다. */
+    fun findParticipants(tripId: Long): List<TripParticipantResult>
 }
