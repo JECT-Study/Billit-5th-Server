@@ -21,8 +21,8 @@ class ApiDocsConsistencyTest : IntegrationTestSupport() {
             // given
             val documented =
                 loadSpecs("classpath:api-docs/domains/*.yml")
-                    .flatMap { (_, spec) ->
-                        spec.paths().flatMap { (path, pathItem) ->
+                    .flatMap { spec ->
+                        spec.paths.flatMap { (path, pathItem) ->
                             pathItem.keys.filter { it in OPERATION_KEYS }.map { "${it.uppercase()} $path" }
                         }
                     }.toSet()
@@ -66,7 +66,7 @@ class ApiDocsConsistencyTest : IntegrationTestSupport() {
             // when
             val documented =
                 loadSpecs("classpath:api-docs/**/*.yml")
-                    .flatMap { (_, spec) -> errorExamples(spec) }
+                    .flatMap { spec -> errorExamples(spec.content) }
                     .toSet()
 
             // then
@@ -80,16 +80,16 @@ class ApiDocsConsistencyTest : IntegrationTestSupport() {
             // given
             val expected =
                 loadSpecs("classpath:api-docs/domains/*.yml")
-                    .flatMap { (file, spec) ->
-                        spec.paths().keys.map { path ->
-                            "$path -> ./domains/$file#/paths/${path.replace("~", "~0").replace("/", "~1")}"
+                    .flatMap { spec ->
+                        spec.paths.keys.map { path ->
+                            "$path -> ./domains/${spec.name}#/paths/${path.replace("~", "~0").replace("/", "~1")}"
                         }
                     }.toSet()
 
             // when
             val referenced =
                 loadSpecs("classpath:api-docs/openapi.yml")
-                    .flatMap { (_, spec) -> spec.paths().map { (path, pathItem) -> "$path -> ${pathItem["\$ref"]}" } }
+                    .flatMap { spec -> spec.paths.map { (path, pathItem) -> "$path -> ${pathItem["\$ref"]}" } }
                     .toSet()
 
             // then
@@ -100,21 +100,22 @@ class ApiDocsConsistencyTest : IntegrationTestSupport() {
         }
     }
 
-    private fun loadSpecs(locationPattern: String): List<Pair<String, Map<String, Any?>>> =
+    private fun loadSpecs(locationPattern: String): List<ApiSpecFile> =
         PathMatchingResourcePatternResolver().getResources(locationPattern).map { resource ->
-            checkNotNull(resource.filename) to resource.inputStream.use { Yaml().load(it) }
+            ApiSpecFile(name = checkNotNull(resource.filename), content = resource.inputStream.use { Yaml().load(it) })
         }
 
-    @Suppress("UNCHECKED_CAST")
-    private fun Map<String, Any?>.paths(): Map<String, Map<String, Any?>> = (this["paths"] as Map<String, Map<String, Any?>>?).orEmpty()
-
-    // 오류 예제의 value는 code, message, errors를 모두 가집니다. 스키마의 properties는 code가 문자열이 아니어서 제외됩니다.
+    // 오류 응답은 공통 ErrorResponse 스키마를 참조하므로, 그 미디어 타입의 예제를 모두 오류 예제로 봅니다.
     private fun errorExamples(node: Any?): List<String> =
         when (node) {
             is Map<*, *> -> {
-                val code = node["code"]
-                if (node.keys == ERROR_BODY_KEYS && code is String) {
-                    listOf("$code: ${node["message"]}")
+                val schemaRef = (node["schema"] as? Map<*, *>)?.get("\$ref") as? String
+                val examples = node["examples"] as? Map<*, *>
+                if (schemaRef != null && schemaRef.endsWith(ERROR_RESPONSE_SCHEMA) && examples != null) {
+                    examples.values.map { example ->
+                        val value = (example as? Map<*, *>)?.get("value") as? Map<*, *>
+                        "${value?.get("code")}: ${value?.get("message")}"
+                    }
                 } else {
                     node.values.flatMap { errorExamples(it) }
                 }
@@ -132,6 +133,15 @@ class ApiDocsConsistencyTest : IntegrationTestSupport() {
     companion object {
         private const val BASE_PACKAGE = "com.ject"
         private val OPERATION_KEYS = setOf("get", "put", "post", "delete", "options", "head", "patch", "trace")
-        private val ERROR_BODY_KEYS = setOf("code", "message", "errors")
+        private const val ERROR_RESPONSE_SCHEMA = "#/schemas/ErrorResponse"
+    }
+
+    private class ApiSpecFile(
+        val name: String,
+        val content: Map<String, Any?>,
+    ) {
+        @Suppress("UNCHECKED_CAST")
+        val paths: Map<String, Map<String, Any?>>
+            get() = (content["paths"] as Map<String, Map<String, Any?>>?).orEmpty()
     }
 }
