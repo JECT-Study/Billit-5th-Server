@@ -4,7 +4,7 @@
 
 요청과 응답의 공통 형식은 [API 공통 규칙](api-conventions.md)을 따릅니다.
 
-`src/main/resources/api-docs`의 YAML 파일을 API 계약의 원본으로 직접 관리합니다. 루트 명세가 도메인별 명세와 공통 정의를 `$ref`로 연결합니다. Controller annotation으로 명세를 생성하지 않습니다.
+`src/main/resources/api-docs`의 YAML 파일을 구현한 API 계약의 원본으로 직접 관리합니다. 구현 예정 API의 계약은 [문서 저장소의 API 스펙](https://github.com/JECT-Study/Billit-5th-Docs/tree/main/api-spec)에서 관리하고, YAML에는 구현한 API만 작성합니다. 루트 명세가 도메인별 명세와 공통 정의를 `$ref`로 연결합니다. Controller annotation으로 명세를 생성하지 않습니다.
 
 | 파일 | 책임 |
 | --- | --- |
@@ -458,7 +458,7 @@ curl 'https://example.com/api/v1/example-files/sample/content' \
 
 - Controller, 요청과 응답 DTO, 입력 검증이나 인증 처리 등에서 HTTP API 계약을 변경하면 해당 도메인 YAML을 같은 변경에서 갱신합니다. 경로, HTTP 메서드, 파라미터, 헤더, 요청과 응답 스키마, 상태 코드와 인증 요구사항을 포함합니다.
 - 도메인 YAML의 계약을 먼저 변경하면 기존 Controller와 관련 구현, HTTP 테스트도 같은 변경에서 해당 계약에 맞춥니다.
-- Controller가 없는 API는 확정된 계약을 해당 도메인 YAML에 먼저 작성할 수 있습니다. 이후 Controller, 요청과 응답 DTO, 검증과 관련 코드를 구성할 때 해당 명세를 기준으로 구현하고 HTTP 테스트로 계약 일치 여부를 확인합니다.
+- 구현하지 않은 API는 도메인 YAML에 작성하지 않습니다. 문서 저장소 API 스펙의 계약을 기준으로 Controller, 요청과 응답 DTO와 검증을 구현하는 변경에서 YAML에 추가하고, HTTP 테스트로 계약 일치 여부를 확인합니다.
 - 클래스 분리나 이름 변경처럼 HTTP API 계약에 영향이 없는 내부 변경은 명세 수정 대상에서 제외합니다.
 
 ## 분류
