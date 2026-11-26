@@ -11,6 +11,8 @@ import java.util.UUID
 interface ExpenseJpaRepository : JpaRepository<Expense, Long> {
     fun findByIdempotencyKey(idempotencyKey: UUID): Expense?
 
+    fun existsByTripIdAndDeletedAtIsNull(tripId: Long): Boolean
+
     @Modifying(clearAutomatically = true)
     @Query(
         """

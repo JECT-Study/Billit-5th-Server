@@ -51,6 +51,9 @@ interface ExpenseRepository {
         limit: Int,
     ): List<Expense>
 
+    /** 여행에 삭제되지 않은 지출이 하나라도 있는지 조회합니다. */
+    fun existsActiveExpense(tripId: Long): Boolean
+
     /** [findExpenses]와 같은 조건에 맞는 전체 지출 수를 조회합니다. */
     fun countExpenses(
         tripId: Long,
