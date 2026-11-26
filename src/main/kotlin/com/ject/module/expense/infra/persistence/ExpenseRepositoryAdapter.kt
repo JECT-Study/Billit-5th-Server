@@ -1,0 +1,60 @@
+package com.ject.module.expense.infra.persistence
+
+import com.ject.global.persistence.violatedUniqueConstraint
+import com.ject.module.expense.domain.Expense
+import com.ject.module.expense.domain.ExpenseIdempotencyKeyDuplicatedException
+import com.ject.module.expense.domain.ExpenseItem
+import com.ject.module.expense.domain.ExpenseItemMember
+import com.ject.module.expense.domain.ExpenseRepository
+import com.ject.module.expense.domain.ExpenseShareAmount
+import com.ject.module.expense.infra.persistence.jpa.ExpenseItemJpaRepository
+import com.ject.module.expense.infra.persistence.jpa.ExpenseItemMemberJpaRepository
+import com.ject.module.expense.infra.persistence.jpa.ExpenseJpaRepository
+import com.ject.module.expense.infra.persistence.jpa.ExpenseShareAmountJpaRepository
+import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.data.repository.findByIdOrNull
+import org.springframework.stereotype.Repository
+import java.util.UUID
+
+@Repository
+class ExpenseRepositoryAdapter(
+    private val expenseJpaRepository: ExpenseJpaRepository,
+    private val expenseItemJpaRepository: ExpenseItemJpaRepository,
+    private val expenseItemMemberJpaRepository: ExpenseItemMemberJpaRepository,
+    private val expenseShareAmountJpaRepository: ExpenseShareAmountJpaRepository,
+) : ExpenseRepository {
+    override fun saveExpense(expense: Expense): Long =
+        try {
+            checkNotNull(expenseJpaRepository.saveAndFlush(expense).id)
+        } catch (exception: DataIntegrityViolationException) {
+            if (exception.violatedUniqueConstraint() != IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT) {
+                throw exception
+            }
+            throw ExpenseIdempotencyKeyDuplicatedException(exception)
+        }
+
+    override fun saveItem(item: ExpenseItem): Long = checkNotNull(expenseItemJpaRepository.saveAndFlush(item).id)
+
+    override fun saveItemMembers(itemMembers: List<ExpenseItemMember>) {
+        expenseItemMemberJpaRepository.saveAllAndFlush(itemMembers)
+    }
+
+    override fun saveShareAmounts(shareAmounts: List<ExpenseShareAmount>) {
+        expenseShareAmountJpaRepository.saveAllAndFlush(shareAmounts)
+    }
+
+    override fun findExpenseByIdempotencyKey(idempotencyKey: UUID): Expense? = expenseJpaRepository.findByIdempotencyKey(idempotencyKey)
+
+    override fun findExpense(expenseId: Long): Expense? = expenseJpaRepository.findByIdOrNull(expenseId)
+
+    override fun findItems(expenseId: Long): List<ExpenseItem> = expenseItemJpaRepository.findByExpenseIdOrderBySortOrder(expenseId)
+
+    override fun findItemMembers(expenseId: Long): List<ExpenseItemMember> = expenseItemMemberJpaRepository.findByExpenseId(expenseId)
+
+    override fun findShareAmounts(expenseId: Long): List<ExpenseShareAmount> =
+        expenseShareAmountJpaRepository.findByExpenseIdOrderByTripMemberId(expenseId)
+
+    companion object {
+        private const val IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT = "uq_expense_idempotency_key"
+    }
+}

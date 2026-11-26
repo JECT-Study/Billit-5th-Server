@@ -35,9 +35,10 @@ class Expense(
     val discountAmount: Long,
     @field:Column(name = "amount", nullable = false)
     val amount: Long,
+    @field:Enumerated(EnumType.STRING)
     @field:JdbcTypeCode(SqlTypes.CHAR)
     @field:Column(name = "currency", nullable = false)
-    val currency: String,
+    val currency: ExpenseCurrency,
     @field:Column(name = "paid_date", nullable = false)
     val paidDate: LocalDate,
     @field:Column(name = "payer_trip_member_id", nullable = false)
