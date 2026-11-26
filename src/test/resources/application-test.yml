@@ -97,6 +97,15 @@ app:
   trip:
     invitation:
       base-url: https://billit.test/invitations
+  expense:
+    receipt-recognition:
+      provider: gemini
+  gemini:
+    api-key: ""
+    model: gemini-test-model
+    base-url: http://invalid
+    connect-timeout: 2s
+    read-timeout: 20s
 
 logging:
   pattern:
