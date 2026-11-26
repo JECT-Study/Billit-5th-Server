@@ -1,5 +1,6 @@
 package com.ject.module.expense.domain
 
+import java.time.LocalDate
 import java.util.UUID
 
 interface ExpenseRepository {
@@ -34,4 +35,24 @@ interface ExpenseRepository {
 
     /** 지출의 참여자별 최종 부담액을 여행 참여자 ID 순서대로 조회합니다. */
     fun findShareAmounts(expenseId: Long): List<ExpenseShareAmount>
+
+    /**
+     * 여행의 삭제되지 않은 지출을 결제 날짜의 역순, 같으면 지출 ID의 역순으로 [offset]부터 [limit]개 조회합니다.
+     *
+     * 결제 날짜가 [fromDate]부터 [toDate]까지(양 끝 포함)인 지출만 조회하며, 날짜가 `null`이면 그 경계를 두지 않습니다.
+     */
+    fun findExpenses(
+        tripId: Long,
+        fromDate: LocalDate?,
+        toDate: LocalDate?,
+        offset: Int,
+        limit: Int,
+    ): List<Expense>
+
+    /** [findExpenses]와 같은 조건에 맞는 전체 지출 수를 조회합니다. */
+    fun countExpenses(
+        tripId: Long,
+        fromDate: LocalDate?,
+        toDate: LocalDate?,
+    ): Long
 }
