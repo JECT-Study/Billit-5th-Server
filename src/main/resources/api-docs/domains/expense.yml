@@ -527,6 +527,260 @@ paths:
                     code: COMMON_NOT_FOUND
                     message: 요청한 리소스를 찾을 수 없습니다.
                     errors: null
+    put:
+      tags:
+      - Expense
+      operationId: updateExpense
+      summary: 지출 수정
+      description: |
+        수정 잠금을 가진 회원이 지출의 결제 정보와 부담자를 요청한 입력 전체로 바꾸고, 서버가 다시 계산한 참여자별 최종 부담액과 원화 환산액을 함께 저장합니다.
+
+        ### 요청 권한
+        이 여행에 참여 중인 로그인 참여자 중 지출을 기록한 회원이나 여행 관리자만 요청할 수 있으며, 요청한 회원이 획득한 잠금의 토큰을 보내야 합니다. 결제자라는 이유만으로는 요청할 수 없습니다.
+
+        ### 처리 조건
+        요청한 회원의 수정 잠금이 만료되기 전이고 정산에 포함되지 않은 지출만 수정할 수 있습니다.
+        수정할 수 있는 입력 전체를 보내며, 생략한 필드를 기존 값으로 두지 않습니다. 금액 검증과 부담액 계산은 지출 생성과 같습니다.
+        결제자와 부담자의 조건도 지출 생성과 같습니다. 다만 수정 전 지출의 결제자와 부담자는 여행을 나갔거나 탈퇴했어도 그대로 둘 수 있습니다.
+        수정에 성공하면 지출, 품목과 부담액의 변경과 수정 잠금 해제를 한 번에 반영하고 지출의 수정 시각을 바꿉니다. 실패하면 기존 지출과 수정 잠금을 그대로 둡니다. 기록자(createdByTripMemberId)는 바뀌지 않습니다.
+
+        ### 사용 시 주의
+        품목은 모두 지우고 요청한 순서대로 다시 저장하므로 expenseItemId는 수정할 때마다 바뀝니다.
+        수정에 성공하면 잠금이 풀리므로, 응답을 받지 못해 같은 토큰으로 다시 보낸 요청은 409 EXPENSE_EDIT_LOCK_INVALID로 거절합니다. 앱은 지출 상세를 다시 조회해 수정이 반영됐는지 확인합니다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "./expense.yml#/components/parameters/LockToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./expense.yml#/components/schemas/ExpenseCreate"
+            examples:
+              equal:
+                summary: 전체 1/N 지출로 수정
+                value:
+                  name: 저녁 식사
+                  splitType: EQUAL
+                  currency: KRW
+                  paidDate: '2026-11-05'
+                  paymentMethod: CARD
+                  payerTripMemberId: '201'
+                  originalAmount: '15000.00'
+                  discountAmount: '1000.00'
+                  exchangeRate: '1.00'
+                  exchangeRateSource: MANUAL
+                  tripMemberIds:
+                  - '201'
+                  - '202'
+              byItem:
+                summary: 품목별 지출로 수정
+                value:
+                  name: Dinner
+                  splitType: BY_ITEM
+                  currency: USD
+                  paidDate: '2026-11-06'
+                  paymentMethod: TRAVEL_CARD
+                  payerTripMemberId: '201'
+                  originalAmount: '12.34'
+                  discountAmount: '0.34'
+                  exchangeRate: '1380.55'
+                  exchangeRateSource: AUTO
+                  items:
+                  - name: 피자
+                    amount: '10.00'
+                    discountAmount: '1.00'
+                    tripMemberIds:
+                    - '201'
+                    - '202'
+                  - amount: '2.34'
+                    discountAmount: '0.00'
+                    tripMemberIds:
+                    - '201'
+      responses:
+        '200':
+          description: 지출 수정 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - data
+                additionalProperties: false
+                properties:
+                  data:
+                    "$ref": "./expense.yml#/components/schemas/ExpenseDetail"
+              examples:
+                equal:
+                  summary: 전체 1/N 지출로 수정 성공
+                  value:
+                    data:
+                      expenseId: '501'
+                      name: 저녁 식사
+                      paidDate: '2026-11-05'
+                      currency: KRW
+                      amount: '14000.00'
+                      payerTripMemberId: '201'
+                      settlementId: null
+                      isEditLocked: false
+                      tripId: '123'
+                      splitType: EQUAL
+                      createdByTripMemberId: '201'
+                      paymentMethod: CARD
+                      originalAmount: '15000.00'
+                      discountAmount: '1000.00'
+                      exchangeRate: '1.00'
+                      exchangeRateSource: MANUAL
+                      exchangeRateProvider: null
+                      exchangeRateBaseDate: null
+                      amountKrw: '14000.00'
+                      items: []
+                      shares:
+                      - tripMemberId: '201'
+                        amount: '7000.00'
+                        amountKrw: '7000.00'
+                      - tripMemberId: '202'
+                        amount: '7000.00'
+                        amountKrw: '7000.00'
+                byItem:
+                  summary: 품목별 지출로 수정 성공
+                  description: 품목을 다시 저장해 expenseItemId가 수정 전과 다릅니다.
+                  value:
+                    data:
+                      expenseId: '501'
+                      name: Dinner
+                      paidDate: '2026-11-06'
+                      currency: USD
+                      amount: '11.00'
+                      payerTripMemberId: '201'
+                      settlementId: null
+                      isEditLocked: false
+                      tripId: '123'
+                      splitType: BY_ITEM
+                      createdByTripMemberId: '201'
+                      paymentMethod: TRAVEL_CARD
+                      originalAmount: '12.34'
+                      discountAmount: '0.34'
+                      exchangeRate: '1380.55'
+                      exchangeRateSource: AUTO
+                      exchangeRateProvider: null
+                      exchangeRateBaseDate: null
+                      amountKrw: '15186.00'
+                      items:
+                      - expenseItemId: '711'
+                        name: 피자
+                        amount: '10.00'
+                        discountAmount: '1.00'
+                        sortOrder: 0
+                        tripMemberIds:
+                        - '201'
+                        - '202'
+                      - expenseItemId: '712'
+                        name: null
+                        amount: '2.34'
+                        discountAmount: '0.00'
+                        sortOrder: 1
+                        tripMemberIds:
+                        - '201'
+                      shares:
+                      - tripMemberId: '201'
+                        amount: '6.63'
+                        amountKrw: '9153.00'
+                      - tripMemberId: '202'
+                        amount: '4.37'
+                        amountKrw: '6033.00'
+        '400':
+          description: |
+            요청 형식이나 값이 올바르지 않거나, 부담자와 금액이 지출 수정 조건에 맞지 않습니다.
+
+            | 오류 코드 | 발생 조건 |
+            | --- | --- |
+            | `COMMON_INVALID_REQUEST` | X-Lock-Token이 없거나 UUID 형식이 아니거나, tripId나 expenseId가 숫자 ID가 아니거나, 요청 본문이 필드 형식과 범위를 벗어났습니다. 분배 방식에 맞지 않는 tripMemberIds나 items, 통화의 최소 단위보다 작은 소수, KRW 지출의 1.00이 아닌 환율, 상품 할인이 품목 금액보다 큰 품목, 0 미만인 최종 결제액과 정수부가 10자리를 넘는 원화 환산액도 포함합니다. |
+            | `EXPENSE_INVALID_SHARES` | 새로 지정한 결제자가 이 여행에 참여 중인 로그인 참여자가 아니거나, 부담자가 없거나 겹치거나 새로 지정한 부담자가 이 여행에 참여 중인 로그인 참여자나 비로그인 참여자가 아닙니다. |
+            | `EXPENSE_AMOUNT_MISMATCH` | 품목별 지출에서 상품 할인 전 품목 금액의 합계가 originalAmount와 다릅니다. |
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 잠금 토큰이나 요청 본문이 올바르지 않음
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors: null
+                EXPENSE_INVALID_SHARES:
+                  summary: 결제자나 부담자로 지정할 수 없는 참여자
+                  value:
+                    code: EXPENSE_INVALID_SHARES
+                    message: 결제자나 부담자로 지정할 수 없는 참여자가 있습니다.
+                    errors: null
+                EXPENSE_AMOUNT_MISMATCH:
+                  summary: 품목 금액 합계가 총액과 다름
+                  value:
+                    code: EXPENSE_AMOUNT_MISMATCH
+                    message: 품목 금액의 합계가 결제 총액과 다릅니다.
+                    errors: null
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          description: |
+            요청한 회원이 이 여행에 참여하지 않았거나 여행을 나갔거나, 지출 기록자도 여행 관리자도 아닙니다.
+
+            **오류 코드:** `COMMON_FORBIDDEN`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_FORBIDDEN:
+                  summary: 수정할 수 있는 참여자가 아님
+                  value:
+                    code: COMMON_FORBIDDEN
+                    message: 요청을 수행할 권한이 없습니다.
+                    errors: null
+        '404':
+          description: |
+            tripId에 해당하는 여행이 없거나 삭제됐거나, expenseId에 해당하는 지출이 없거나 삭제됐거나 이 여행의 지출이 아닙니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_NOT_FOUND:
+                  summary: 여행이나 지출이 없거나 삭제됨
+                  value:
+                    code: COMMON_NOT_FOUND
+                    message: 요청한 리소스를 찾을 수 없습니다.
+                    errors: null
+        '409':
+          description: |
+            요청한 회원의 유효한 수정 잠금이 없거나 지출이 정산에 포함돼 있습니다. 지출과 기존 잠금은 그대로 둡니다.
+
+            | 오류 코드 | 발생 조건 |
+            | --- | --- |
+            | `EXPENSE_EDIT_LOCK_INVALID` | 요청한 회원의 잠금이 아니거나, 토큰이 현재 수정 작업과 다르거나, 잠금이 없거나 만료됐습니다. 수정에 성공한 뒤 같은 토큰으로 다시 보낸 요청도 같습니다. |
+            | `EXPENSE_SETTLEMENT_LOCKED` | 지출이 준비 중이거나 발행된 정산에 포함돼 있습니다. |
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                EXPENSE_EDIT_LOCK_INVALID:
+                  summary: 만료됐거나 다른 수정 작업의 잠금
+                  value:
+                    code: EXPENSE_EDIT_LOCK_INVALID
+                    message: 수정 가능 시간이 지났거나 다른 화면에서 수정을 시작했습니다. 다시 수정해주세요.
+                    errors: null
+                EXPENSE_SETTLEMENT_LOCKED:
+                  summary: 정산에 포함된 지출
+                  value:
+                    code: EXPENSE_SETTLEMENT_LOCKED
+                    message: 정산 중이거나 정산한 지출은 수정할 수 없습니다.
+                    errors: null
   "/api/v1/trips/{tripId}/expenses/{expenseId}/edit-lock":
     parameters:
     - "$ref": "./trip.yml#/components/parameters/TripId"
@@ -1091,7 +1345,7 @@ components:
       name: X-Lock-Token
       in: header
       required: true
-      description: 수정 잠금 획득 응답의 lockToken입니다. 하이픈으로 구분한 8-4-4-4-12자리 16진수 표기만 받습니다.
+      description: 수정 잠금 획득 응답의 lockToken입니다. 같은 수정 작업의 연장, 해제와 지출 수정 요청에 보냅니다. 하이픈으로 구분한 8-4-4-4-12자리 16진수 표기만 받습니다.
       schema:
         type: string
         format: uuid
@@ -1133,7 +1387,7 @@ components:
       description: 지출 목록과 상세에 표시할 지출명입니다. 공백이 아닌 문자를 하나 이상 포함해야 하며 공백을 지우지 않고 저장합니다.
       example: 식사
     ExpenseCreate:
-      description: 분배 방식(splitType)에 따라 부담자를 받습니다. 전체 1/N(EQUAL)이면 tripMemberIds만, 품목별(BY_ITEM)이면 items만 보냅니다. 다른 쪽을 함께 보내면 400입니다.
+      description: 지출 생성과 수정이 함께 쓰는 요청 본문입니다. 분배 방식(splitType)에 따라 부담자를 받습니다. 전체 1/N(EQUAL)이면 tripMemberIds만, 품목별(BY_ITEM)이면 items만 보냅니다. 다른 쪽을 함께 보내면 400입니다.
       oneOf:
       - "$ref": "./expense.yml#/components/schemas/EqualExpenseCreate"
       - "$ref": "./expense.yml#/components/schemas/ItemExpenseCreate"
@@ -1144,7 +1398,7 @@ components:
           BY_ITEM: "./expense.yml#/components/schemas/ItemExpenseCreate"
     EqualExpenseCreate:
       type: object
-      description: 할인 전 총액에서 전체 할인을 뺀 최종 결제액을 선택한 부담자끼리 똑같이 나누는 지출 생성 요청입니다.
+      description: 할인 전 총액에서 전체 할인을 뺀 최종 결제액을 선택한 부담자끼리 똑같이 나누는 지출 요청입니다. 지출 생성과 수정이 함께 씁니다.
       required:
       - name
       - splitType
@@ -1177,7 +1431,7 @@ components:
         payerTripMemberId:
           allOf:
           - "$ref": "../common/components.yml#/schemas/ResourceId"
-          description: 실제로 결제한 여행 참여자 ID입니다. 이 여행에 참여 중인 로그인 참여자만 지정할 수 있습니다.
+          description: 실제로 결제한 여행 참여자 ID입니다. 이 여행에 참여 중인 로그인 참여자만 지정할 수 있습니다. 지출 수정에서는 수정 전 지출의 결제자를 여행을 나갔거나 탈퇴했어도 그대로 둘 수 있습니다.
         originalAmount:
           allOf:
           - "$ref": "./expense.yml#/components/schemas/ExpenseAmount"
@@ -1196,12 +1450,12 @@ components:
           "$ref": "./expense.yml#/components/schemas/RateSource"
         tripMemberIds:
           type: array
-          description: 최종 결제액을 나눌 부담자의 여행 참여자 ID입니다. 1명 이상이고 겹칠 수 없으며, 이 여행에 참여 중인 로그인 참여자나 비로그인 참여자만 지정할 수 있습니다.
+          description: 최종 결제액을 나눌 부담자의 여행 참여자 ID입니다. 1명 이상이고 겹칠 수 없으며, 이 여행에 참여 중인 로그인 참여자나 비로그인 참여자만 지정할 수 있습니다. 지출 수정에서는 수정 전 지출의 부담자를 여행을 나갔거나 탈퇴했어도 그대로 둘 수 있습니다.
           items:
             "$ref": "../common/components.yml#/schemas/ResourceId"
     ItemExpenseCreate:
       type: object
-      description: 품목마다 지정한 부담자끼리 나누는 지출 생성 요청입니다. 전체 할인은 품목별 부담 비율대로 나뉩니다.
+      description: 품목마다 지정한 부담자끼리 나누는 지출 요청입니다. 지출 생성과 수정이 함께 씁니다. 전체 할인은 품목별 부담 비율대로 나뉩니다.
       required:
       - name
       - splitType
@@ -1234,7 +1488,7 @@ components:
         payerTripMemberId:
           allOf:
           - "$ref": "../common/components.yml#/schemas/ResourceId"
-          description: 실제로 결제한 여행 참여자 ID입니다. 이 여행에 참여 중인 로그인 참여자만 지정할 수 있습니다.
+          description: 실제로 결제한 여행 참여자 ID입니다. 이 여행에 참여 중인 로그인 참여자만 지정할 수 있습니다. 지출 수정에서는 수정 전 지출의 결제자를 여행을 나갔거나 탈퇴했어도 그대로 둘 수 있습니다.
         originalAmount:
           allOf:
           - "$ref": "./expense.yml#/components/schemas/ExpenseAmount"
@@ -1282,7 +1536,7 @@ components:
           description: 이 품목에만 적용하는 상품 할인액입니다. amount보다 클 수 없습니다.
         tripMemberIds:
           type: array
-          description: 이 품목을 나눌 부담자의 여행 참여자 ID입니다. 1명 이상이고 겹칠 수 없으며, 이 여행에 참여 중인 로그인 참여자나 비로그인 참여자만 지정할 수 있습니다.
+          description: 이 품목을 나눌 부담자의 여행 참여자 ID입니다. 1명 이상이고 겹칠 수 없으며, 이 여행에 참여 중인 로그인 참여자나 비로그인 참여자만 지정할 수 있습니다. 지출 수정에서는 수정 전 지출의 부담자를 여행을 나갔거나 탈퇴했어도 어느 품목에든 그대로 둘 수 있습니다.
           items:
             "$ref": "../common/components.yml#/schemas/ResourceId"
     ExpenseSummary:
@@ -1437,7 +1691,9 @@ components:
       additionalProperties: false
       properties:
         expenseItemId:
-          "$ref": "../common/components.yml#/schemas/ResourceId"
+          allOf:
+          - "$ref": "../common/components.yml#/schemas/ResourceId"
+          description: 지출 품목 ID입니다. 지출을 수정하면 품목을 다시 저장하므로 수정할 때마다 바뀝니다.
         name:
           type: string
           nullable: true
@@ -1490,7 +1746,7 @@ components:
         lockToken:
           type: string
           format: uuid
-          description: 이 수정 작업의 잠금 토큰입니다. 연장과 해제 요청의 X-Lock-Token으로 보냅니다.
+          description: 이 수정 작업의 잠금 토큰입니다. 지출 수정, 잠금 연장과 해제 요청의 X-Lock-Token으로 보냅니다.
           example: 5f0c7a2e-9b1d-4c3e-8a6f-2d4b6c8e0a1f
         expiresAt:
           type: string

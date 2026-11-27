@@ -26,7 +26,7 @@ Redis 저장과 PostgreSQL 변경은 하나의 원자적 트랜잭션으로 처�
 
 ## 지출 수정 잠금
 
-지출 수정 잠금은 Redis를 쓰지 않고 PostgreSQL의 `expense` 행에 소유자, 토큰과 만료 시각 칼럼으로 저장합니다. 획득, 연장과 해제는 각각 조건부 UPDATE 한 번으로 처리해 경쟁하는 요청 중 하나만 성공합니다. 조건은 [ExpenseRepository](../../src/main/kotlin/com/ject/module/expense/domain/ExpenseRepository.kt)의 잠금 메서드를 따릅니다.
+지출 수정 잠금은 Redis를 쓰지 않고 PostgreSQL의 `expense` 행에 소유자, 토큰과 만료 시각 칼럼으로 저장합니다. 획득, 연장과 해제는 각각 조건부 UPDATE 한 번으로 처리해 경쟁하는 요청 중 하나만 성공합니다. 지출 수정은 소유자, 토큰과 만료 조건을 함께 검사하는 조건부 UPDATE로 지출을 바꾸고 같은 트랜잭션에서 잠금을 해제합니다. 조건은 [ExpenseRepository](../../src/main/kotlin/com/ject/module/expense/domain/ExpenseRepository.kt)의 잠금 메서드와 `updateExpenseIfEditLocked`를 따릅니다.
 
 ## 메모리와 장애 처리
 

@@ -13,7 +13,7 @@ import jakarta.validation.constraints.Size
 import java.time.LocalDate
 
 /**
- * 지출 생성 요청입니다. 명세의 `ExpenseInput`입니다.
+ * 지출 생성과 수정이 함께 쓰는 요청 본문입니다. 명세의 `ExpenseInput`입니다. 수정은 생략한 필드를 기존 값으로 두지 않고 입력 전체를 다시 받습니다.
  *
  * 금액과 환율은 소수점 이하 2자리 문자열인지만 검사하고, 범위와 통화의 최소 단위는 UseCase가 확인합니다. ID는 문자열로 받아 Controller가 숫자로 바꿉니다.
  * [discountAmount]를 생략하면 할인이 없습니다. [tripMemberIds]와 [items]는 분배 방식에 따라 한쪽만 보내며, 분배 방식과의 조합은 UseCase가 확인합니다.
