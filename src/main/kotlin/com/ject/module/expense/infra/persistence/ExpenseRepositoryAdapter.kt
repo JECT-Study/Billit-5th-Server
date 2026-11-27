@@ -1,7 +1,9 @@
 package com.ject.module.expense.infra.persistence
 
 import com.ject.global.persistence.violatedUniqueConstraint
+import com.ject.module.expense.domain.CreateExpenseCommand
 import com.ject.module.expense.domain.Expense
+import com.ject.module.expense.domain.ExpenseCalculation
 import com.ject.module.expense.domain.ExpenseIdempotencyKeyDuplicatedException
 import com.ject.module.expense.domain.ExpenseItem
 import com.ject.module.expense.domain.ExpenseItemMember
@@ -104,6 +106,42 @@ class ExpenseRepositoryAdapter(
         ownerTripMemberId: Long,
         token: UUID,
     ): Boolean = expenseJpaRepository.releaseEditLock(expenseId, tripId, ownerTripMemberId, token) == 1
+
+    override fun updateExpenseIfEditLocked(
+        expenseId: Long,
+        tripId: Long,
+        ownerTripMemberId: Long,
+        token: UUID,
+        command: CreateExpenseCommand,
+        calculation: ExpenseCalculation,
+        now: Instant,
+    ): Boolean =
+        expenseJpaRepository.updateIfEditLocked(
+            expenseId = expenseId,
+            tripId = tripId,
+            ownerTripMemberId = ownerTripMemberId,
+            token = token,
+            name = command.name,
+            splitType = command.splitType,
+            originalAmount = calculation.originalAmount,
+            discountAmount = calculation.discountAmount,
+            amount = calculation.amount,
+            currency = command.currency,
+            paidDate = command.paidDate,
+            payerTripMemberId = command.payerTripMemberId,
+            paymentMethod = command.paymentMethod,
+            exchangeRate = command.exchangeRate,
+            exchangeRateSource = command.exchangeRateSource,
+            krwAmount = calculation.krwAmount,
+            now = now,
+        ) == 1
+
+    override fun deleteItemsAndShareAmounts(expenseId: Long) {
+        // 품목별 부담자 연결이 품목을 참조하므로 연결을 먼저 지웁니다.
+        expenseItemMemberJpaRepository.deleteAllByExpenseId(expenseId)
+        expenseItemJpaRepository.deleteAllByExpenseId(expenseId)
+        expenseShareAmountJpaRepository.deleteAllByExpenseId(expenseId)
+    }
 
     companion object {
         private const val IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT = "uq_expense_idempotency_key"

@@ -1,11 +1,17 @@
 package com.ject.module.expense.infra.persistence.jpa
 
 import com.ject.module.expense.domain.Expense
+import com.ject.module.expense.domain.ExpenseCurrency
+import com.ject.module.expense.domain.PaymentMethod
+import com.ject.module.expense.domain.RateSource
+import com.ject.module.expense.domain.SplitType
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Modifying
 import org.springframework.data.jpa.repository.Query
 import org.springframework.data.repository.query.Param
+import java.math.BigDecimal
 import java.time.Instant
+import java.time.LocalDate
 import java.util.UUID
 
 interface ExpenseJpaRepository : JpaRepository<Expense, Long> {
@@ -66,5 +72,47 @@ interface ExpenseJpaRepository : JpaRepository<Expense, Long> {
         @Param("tripId") tripId: Long,
         @Param("ownerTripMemberId") ownerTripMemberId: Long,
         @Param("token") token: UUID,
+    ): Int
+
+    /** 벌크 UPDATE는 Auditing을 거치지 않으므로 수정 시각도 이 쿼리에서 바꿉니다. */
+    @Modifying(clearAutomatically = true)
+    @Query(
+        """
+        UPDATE Expense e
+        SET e.name = :name,
+            e.splitType = :splitType,
+            e.originalAmount = :originalAmount,
+            e.discountAmount = :discountAmount,
+            e.amount = :amount,
+            e.currency = :currency,
+            e.paidDate = :paidDate,
+            e.payerTripMemberId = :payerTripMemberId,
+            e.paymentMethod = :paymentMethod,
+            e.exchangeRate = :exchangeRate,
+            e.exchangeRateSource = :exchangeRateSource,
+            e.krwAmount = :krwAmount,
+            e.updatedAt = :now
+        WHERE e.id = :expenseId AND e.tripId = :tripId AND e.deletedAt IS NULL AND e.settlementId IS NULL
+          AND e.editLockOwnerTripMemberId = :ownerTripMemberId AND e.editLockToken = :token AND e.editLockExpiresAt > :now
+        """,
+    )
+    fun updateIfEditLocked(
+        @Param("expenseId") expenseId: Long,
+        @Param("tripId") tripId: Long,
+        @Param("ownerTripMemberId") ownerTripMemberId: Long,
+        @Param("token") token: UUID,
+        @Param("name") name: String,
+        @Param("splitType") splitType: SplitType,
+        @Param("originalAmount") originalAmount: Long,
+        @Param("discountAmount") discountAmount: Long,
+        @Param("amount") amount: Long,
+        @Param("currency") currency: ExpenseCurrency,
+        @Param("paidDate") paidDate: LocalDate,
+        @Param("payerTripMemberId") payerTripMemberId: Long,
+        @Param("paymentMethod") paymentMethod: PaymentMethod,
+        @Param("exchangeRate") exchangeRate: BigDecimal,
+        @Param("exchangeRateSource") exchangeRateSource: RateSource,
+        @Param("krwAmount") krwAmount: Long,
+        @Param("now") now: Instant,
     ): Int
 }

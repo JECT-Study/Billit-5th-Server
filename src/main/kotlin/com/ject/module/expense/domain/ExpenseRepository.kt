@@ -95,4 +95,29 @@ interface ExpenseRepository {
         ownerTripMemberId: Long,
         token: UUID,
     ): Boolean
+
+    /**
+     * 소유자와 토큰이 같고 [now]보다 늦게 만료되는 잠금이 있는 지출의 결제 정보와 금액을 [command]와 [calculation]의 값으로 바꾸고, 수정 시각을 [now]로 기록하면 `true`입니다.
+     *
+     * - 잠금이 없거나 소유자나 토큰이 다르거나 만료됐거나, 정산이 점유했거나 삭제된 지출이면 아무것도 바꾸지 않고 `false`입니다.
+     * - 지출 생성 고유키, 기록자, 환율 제공 기관과 잠금 칼럼은 바꾸지 않습니다. 품목, 품목별 부담자와 참여자별 부담액도 바꾸지 않습니다.
+     * - 호출하는 쪽의 트랜잭션에서 조건부 UPDATE 한 번으로 실행하며, 이때 얻은 지출 행의 잠금은 그 트랜잭션이 끝날 때 풀립니다.
+     *   실행 뒤 영속성 컨텍스트를 비우므로 이후 조회는 DB 값을 읽습니다.
+     */
+    fun updateExpenseIfEditLocked(
+        expenseId: Long,
+        tripId: Long,
+        ownerTripMemberId: Long,
+        token: UUID,
+        command: CreateExpenseCommand,
+        calculation: ExpenseCalculation,
+        now: Instant,
+    ): Boolean
+
+    /**
+     * 지출의 품목, 품목별 부담자 연결과 참여자별 최종 부담액 행을 모두 지웁니다. 지출 수정에서 요청한 값으로 다시 저장하기 직전에만 씁니다.
+     *
+     * 삭제 시각을 남기지 않고 행을 지우며 바로 실행합니다. 지출 행은 지우지 않습니다. 트랜잭션은 호출하는 쪽이 엽니다.
+     */
+    fun deleteItemsAndShareAmounts(expenseId: Long)
 }
