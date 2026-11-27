@@ -11,11 +11,7 @@ reviews:
   changed_files_summary: false
   poem: false
   auto_review:
-    enabled: true
-    drafts: false
-    base_branches:
-      - "^main$"
-      - "^develop$"
+    enabled: false
   path_instructions:
     - path: "**/*"
       instructions: |
