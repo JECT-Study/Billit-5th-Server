@@ -699,7 +699,7 @@ class ExpenseControllerTest : IntegrationTestSupport() {
                 // then
                 assertSoftly {
                     response.statusCode() shouldBe 409
-                    body(response) shouldBe errorBody("EXPENSE_SETTLEMENT_LOCKED", "정산 중이거나 정산한 지출은 수정할 수 없습니다.")
+                    body(response) shouldBe errorBody("EXPENSE_SETTLEMENT_LOCKED", "정산 중이거나 정산한 지출은 수정하거나 삭제할 수 없습니다.")
                 }
             }
 
@@ -781,6 +781,127 @@ class ExpenseControllerTest : IntegrationTestSupport() {
                         errorBody("EXPENSE_AMOUNT_MISMATCH", "품목 금액의 합계가 결제 총액과 다릅니다.")
                     extended.statusCode() shouldBe 200
                     body(get(path, accessToken)) shouldBe before
+                }
+            }
+        }
+
+        context("DELETE /api/v1/trips/{tripId}/expenses/{expenseId}") {
+            test("지출을 삭제하면 본문 없는 204를 받고, 지출 목록에서 빠지며 상세 조회와 같은 삭제를 다시 보낸 요청은 404 COMMON_NOT_FOUND를 받는다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                val listPath = "/api/v1/trips/${trip.tripId}/expenses"
+                val path =
+                    post(
+                        trip.tripId,
+                        validRequestBody(trip),
+                        accessToken,
+                        UUID.randomUUID().toString(),
+                    ).headers().firstValue("Location").get()
+                val listedBefore = body(get(listPath, accessToken))["data"] as List<*>
+
+                // when
+                val response = send("DELETE", path, accessToken)
+                val listed = body(get(listPath, accessToken))
+                val detail = get(path, accessToken)
+                val deletedAgain = send("DELETE", path, accessToken)
+
+                // then
+                val notFound = errorBody("COMMON_NOT_FOUND", "요청한 리소스를 찾을 수 없습니다.")
+                assertSoftly {
+                    listedBefore.size shouldBe 1
+                    response.statusCode() shouldBe 204
+                    response.body() shouldBe ""
+                    listed["data"] shouldBe emptyList<Any>()
+                    (listed["page"] as Map<*, *>)["totalElements"] shouldBe 0
+                    detail.statusCode() shouldBe 404
+                    body(detail) shouldBe notFound
+                    deletedAgain.statusCode() shouldBe 404
+                    body(deletedAgain) shouldBe notFound
+                }
+            }
+
+            test("수정 잠금이 유효한 지출은 409 EXPENSE_EDIT_LOCKED, 정산이 점유한 지출은 409 EXPENSE_SETTLEMENT_LOCKED와 안내 문구를 받고 지출은 남는다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                val editLockedPath =
+                    post(
+                        trip.tripId,
+                        validRequestBody(trip),
+                        accessToken,
+                        UUID.randomUUID().toString(),
+                    ).headers().firstValue("Location").get()
+                val settlementLockedPath =
+                    post(
+                        trip.tripId,
+                        validRequestBody(trip),
+                        accessToken,
+                        UUID.randomUUID().toString(),
+                    ).headers().firstValue("Location").get()
+                send("POST", "$editLockedPath/edit-lock", accessToken).statusCode() shouldBe 201
+                val settlementId =
+                    jdbc.queryForObject(
+                        "INSERT INTO settlement (trip_id, settlement_method, status, created_at, updated_at) " +
+                            "VALUES (?, 'SINGLE_CURRENCY', 'DRAFT', now(), now()) RETURNING id",
+                        Long::class.java,
+                        trip.tripId,
+                    )
+                jdbc.update(
+                    "UPDATE expense SET settlement_id = ? WHERE id = ?",
+                    settlementId,
+                    settlementLockedPath.substringAfterLast("/").toLong(),
+                )
+
+                // when
+                val editLocked = send("DELETE", editLockedPath, accessToken)
+                val settlementLocked = send("DELETE", settlementLockedPath, accessToken)
+
+                // then
+                assertSoftly {
+                    editLocked.statusCode() shouldBe 409
+                    body(editLocked) shouldBe errorBody("EXPENSE_EDIT_LOCKED", "다른 참여자가 수정 중인 지출입니다.")
+                    settlementLocked.statusCode() shouldBe 409
+                    body(settlementLocked) shouldBe
+                        errorBody("EXPENSE_SETTLEMENT_LOCKED", "정산 중이거나 정산한 지출은 수정하거나 삭제할 수 없습니다.")
+                    get(editLockedPath, accessToken).statusCode() shouldBe 200
+                    get(settlementLockedPath, accessToken).statusCode() shouldBe 200
+                }
+            }
+
+            test("숫자가 아닌 지출 ID는 400, Access Token이 없으면 401, 기록자도 관리자도 아닌 참여자는 403을 반환하고 지출을 삭제하지 않는다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                val path =
+                    post(
+                        trip.tripId,
+                        validRequestBody(trip),
+                        accessToken,
+                        UUID.randomUUID().toString(),
+                    ).headers().firstValue("Location").get()
+                val otherMemberId = createMember()
+                addTripMember(trip.tripId, otherMemberId, "지훈", "MEMBER", "MEMBER")
+
+                // when
+                val invalidId = send("DELETE", "/api/v1/trips/${trip.tripId}/expenses/expense-a", accessToken)
+                val withoutAccessToken = send("DELETE", path, token = null)
+                val forbidden = send("DELETE", path, accessToken(otherMemberId))
+
+                // then
+                assertSoftly {
+                    invalidId.statusCode() shouldBe 400
+                    body(invalidId) shouldBe
+                        mapOf(
+                            "code" to "COMMON_INVALID_REQUEST",
+                            "message" to "요청이 올바르지 않습니다.",
+                            "errors" to listOf(mapOf("field" to "expenseId", "reason" to "허용되지 않는 값입니다.")),
+                        )
+                    withoutAccessToken.statusCode() shouldBe 401
+                    body(withoutAccessToken)["code"] shouldBe "COMMON_UNAUTHORIZED"
+                    forbidden.statusCode() shouldBe 403
+                    body(forbidden) shouldBe errorBody("COMMON_FORBIDDEN", "요청을 수행할 권한이 없습니다.")
+                    get(path, accessToken).statusCode() shouldBe 200
                 }
             }
         }
@@ -927,14 +1048,16 @@ class ExpenseControllerTest : IntegrationTestSupport() {
     private fun send(
         method: String,
         path: String,
-        token: String,
+        token: String?,
         lockToken: String? = null,
     ): HttpResponse<String> {
         val request =
             HttpRequest
                 .newBuilder(URI.create("http://localhost:${environment.getRequiredProperty("local.server.port")}$path"))
-                .header("Authorization", "Bearer $token")
                 .method(method, HttpRequest.BodyPublishers.noBody())
+        if (token != null) {
+            request.header("Authorization", "Bearer $token")
+        }
         if (lockToken != null) {
             request.header("X-Lock-Token", lockToken)
         }

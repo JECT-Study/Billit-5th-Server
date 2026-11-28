@@ -30,6 +30,9 @@ class AcquireExpenseEditLockUseCaseTest : IntegrationTestSupport() {
     @Autowired
     private lateinit var acquireExpenseEditLockUseCase: AcquireExpenseEditLockUseCase
 
+    @Autowired
+    private lateinit var deleteExpenseUseCase: DeleteExpenseUseCase
+
     @MockitoSpyBean
     private lateinit var expenseRepository: ExpenseRepository
 
@@ -229,6 +232,42 @@ class AcquireExpenseEditLockUseCaseTest : IntegrationTestSupport() {
                 successes.size shouldBe 1
                 failures shouldBe listOf<ErrorCode>(ExpenseErrorCode.EDIT_LOCKED)
                 findLock(expenseId)["edit_lock_token"] shouldBe successes.single().lockToken
+            }
+        }
+
+        test("권한 확인을 마친 뒤 잠금을 걸기 전에 지출이 삭제되면 404로 거절하고 잠금을 걸지 않는다") {
+            // given
+            val trip = createTrip()
+            val expenseId = insertExpense(trip)
+            // 잠금 획득의 권한 확인이 지출을 읽은 직후에 다른 트랜잭션에서 삭제를 커밋합니다.
+            // 삭제의 권한 확인도 같은 조회를 거치므로 첫 조회에서만 끼어듭니다.
+            val lookups = AtomicInteger()
+            val executor = Executors.newSingleThreadExecutor()
+            doAnswer { invocation ->
+                val result = invocation.callRealMethod()
+                if (lookups.incrementAndGet() == 1) {
+                    executor
+                        .submit<Unit> { deleteExpenseUseCase.delete(trip.adminMemberId, trip.tripId, expenseId) }
+                        .get(10, TimeUnit.SECONDS)
+                }
+                result
+            }.`when`(expenseRepository).findExpense(expenseId)
+
+            // when
+            val failure =
+                try {
+                    shouldThrow<BusinessException> {
+                        acquireExpenseEditLockUseCase.acquire(trip.recorderMemberId, trip.tripId, expenseId)
+                    }
+                } finally {
+                    executor.shutdownNow()
+                }
+
+            // then
+            assertSoftly {
+                failure.errorCode shouldBe CommonErrorCode.NOT_FOUND
+                (jdbc.queryForObject("SELECT deleted_at FROM expense WHERE id = ?", Timestamp::class.java, expenseId) != null) shouldBe true
+                findLock(expenseId)["edit_lock_token"] shouldBe null
             }
         }
     }

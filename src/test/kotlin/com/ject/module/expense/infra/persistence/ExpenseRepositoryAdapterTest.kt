@@ -128,6 +128,52 @@ class ExpenseRepositoryAdapterTest : IntegrationTestSupport() {
                 findExpenseRow(expenseIds.getValue("만료 직후")) shouldBe before.getValue("만료 직후")
             }
         }
+
+        test("수정 잠금이 만료 전이면 지출을 삭제하지 않고, 만료 시각과 같거나 지났으면 지정한 시각을 deleted_at과 updated_at으로 기록한다") {
+            // given
+            val tripId = createTrip()
+            val tripMemberId = addGuest(tripId)
+            val expiresAt = Instant.parse("2026-11-05T03:05:00Z")
+            val nows =
+                mapOf(
+                    "만료 직전" to expiresAt.minusMillis(1),
+                    "만료 시각" to expiresAt,
+                    "만료 직후" to expiresAt.plusMillis(1),
+                )
+            val expenseIds =
+                nows.mapValues {
+                    expenseRepository.saveExpense(
+                        expense(
+                            tripId,
+                            tripMemberId,
+                            UUID.randomUUID(),
+                            name = "식사",
+                            lockToken = UUID.randomUUID(),
+                            lockExpiresAt = expiresAt,
+                        ),
+                    )
+                }
+            val before = expenseIds.mapValues { findExpenseRow(it.value) }
+
+            // when
+            val deleted =
+                nows.mapValues { (case, now) ->
+                    transactionTemplate.execute {
+                        expenseRepository.deleteExpenseIfUnlocked(expenseId = expenseIds.getValue(case), tripId = tripId, now = now)
+                    }
+                }
+
+            // then
+            val after = expenseIds.mapValues { findExpenseRow(it.value) }
+            assertSoftly {
+                deleted shouldBe mapOf("만료 직전" to false, "만료 시각" to true, "만료 직후" to true)
+                after.getValue("만료 직전") shouldBe before.getValue("만료 직전")
+                after.filterKeys { it != "만료 직전" }.mapValues { (it.value["deleted_at"] as Timestamp?)?.toInstant() } shouldBe
+                    mapOf("만료 시각" to expiresAt, "만료 직후" to expiresAt.plusMillis(1))
+                after.filterKeys { it != "만료 직전" }.mapValues { (it.value["updated_at"] as Timestamp).toInstant() } shouldBe
+                    mapOf("만료 시각" to expiresAt, "만료 직후" to expiresAt.plusMillis(1))
+            }
+        }
     }
 
     /** 테스트가 끝나면 지웁니다. 지출의 외래 키를 채우려고 여행 생성 API 대신 DB에 바로 넣습니다. */
