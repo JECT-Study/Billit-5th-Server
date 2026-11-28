@@ -23,6 +23,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class ReferenceExchangeRateControllerTest : IntegrationTestSupport() {
@@ -186,7 +187,7 @@ class ReferenceExchangeRateControllerTest : IntegrationTestSupport() {
 
             test("미래 날짜의 결제일은 400 COMMON_INVALID_REQUEST를 반환하고 고시 기관을 호출하지 않는다") {
                 // when
-                val response = get("JPY", today.plusDays(1).toString(), accessToken())
+                val response = get("JPY", LocalDate.now(ZoneOffset.ofHours(14)).plusDays(1).toString(), accessToken())
 
                 // then
                 assertSoftly {
