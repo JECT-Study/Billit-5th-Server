@@ -244,6 +244,88 @@ class ManualExchangeRateControllerTest : IntegrationTestSupport() {
                 response.statusCode() shouldBe 401
             }
         }
+
+        context("DELETE /api/v1/trips/{tripId}/exchange-rates/{exchangeRateId}") {
+            test("본인이 등록한 기록을 삭제하면 204를 반환하고 목록에서 빠진다") {
+                // given
+                val trip = createTrip()
+                val rateId = insertRate(trip.tripId, trip.tripMemberId)
+
+                // when
+                val response = delete(trip.tripId, rateId.toString(), trip.token)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 204
+                    response.body() shouldBe ""
+                    countRecords(trip.tripId) shouldBe 0
+                }
+            }
+
+            test("이미 삭제한 기록과 다른 참여자의 기록은 404 COMMON_NOT_FOUND를 반환한다") {
+                // given
+                val trip = createTrip()
+                val otherMemberId = createMember()
+                val otherTripMemberId = addTripMember(trip.tripId, otherMemberId, "민지", "MEMBER")
+                val othersRate = insertRate(trip.tripId, otherTripMemberId)
+                val deleted = insertRate(trip.tripId, trip.tripMemberId)
+                delete(trip.tripId, deleted.toString(), trip.token)
+
+                // when
+                val forOthers = delete(trip.tripId, othersRate.toString(), trip.token)
+                val again = delete(trip.tripId, deleted.toString(), trip.token)
+
+                // then
+                assertSoftly {
+                    forOthers.statusCode() shouldBe 404
+                    body(forOthers)["code"] shouldBe "COMMON_NOT_FOUND"
+                    again.statusCode() shouldBe 404
+                    body(again)["code"] shouldBe "COMMON_NOT_FOUND"
+                    countRecords(trip.tripId) shouldBe 1
+                }
+            }
+
+            test("숫자가 아닌 기록 ID는 400 COMMON_INVALID_REQUEST를 반환한다") {
+                // given
+                val trip = createTrip()
+
+                // when
+                val response = delete(trip.tripId, "abc", trip.token)
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 400
+                    body(response)["code"] shouldBe "COMMON_INVALID_REQUEST"
+                }
+            }
+
+            test("여행 참여자가 아니면 403을 반환한다") {
+                // given
+                val trip = createTrip()
+                val rateId = insertRate(trip.tripId, trip.tripMemberId)
+
+                // when
+                val response = delete(trip.tripId, rateId.toString(), accessToken(createMember()))
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 403
+                    body(response)["code"] shouldBe "COMMON_FORBIDDEN"
+                    countRecords(trip.tripId) shouldBe 1
+                }
+            }
+
+            test("인증 정보가 없으면 401을 반환한다") {
+                // given
+                val trip = createTrip()
+
+                // when
+                val response = delete(trip.tripId, "1", null)
+
+                // then
+                response.statusCode() shouldBe 401
+            }
+        }
     }
 
     private fun countRecords(tripId: Long): Long =
@@ -264,8 +346,8 @@ class ManualExchangeRateControllerTest : IntegrationTestSupport() {
             )
         tripIds.add(tripId)
         val memberId = createMember()
-        addTripMember(tripId, memberId, "지훈", "MEMBER")
-        return TripFixture(tripId, accessToken(memberId))
+        val tripMemberId = addTripMember(tripId, memberId, "지훈", "MEMBER")
+        return TripFixture(tripId, accessToken(memberId), tripMemberId)
     }
 
     private fun createMember(): Long {
@@ -285,15 +367,44 @@ class ManualExchangeRateControllerTest : IntegrationTestSupport() {
         memberId: Long,
         tripNickname: String,
         role: String,
-    ) {
-        jdbc.update(
-            "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, status, created_at, updated_at) " +
-                "VALUES (?, ?, ?, ?::trip_member_role, 'MEMBER'::trip_member_status, now(), now())",
-            tripId,
-            memberId,
-            tripNickname,
-            role,
+    ): Long =
+        checkNotNull(
+            jdbc.queryForObject(
+                "INSERT INTO trip_member (trip_id, member_id, trip_nickname, role, status, created_at, updated_at) " +
+                    "VALUES (?, ?, ?, ?::trip_member_role, 'MEMBER'::trip_member_status, now(), now()) RETURNING id",
+                Long::class.java,
+                tripId,
+                memberId,
+                tripNickname,
+                role,
+            ),
         )
+
+    private fun insertRate(
+        tripId: Long,
+        tripMemberId: Long,
+    ): Long =
+        checkNotNull(
+            jdbc.queryForObject(
+                "INSERT INTO manual_exchange_rate (trip_id, currency, rate, exchange_date, exchange_method, created_by_trip_member_id, " +
+                    "created_at, updated_at) VALUES (?, 'JPY', 9.12, '2026-11-05'::date, 'CASH'::exchange_method, ?, now(), now()) RETURNING id",
+                Long::class.java,
+                tripId,
+                tripMemberId,
+            ),
+        )
+
+    private fun delete(
+        tripId: Long,
+        exchangeRateId: String,
+        token: String?,
+    ): HttpResponse<String> {
+        val builder =
+            HttpRequest.newBuilder(URI.create("${baseUrl()}/api/v1/trips/$tripId/exchange-rates/$exchangeRateId")).DELETE()
+        if (token != null) {
+            builder.header("Authorization", "Bearer $token")
+        }
+        return httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString())
     }
 
     private fun accessToken(memberId: Long): String = authTokenCreator.createMemberTokens(memberId).accessToken
@@ -333,6 +444,7 @@ class ManualExchangeRateControllerTest : IntegrationTestSupport() {
     private data class TripFixture(
         val tripId: Long,
         val token: String,
+        val tripMemberId: Long,
     )
 
     companion object {

@@ -373,7 +373,93 @@ paths:
                     code: EXCHANGE_RATE_DUPLICATED
                     message: 같은 통화, 환전 날짜, 환전 수단과 환율의 기록을 이미 등록했습니다.
                     errors: null
+  "/api/v1/trips/{tripId}/exchange-rates/{exchangeRateId}":
+    parameters:
+    - "$ref": "./trip.yml#/components/parameters/TripId"
+    - "$ref": "./exchange-rate.yml#/components/parameters/ExchangeRateId"
+    delete:
+      tags:
+      - ExchangeRate
+      operationId: deleteExchangeRate
+      summary: 개인 환율 삭제
+      description: |
+        본인이 등록한 개인 환율 기록 하나를 삭제합니다. 삭제한 기록은 개인 환율 목록에서 빠집니다.
+
+        ### 요청 권한
+        이 여행에 참여 중인 로그인 참여자 중 그 기록을 등록한 회원만 요청할 수 있습니다.
+
+        ### 처리 조건
+        기록 ID, 여행과 요청한 회원의 여행 참여자가 모두 같은 기록만 삭제합니다. 삭제한 기록은 복구하지 않습니다.
+        지출은 환율 값을 복사해 저장하므로 삭제해도 기존 지출과 정산의 환율은 바뀌지 않습니다.
+
+        ### 사용 시 주의
+        다른 회원이 등록한 기록의 ID로 요청해도 기록의 존재를 알리지 않고 404를 반환합니다. 이미 삭제한 기록을 다시 삭제하면 404를 반환하며, 삭제 응답을 받지 못해 다시 보낸 요청도 같습니다.
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: 개인 환율 삭제 성공
+        '400':
+          description: |
+            tripId나 exchangeRateId가 숫자 ID가 아닙니다.
+
+            **오류 코드:** `COMMON_INVALID_REQUEST`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_INVALID_REQUEST:
+                  summary: 숫자가 아닌 개인 환율 ID
+                  value:
+                    code: COMMON_INVALID_REQUEST
+                    message: 요청이 올바르지 않습니다.
+                    errors:
+                    - field: exchangeRateId
+                      reason: 허용되지 않는 값입니다.
+        '401':
+          "$ref": "../common/components.yml#/responses/Unauthorized"
+        '403':
+          description: |
+            요청한 회원이 이 여행에 참여하지 않았거나 여행을 나갔습니다.
+
+            **오류 코드:** `COMMON_FORBIDDEN`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_FORBIDDEN:
+                  summary: 참여 중인 여행이 아님
+                  value:
+                    code: COMMON_FORBIDDEN
+                    message: 요청을 수행할 권한이 없습니다.
+                    errors: null
+        '404':
+          description: |
+            tripId에 해당하는 여행이 없거나 삭제됐거나, exchangeRateId에 해당하는 기록이 없거나 이미 삭제됐거나 요청한 회원이 이 여행에서 등록한 기록이 아닙니다.
+
+            **오류 코드:** `COMMON_NOT_FOUND`
+          content:
+            application/json:
+              schema:
+                "$ref": "../common/components.yml#/schemas/ErrorResponse"
+              examples:
+                COMMON_NOT_FOUND:
+                  summary: 여행이나 본인 기록이 없음
+                  value:
+                    code: COMMON_NOT_FOUND
+                    message: 요청한 리소스를 찾을 수 없습니다.
+                    errors: null
 components:
+  parameters:
+    ExchangeRateId:
+      name: exchangeRateId
+      in: path
+      required: true
+      description: 개인 환율 기록 ID
+      schema:
+        "$ref": "../common/components.yml#/schemas/ResourceId"
   schemas:
     PersonalRate:
       type: object

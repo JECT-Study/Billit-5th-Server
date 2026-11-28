@@ -5,6 +5,7 @@ import com.ject.global.response.ApiResponse
 import com.ject.module.exchangerate.presentation.request.ListManualExchangeRatesRequest
 import com.ject.module.exchangerate.presentation.request.RegisterManualExchangeRateRequest
 import com.ject.module.exchangerate.presentation.response.ManualExchangeRateResponse
+import com.ject.module.exchangerate.usecase.DeleteManualExchangeRateUseCase
 import com.ject.module.exchangerate.usecase.ListManualExchangeRatesUseCase
 import com.ject.module.exchangerate.usecase.RegisterManualExchangeRateUseCase
 import jakarta.validation.Valid
@@ -12,6 +13,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -26,6 +28,7 @@ import java.math.RoundingMode
 class ManualExchangeRateController(
     private val registerManualExchangeRateUseCase: RegisterManualExchangeRateUseCase,
     private val listManualExchangeRatesUseCase: ListManualExchangeRatesUseCase,
+    private val deleteManualExchangeRateUseCase: DeleteManualExchangeRateUseCase,
 ) {
     /** 개인 환율을 조회하는 API가 한 건 단위로는 없으므로 `Location` 없이 201로 응답합니다. */
     @PostMapping
@@ -85,6 +88,18 @@ class ManualExchangeRateController(
                 hasNext = result.hasNext,
             ),
         )
+    }
+
+    /** 이미 삭제한 기록을 다시 삭제하면 404로 응답합니다. */
+    @DeleteMapping("/{exchangeRateId}")
+    fun deleteManualExchangeRate(
+        @AuthenticationPrincipal accessToken: Jwt,
+        @PathVariable tripId: Long,
+        @PathVariable exchangeRateId: Long,
+    ): ResponseEntity<Void> {
+        deleteManualExchangeRateUseCase.delete(memberId(accessToken), tripId, exchangeRateId)
+
+        return ResponseEntity.noContent().build<Void>()
     }
 
     private fun memberId(accessToken: Jwt): Long = checkNotNull(accessToken.subject).toLong()
