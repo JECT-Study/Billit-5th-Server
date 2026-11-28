@@ -12,7 +12,7 @@ enum class ExpenseErrorCode(
     IDEMPOTENCY_KEY_REUSED(409, "이미 사용된 지출 등록 요청입니다. 다시 시도해주세요."),
     EDIT_LOCKED(409, "다른 참여자가 수정 중인 지출입니다."),
     EDIT_LOCK_INVALID(409, "수정 가능 시간이 지났거나 다른 화면에서 수정을 시작했습니다. 다시 수정해주세요."),
-    SETTLEMENT_LOCKED(409, "정산 중이거나 정산한 지출은 수정할 수 없습니다."),
+    SETTLEMENT_LOCKED(409, "정산 중이거나 정산한 지출은 수정하거나 삭제할 수 없습니다."),
     RECEIPT_TOO_LARGE(413, "15MB 이하의 영수증 이미지를 선택해주세요."),
     RECEIPT_UNSUPPORTED(415, "JPG, PNG, HEIC, WEBP 형식의 영수증 이미지를 선택해주세요."),
     NOT_RECEIPT(400, "영수증을 찾지 못했습니다. 영수증 사진을 다시 선택해주세요."),
