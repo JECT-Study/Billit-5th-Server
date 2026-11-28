@@ -14,6 +14,8 @@ tags:
   description: 여행
 - name: Expense
   description: 지출
+- name: ExchangeRate
+  description: 환율
 paths:
   '/api/v1/auth/social-logins':
     $ref: './domains/auth.yml#/paths/~1api~1v1~1auth~1social-logins'
@@ -51,6 +53,8 @@ paths:
     $ref: './domains/expense.yml#/paths/~1api~1v1~1trips~1{tripId}~1expenses~1{expenseId}~1edit-lock'
   '/api/v1/trips/{tripId}/receipt-recognitions':
     $ref: './domains/expense.yml#/paths/~1api~1v1~1trips~1{tripId}~1receipt-recognitions'
+  '/api/v1/reference-exchange-rates':
+    $ref: './domains/exchange-rate.yml#/paths/~1api~1v1~1reference-exchange-rates'
 components:
   securitySchemes:
     registrationBearerAuth:

@@ -175,6 +175,7 @@ DB 롤백이 외부 API 호출이나 다른 저장소의 변경까지 되돌리�
 | --- | --- | --- |
 | [AuthSessionJpaRepository](../../src/main/kotlin/com/ject/module/auth/infra/persistence/jpa/AuthSessionJpaRepository.kt)의 `revokeIfActive` | 이미 사용된 Refresh Token이 다시 제출됐을 때의 로그인 세션 종료 | 401로 응답하면서도 세션 종료는 반영돼야 탈취된 토큰을 막을 수 있습니다. |
 | [AppleRefreshTokenJpaRepository](../../src/main/kotlin/com/ject/module/auth/infra/persistence/jpa/AppleRefreshTokenJpaRepository.kt)의 `upsert`, `deleteByMemberIdAndEncryptedRefreshToken` | 애플 Refresh Token 저장·삭제 | [SocialLoginUseCase](../../src/main/kotlin/com/ject/module/auth/usecase/SocialLoginUseCase.kt)와 애플 연결 해제는 애플 토큰 API 호출을 사이에 두므로 DB 트랜잭션을 외부 호출 동안 열어 두지 않습니다. 각 쓰기는 조건부 쿼리 한 번이고, 하나가 실패해도 앞의 쓰기를 되돌릴 필요가 없습니다(다음 로그인에서 다시 저장합니다). |
+| [ReferenceExchangeRateJpaRepository](../../src/main/kotlin/com/ject/module/exchangerate/infra/persistence/jpa/ReferenceExchangeRateJpaRepository.kt)의 `insertIfAbsent` | 고시 기관에서 받은 기준 환율 저장 | [GetReferenceExchangeRateUseCase](../../src/main/kotlin/com/ject/module/exchangerate/usecase/GetReferenceExchangeRateUseCase.kt)는 고시 기관 API 호출 뒤에 저장하므로 호출 동안 DB 트랜잭션을 열어 두지 않습니다. `INSERT ... ON CONFLICT DO NOTHING` 한 번으로 끝나며, 동시에 저장해도 한 행만 남고 늦은 요청은 오류 없이 받은 환율로 응답합니다. |
 
 ### 예외: 유니크 제약 위반 뒤 다시 조회하는 저장
 
