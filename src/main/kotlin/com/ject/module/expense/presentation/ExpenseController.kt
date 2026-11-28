@@ -19,6 +19,7 @@ import com.ject.module.expense.usecase.ExtendExpenseEditLockUseCase
 import com.ject.module.expense.usecase.GetExpenseDetailUseCase
 import com.ject.module.expense.usecase.ListExpensesUseCase
 import com.ject.module.expense.usecase.ReleaseExpenseEditLockUseCase
+import com.ject.module.expense.usecase.UpdateExpenseUseCase
 import jakarta.validation.Valid
 import jakarta.validation.constraints.Pattern
 import org.springframework.http.HttpStatus
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.PutMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RequestMapping
@@ -45,6 +47,7 @@ class ExpenseController(
     private val createExpenseUseCase: CreateExpenseUseCase,
     private val listExpensesUseCase: ListExpensesUseCase,
     private val getExpenseDetailUseCase: GetExpenseDetailUseCase,
+    private val updateExpenseUseCase: UpdateExpenseUseCase,
     private val acquireExpenseEditLockUseCase: AcquireExpenseEditLockUseCase,
     private val extendExpenseEditLockUseCase: ExtendExpenseEditLockUseCase,
     private val releaseExpenseEditLockUseCase: ReleaseExpenseEditLockUseCase,
@@ -57,35 +60,7 @@ class ExpenseController(
         @RequestHeader(IDEMPOTENCY_KEY_HEADER) @Pattern(regexp = UUID_PATTERN) idempotencyKey: String,
         @Valid @RequestBody request: CreateExpenseRequest,
     ): ResponseEntity<ApiResponse<ExpenseDetailResponse>> {
-        val command =
-            CreateExpenseCommand(
-                name = request.name,
-                splitType =
-                    when (request.splitType) {
-                        ExpenseSplitType.EQUAL -> SplitType.EQUAL
-                        ExpenseSplitType.BY_ITEM -> SplitType.ITEM
-                    },
-                currency = request.currency,
-                paidDate = request.paidDate,
-                paymentMethod = request.paymentMethod,
-                payerTripMemberId = id(request.payerTripMemberId),
-                originalAmount = BigDecimal(request.originalAmount),
-                discountAmount = BigDecimal(request.discountAmount),
-                exchangeRate = BigDecimal(request.exchangeRate),
-                exchangeRateSource = request.exchangeRateSource,
-                tripMemberIds = request.tripMemberIds?.map { id(it) },
-                items =
-                    request.items?.map { item ->
-                        CreateExpenseCommand.Item(
-                            name = item.name,
-                            amount = BigDecimal(item.amount),
-                            discountAmount = BigDecimal(item.discountAmount),
-                            tripMemberIds = item.tripMemberIds.map { id(it) },
-                        )
-                    },
-            )
-
-        val expense = createExpenseUseCase.create(memberId(accessToken), tripId, UUID.fromString(idempotencyKey), command)
+        val expense = createExpenseUseCase.create(memberId(accessToken), tripId, UUID.fromString(idempotencyKey), request.toCommand())
 
         return ResponseEntity
             .created(URI.create("/api/v1/trips/$tripId/expenses/${expense.expenseId}"))
@@ -131,6 +106,20 @@ class ExpenseController(
     ): ResponseEntity<ApiResponse<ExpenseDetailResponse>> =
         ResponseEntity.ok(ApiResponse(getExpenseDetailUseCase.get(memberId(accessToken), tripId, expenseId).toResponse()))
 
+    /** 수정에 성공하면 수정 잠금이 풀리므로, 같은 `X-Lock-Token`으로 다시 보낸 요청은 409로 거절됩니다. */
+    @PutMapping("/{expenseId}")
+    fun updateExpense(
+        @AuthenticationPrincipal accessToken: Jwt,
+        @PathVariable tripId: Long,
+        @PathVariable expenseId: Long,
+        @RequestHeader(LOCK_TOKEN_HEADER) @Pattern(regexp = UUID_PATTERN) lockToken: String,
+        @Valid @RequestBody request: CreateExpenseRequest,
+    ): ResponseEntity<ApiResponse<ExpenseDetailResponse>> {
+        val expense = updateExpenseUseCase.update(memberId(accessToken), tripId, expenseId, UUID.fromString(lockToken), request.toCommand())
+
+        return ResponseEntity.ok(ApiResponse(expense.toResponse()))
+    }
+
     /** 잠금은 따로 조회하는 API가 없어 `Location` 없이 201로 응답합니다. */
     @PostMapping("/{expenseId}/edit-lock")
     fun acquireExpenseEditLock(
@@ -171,6 +160,35 @@ class ExpenseController(
 
     /** 숫자가 아닌 ID는 어떤 참여자도 가리킬 수 없으므로 경로의 숫자 ID와 같이 400으로 거절합니다. */
     private fun id(value: String): Long = value.toLongOrNull() ?: throw BusinessException(CommonErrorCode.INVALID_REQUEST)
+
+    /** 지출 생성과 수정이 같은 요청 본문을 받으므로 업무 입력으로 바꾸는 변환도 함께 씁니다. */
+    private fun CreateExpenseRequest.toCommand(): CreateExpenseCommand =
+        CreateExpenseCommand(
+            name = name,
+            splitType =
+                when (splitType) {
+                    ExpenseSplitType.EQUAL -> SplitType.EQUAL
+                    ExpenseSplitType.BY_ITEM -> SplitType.ITEM
+                },
+            currency = currency,
+            paidDate = paidDate,
+            paymentMethod = paymentMethod,
+            payerTripMemberId = id(payerTripMemberId),
+            originalAmount = BigDecimal(originalAmount),
+            discountAmount = BigDecimal(discountAmount),
+            exchangeRate = BigDecimal(exchangeRate),
+            exchangeRateSource = exchangeRateSource,
+            tripMemberIds = tripMemberIds?.map { id(it) },
+            items =
+                items?.map { item ->
+                    CreateExpenseCommand.Item(
+                        name = item.name,
+                        amount = BigDecimal(item.amount),
+                        discountAmount = BigDecimal(item.discountAmount),
+                        tripMemberIds = item.tripMemberIds.map { id(it) },
+                    )
+                },
+        )
 
     private fun ExpenseDetailResult.toResponse(): ExpenseDetailResponse =
         ExpenseDetailResponse(

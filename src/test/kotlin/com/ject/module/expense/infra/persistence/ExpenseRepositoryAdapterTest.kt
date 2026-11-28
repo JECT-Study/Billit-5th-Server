@@ -1,7 +1,9 @@
 package com.ject.module.expense.infra.persistence
 
 import com.ject.global.persistence.violatedUniqueConstraint
+import com.ject.module.expense.domain.CreateExpenseCommand
 import com.ject.module.expense.domain.Expense
+import com.ject.module.expense.domain.ExpenseCalculation
 import com.ject.module.expense.domain.ExpenseCurrency
 import com.ject.module.expense.domain.ExpenseIdempotencyKeyDuplicatedException
 import com.ject.module.expense.domain.ExpenseRepository
@@ -14,13 +16,19 @@ import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.transaction.support.TransactionTemplate
 import java.math.BigDecimal
+import java.sql.Timestamp
+import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 
 class ExpenseRepositoryAdapterTest : IntegrationTestSupport() {
     @Autowired
     private lateinit var expenseRepository: ExpenseRepository
+
+    @Autowired
+    private lateinit var transactionTemplate: TransactionTemplate
 
     private val tripIds = mutableListOf<Long>()
 
@@ -72,6 +80,54 @@ class ExpenseRepositoryAdapterTest : IntegrationTestSupport() {
                 countExpenses(idempotencyKey) shouldBe 0
             }
         }
+
+        test("수정 잠금이 만료 시각과 같거나 지났으면 지출을 바꾸지 않고, 만료 전이면 지정한 시각을 updated_at으로 기록한다") {
+            // given
+            val tripId = createTrip()
+            val tripMemberId = addGuest(tripId)
+            val token = UUID.randomUUID()
+            val expiresAt = Instant.parse("2026-11-05T03:05:00Z")
+            val nows =
+                mapOf(
+                    "만료 직전" to expiresAt.minusMillis(1),
+                    "만료 시각" to expiresAt,
+                    "만료 직후" to expiresAt.plusMillis(1),
+                )
+            val expenseIds =
+                nows.mapValues {
+                    expenseRepository.saveExpense(
+                        expense(tripId, tripMemberId, UUID.randomUUID(), name = "식사", lockToken = token, lockExpiresAt = expiresAt),
+                    )
+                }
+            val before = expenseIds.mapValues { findExpenseRow(it.value) }
+
+            // when
+            val updated =
+                nows.mapValues { (case, now) ->
+                    transactionTemplate.execute {
+                        expenseRepository.updateExpenseIfEditLocked(
+                            expenseId = expenseIds.getValue(case),
+                            tripId = tripId,
+                            ownerTripMemberId = tripMemberId,
+                            token = token,
+                            command = renameCommand(payerTripMemberId = tripMemberId),
+                            calculation = ExpenseCalculation(9000, 0, 9000, 9000, emptyList(), emptyList()),
+                            now = now,
+                        )
+                    }
+                }
+
+            // then
+            val updatedRow = findExpenseRow(expenseIds.getValue("만료 직전"))
+            assertSoftly {
+                updated shouldBe mapOf("만료 직전" to true, "만료 시각" to false, "만료 직후" to false)
+                updatedRow["name"] shouldBe "저녁 식사"
+                updatedRow["amount"] shouldBe 9000L
+                (updatedRow["updated_at"] as Timestamp).toInstant() shouldBe expiresAt.minusMillis(1)
+                findExpenseRow(expenseIds.getValue("만료 시각")) shouldBe before.getValue("만료 시각")
+                findExpenseRow(expenseIds.getValue("만료 직후")) shouldBe before.getValue("만료 직후")
+            }
+        }
     }
 
     /** 테스트가 끝나면 지웁니다. 지출의 외래 키를 채우려고 여행 생성 API 대신 DB에 바로 넣습니다. */
@@ -102,11 +158,14 @@ class ExpenseRepositoryAdapterTest : IntegrationTestSupport() {
             ),
         )
 
+    /** [lockToken]을 주면 [tripMemberId]가 [lockExpiresAt]까지 유효한 수정 잠금을 가진 지출입니다. */
     private fun expense(
         tripId: Long,
         tripMemberId: Long,
         idempotencyKey: UUID,
         name: String,
+        lockToken: UUID? = null,
+        lockExpiresAt: Instant? = null,
     ): Expense =
         Expense(
             tripId = tripId,
@@ -125,11 +184,30 @@ class ExpenseRepositoryAdapterTest : IntegrationTestSupport() {
             exchangeRateSource = RateSource.MANUAL,
             exchangeRateProvider = null,
             krwAmount = 12000,
-            editLockOwnerTripMemberId = null,
-            editLockExpiresAt = null,
-            editLockToken = null,
+            editLockOwnerTripMemberId = if (lockToken == null) null else tripMemberId,
+            editLockExpiresAt = lockExpiresAt,
+            editLockToken = lockToken,
             settlementId = null,
         )
+
+    /** 지출명과 금액만 바꾸는 수정 입력입니다. */
+    private fun renameCommand(payerTripMemberId: Long): CreateExpenseCommand =
+        CreateExpenseCommand(
+            name = "저녁 식사",
+            splitType = SplitType.EQUAL,
+            currency = ExpenseCurrency.KRW,
+            paidDate = LocalDate.parse("2026-11-05"),
+            paymentMethod = PaymentMethod.CARD,
+            payerTripMemberId = payerTripMemberId,
+            originalAmount = BigDecimal("9000.00"),
+            discountAmount = BigDecimal("0.00"),
+            exchangeRate = BigDecimal("1.00"),
+            exchangeRateSource = RateSource.MANUAL,
+            tripMemberIds = listOf(payerTripMemberId),
+            items = null,
+        )
+
+    private fun findExpenseRow(expenseId: Long): Map<String, Any?> = jdbc.queryForMap("SELECT * FROM expense WHERE id = ?", expenseId)
 
     private fun countExpenses(idempotencyKey: UUID): Int =
         checkNotNull(jdbc.queryForObject("SELECT count(*) FROM expense WHERE idempotency_key = ?", Int::class.java, idempotencyKey))

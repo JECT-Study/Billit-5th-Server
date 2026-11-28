@@ -38,6 +38,7 @@ class ExpenseControllerTest : IntegrationTestSupport() {
                 jdbc.update("DELETE FROM expense_item_member WHERE expense_id IN (SELECT id FROM expense WHERE trip_id = ?)", id)
                 jdbc.update("DELETE FROM expense_item WHERE expense_id IN (SELECT id FROM expense WHERE trip_id = ?)", id)
                 jdbc.update("DELETE FROM expense WHERE trip_id = ?", id)
+                jdbc.update("DELETE FROM settlement WHERE trip_id = ?", id)
                 jdbc.update("DELETE FROM trip_member WHERE trip_id = ?", id)
                 jdbc.update("DELETE FROM trip WHERE id = ?", id)
             }
@@ -556,6 +557,233 @@ class ExpenseControllerTest : IntegrationTestSupport() {
                 }
             }
         }
+
+        context("PUT /api/v1/trips/{tripId}/expenses/{expenseId}") {
+            test("잠금 토큰으로 품목별 USD 지출로 수정하면 200과 다시 계산한 지출 상세를 받고, 잠금이 풀려 상세 조회도 같은 값을 반환한다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                post(trip.tripId, validRequestBody(trip), accessToken, UUID.randomUUID().toString())
+                val expenseId = findExpenseIds(trip.tripId).single()
+                val path = "/api/v1/trips/${trip.tripId}/expenses/$expenseId"
+                val lockToken = (body(send("POST", "$path/edit-lock", accessToken))["data"] as Map<*, *>)["lockToken"] as String
+                val requestBody =
+                    """
+                    {
+                      "name": "Dinner",
+                      "splitType": "BY_ITEM",
+                      "currency": "USD",
+                      "paidDate": "2026-11-06",
+                      "paymentMethod": "TRAVEL_CARD",
+                      "payerTripMemberId": "${trip.adminId}",
+                      "originalAmount": "12.34",
+                      "discountAmount": "0.34",
+                      "exchangeRate": "1380.55",
+                      "exchangeRateSource": "AUTO",
+                      "items": [
+                        { "name": "피자", "amount": "10.00", "discountAmount": "1.00", "tripMemberIds": ["${trip.guestId}", "${trip.adminId}"] },
+                        { "amount": "2.34", "discountAmount": "0.00", "tripMemberIds": ["${trip.adminId}"] }
+                      ]
+                    }
+                    """.trimIndent()
+
+                // when
+                val response = put(path, requestBody, accessToken, lockToken)
+
+                // then
+                // 최종 결제액 11.00달러를 13.68 : 9.00 비율로 나눠 6.63달러와 4.37달러, 원화 환산액 15186원을 9153원과 6033원으로 나눕니다.
+                val itemIds = findItemIds(expenseId)
+                assertSoftly {
+                    response.statusCode() shouldBe 200
+                    response.headers().firstValue("Location").isPresent shouldBe false
+                    body(response)["data"] shouldBe
+                        mapOf(
+                            "expenseId" to expenseId.toString(),
+                            "name" to "Dinner",
+                            "paidDate" to "2026-11-06",
+                            "currency" to "USD",
+                            "amount" to "11.00",
+                            "payerTripMemberId" to trip.adminId.toString(),
+                            "settlementId" to null,
+                            "isEditLocked" to false,
+                            "tripId" to trip.tripId.toString(),
+                            "splitType" to "BY_ITEM",
+                            "createdByTripMemberId" to trip.adminId.toString(),
+                            "paymentMethod" to "TRAVEL_CARD",
+                            "originalAmount" to "12.34",
+                            "discountAmount" to "0.34",
+                            "exchangeRate" to "1380.55",
+                            "exchangeRateSource" to "AUTO",
+                            "exchangeRateProvider" to null,
+                            "exchangeRateBaseDate" to null,
+                            "amountKrw" to "15186.00",
+                            "items" to
+                                listOf(
+                                    mapOf(
+                                        "expenseItemId" to itemIds[0].toString(),
+                                        "name" to "피자",
+                                        "amount" to "10.00",
+                                        "discountAmount" to "1.00",
+                                        "sortOrder" to 0,
+                                        "tripMemberIds" to listOf(trip.adminId.toString(), trip.guestId.toString()),
+                                    ),
+                                    mapOf(
+                                        "expenseItemId" to itemIds[1].toString(),
+                                        "name" to null,
+                                        "amount" to "2.34",
+                                        "discountAmount" to "0.00",
+                                        "sortOrder" to 1,
+                                        "tripMemberIds" to listOf(trip.adminId.toString()),
+                                    ),
+                                ),
+                            "shares" to
+                                listOf(
+                                    mapOf("tripMemberId" to trip.adminId.toString(), "amount" to "6.63", "amountKrw" to "9153.00"),
+                                    mapOf("tripMemberId" to trip.guestId.toString(), "amount" to "4.37", "amountKrw" to "6033.00"),
+                                ),
+                        )
+                    body(get(path, accessToken)) shouldBe body(response)
+                }
+            }
+
+            test("수정에 성공한 뒤 같은 X-Lock-Token으로 다시 보내거나 잠금 없이 수정하면 409 EXPENSE_EDIT_LOCK_INVALID와 안내 문구를 받는다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                post(trip.tripId, validRequestBody(trip), accessToken, UUID.randomUUID().toString())
+                val path = "/api/v1/trips/${trip.tripId}/expenses/${findExpenseIds(trip.tripId).single()}"
+                val requestBody = jsonMapper.writeValueAsString(validRequest(trip) + ("name" to "저녁 식사"))
+
+                // when
+                val withoutLock = put(path, requestBody, accessToken, UUID.randomUUID().toString())
+                val lockToken = (body(send("POST", "$path/edit-lock", accessToken))["data"] as Map<*, *>)["lockToken"] as String
+                val updated = put(path, requestBody, accessToken, lockToken)
+                val resent = put(path, requestBody, accessToken, lockToken)
+
+                // then
+                val lockInvalid = errorBody("EXPENSE_EDIT_LOCK_INVALID", "수정 가능 시간이 지났거나 다른 화면에서 수정을 시작했습니다. 다시 수정해주세요.")
+                assertSoftly {
+                    withoutLock.statusCode() shouldBe 409
+                    body(withoutLock) shouldBe lockInvalid
+                    updated.statusCode() shouldBe 200
+                    resent.statusCode() shouldBe 409
+                    body(resent) shouldBe lockInvalid
+                    body(get(path, accessToken)) shouldBe body(updated)
+                }
+            }
+
+            test("정산이 점유한 지출을 수정하면 409 EXPENSE_SETTLEMENT_LOCKED와 안내 문구를 받는다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                post(trip.tripId, validRequestBody(trip), accessToken, UUID.randomUUID().toString())
+                val expenseId = findExpenseIds(trip.tripId).single()
+                val settlementId =
+                    jdbc.queryForObject(
+                        "INSERT INTO settlement (trip_id, settlement_method, status, created_at, updated_at) " +
+                            "VALUES (?, 'SINGLE_CURRENCY', 'DRAFT', now(), now()) RETURNING id",
+                        Long::class.java,
+                        trip.tripId,
+                    )
+                jdbc.update("UPDATE expense SET settlement_id = ? WHERE id = ?", settlementId, expenseId)
+
+                // when
+                val response =
+                    put(
+                        "/api/v1/trips/${trip.tripId}/expenses/$expenseId",
+                        validRequestBody(trip),
+                        accessToken,
+                        UUID.randomUUID().toString(),
+                    )
+
+                // then
+                assertSoftly {
+                    response.statusCode() shouldBe 409
+                    body(response) shouldBe errorBody("EXPENSE_SETTLEMENT_LOCKED", "정산 중이거나 정산한 지출은 수정할 수 없습니다.")
+                }
+            }
+
+            test("X-Lock-Token이 없거나 UUID 형식이 아니면 400, Access Token이 없으면 401을 반환하고 지출을 바꾸지 않는다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                post(trip.tripId, validRequestBody(trip), accessToken, UUID.randomUUID().toString())
+                val path = "/api/v1/trips/${trip.tripId}/expenses/${findExpenseIds(trip.tripId).single()}"
+                val lockToken = (body(send("POST", "$path/edit-lock", accessToken))["data"] as Map<*, *>)["lockToken"] as String
+                val before = body(get(path, accessToken))
+                val requestBody = jsonMapper.writeValueAsString(validRequest(trip) + ("name" to "저녁 식사"))
+
+                // when
+                val withoutLockToken = put(path, requestBody, accessToken, lockToken = null)
+                val malformedLockToken = put(path, requestBody, accessToken, lockToken.replace("-", ""))
+                val withoutAccessToken = put(path, requestBody, token = null, lockToken)
+
+                // then
+                assertSoftly {
+                    withoutLockToken.statusCode() shouldBe 400
+                    body(withoutLockToken)["code"] shouldBe "COMMON_INVALID_REQUEST"
+                    malformedLockToken.statusCode() shouldBe 400
+                    body(malformedLockToken)["code"] shouldBe "COMMON_INVALID_REQUEST"
+                    withoutAccessToken.statusCode() shouldBe 401
+                    body(withoutAccessToken)["code"] shouldBe "COMMON_UNAUTHORIZED"
+                    body(get(path, accessToken)) shouldBe before
+                }
+            }
+
+            test("형식이나 업무 규칙에 맞지 않는 본문은 400과 오류 코드를 반환하고, 지출과 수정 잠금을 그대로 두어 같은 토큰으로 연장할 수 있다") {
+                // given
+                val trip = createTrip()
+                val accessToken = accessToken(trip.adminMemberId)
+                post(trip.tripId, validRequestBody(trip), accessToken, UUID.randomUUID().toString())
+                val path = "/api/v1/trips/${trip.tripId}/expenses/${findExpenseIds(trip.tripId).single()}"
+                val lockToken = (body(send("POST", "$path/edit-lock", accessToken))["data"] as Map<*, *>)["lockToken"] as String
+                val before = body(get(path, accessToken))
+                val valid = validRequest(trip)
+                val requests =
+                    mapOf(
+                        "정의하지 않은 필드" to valid + ("shares" to emptyList<String>()),
+                        "필수 필드 생략" to valid - "name",
+                        "KRW의 소수 금액" to valid + ("originalAmount" to "12000.50"),
+                        "비로그인 참여자를 결제자로" to valid + ("payerTripMemberId" to trip.guestId.toString()),
+                        "품목 합계가 총액과 다름" to
+                            valid - "tripMemberIds" +
+                            mapOf(
+                                "splitType" to "BY_ITEM",
+                                "items" to
+                                    listOf(
+                                        mapOf(
+                                            "amount" to "1.00",
+                                            "discountAmount" to "0.00",
+                                            "tripMemberIds" to listOf(trip.adminId.toString()),
+                                        ),
+                                    ),
+                            ),
+                    )
+
+                // when
+                val responses = requests.mapValues { put(path, jsonMapper.writeValueAsString(it.value), accessToken, lockToken) }
+                val extended = send("PATCH", "$path/edit-lock", accessToken, lockToken)
+
+                // then
+                assertSoftly {
+                    responses.mapValues { it.value.statusCode() } shouldBe requests.mapValues { 400 }
+                    responses.mapValues { body(it.value)["code"] } shouldBe
+                        mapOf(
+                            "정의하지 않은 필드" to "COMMON_INVALID_REQUEST",
+                            "필수 필드 생략" to "COMMON_INVALID_REQUEST",
+                            "KRW의 소수 금액" to "COMMON_INVALID_REQUEST",
+                            "비로그인 참여자를 결제자로" to "EXPENSE_INVALID_SHARES",
+                            "품목 합계가 총액과 다름" to "EXPENSE_AMOUNT_MISMATCH",
+                        )
+                    body(responses.getValue("비로그인 참여자를 결제자로")) shouldBe
+                        errorBody("EXPENSE_INVALID_SHARES", "결제자나 부담자로 지정할 수 없는 참여자가 있습니다.")
+                    body(responses.getValue("품목 합계가 총액과 다름")) shouldBe
+                        errorBody("EXPENSE_AMOUNT_MISMATCH", "품목 금액의 합계가 결제 총액과 다릅니다.")
+                    extended.statusCode() shouldBe 200
+                    body(get(path, accessToken)) shouldBe before
+                }
+            }
+        }
     }
 
     /** 테스트가 끝나면 지웁니다. 확정 상태를 직접 정하려고 여행 생성 API 대신 DB에 바로 넣습니다. */
@@ -659,6 +887,26 @@ class ExpenseControllerTest : IntegrationTestSupport() {
         }
         if (idempotencyKey != null) {
             request.header("Idempotency-Key", idempotencyKey)
+        }
+        return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString())
+    }
+
+    private fun put(
+        path: String,
+        requestBody: String,
+        token: String?,
+        lockToken: String?,
+    ): HttpResponse<String> {
+        val request =
+            HttpRequest
+                .newBuilder(URI.create("http://localhost:${environment.getRequiredProperty("local.server.port")}$path"))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(requestBody))
+        if (token != null) {
+            request.header("Authorization", "Bearer $token")
+        }
+        if (lockToken != null) {
+            request.header("X-Lock-Token", lockToken)
         }
         return httpClient.send(request.build(), HttpResponse.BodyHandlers.ofString())
     }

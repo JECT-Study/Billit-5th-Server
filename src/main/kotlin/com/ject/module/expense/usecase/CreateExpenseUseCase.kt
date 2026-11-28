@@ -7,12 +7,11 @@ import com.ject.module.expense.domain.ExpenseDetailResult
 import com.ject.module.expense.domain.ExpenseErrorCode
 import com.ject.module.expense.domain.ExpenseIdempotencyKeyDuplicatedException
 import com.ject.module.expense.domain.ExpenseRepository
-import com.ject.module.expense.domain.SplitType
 import com.ject.module.expense.implement.ExpenseCalculator
 import com.ject.module.expense.implement.ExpenseCreator
 import com.ject.module.expense.implement.ExpenseDetailReader
+import com.ject.module.expense.implement.ExpenseShareValidator
 import com.ject.module.trip.domain.TripMemberStatus
-import com.ject.module.trip.domain.TripParticipantResult
 import com.ject.module.trip.domain.TripRepository
 import com.ject.module.trip.domain.TripStatus
 import org.springframework.stereotype.Service
@@ -29,6 +28,7 @@ import java.util.UUID
 class CreateExpenseUseCase(
     private val tripRepository: TripRepository,
     private val expenseRepository: ExpenseRepository,
+    private val expenseShareValidator: ExpenseShareValidator,
     private val expenseCalculator: ExpenseCalculator,
     private val expenseCreator: ExpenseCreator,
     private val expenseDetailReader: ExpenseDetailReader,
@@ -38,10 +38,9 @@ class CreateExpenseUseCase(
      * 2. 고유키로 만든 지출이 이미 있으면 저장하지 않습니다. 이 여행에서 요청한 회원이 기록한 삭제되지 않은 지출이면 그 지출의 현재 상세를 반환하고,
      *    아니면 409 `EXPENSE_IDEMPOTENCY_KEY_REUSED`입니다. 요청 내용은 처음 요청과 비교하지 않습니다.
      * 3. 확정 전 여행이면 409 `EXPENSE_TRIP_NOT_CONFIRMED`입니다.
-     * 4. 전체 1/N인데 tripMemberIds가 없거나 items를 보냈으면, 품목별인데 items가 없거나 비었거나 tripMemberIds를 보냈으면 400입니다.
-     * 5. 결제자가 참여 중인 로그인 참여자가 아니거나, 부담자가 없거나 겹치거나 참여 중인 로그인 참여자나 비로그인 참여자가 아니면 400 `EXPENSE_INVALID_SHARES`입니다.
-     * 6. 금액 검증과 부담액 계산은 [ExpenseCalculator]를 따르고, 요청한 회원을 기록자로 지출을 저장합니다.
-     * 7. 저장이 고유키 중복으로 실패하면 같은 키의 요청이 먼저 저장된 것이므로 2번처럼 처리합니다.
+     * 4. 분배 방식과 부담자 입력의 조합, 결제자와 부담자의 참여 상태는 [ExpenseShareValidator]를 따릅니다. 생성에는 그대로 둘 기존 참여자가 없습니다.
+     * 5. 금액 검증과 부담액 계산은 [ExpenseCalculator]를 따르고, 요청한 회원을 기록자로 지출을 저장합니다.
+     * 6. 저장이 고유키 중복으로 실패하면 같은 키의 요청이 먼저 저장된 것이므로 2번처럼 처리합니다.
      */
     fun create(
         memberId: Long,
@@ -63,7 +62,7 @@ class CreateExpenseUseCase(
         if (tripStatus != TripStatus.CONFIRMED) {
             throw BusinessException(ExpenseErrorCode.TRIP_NOT_CONFIRMED)
         }
-        validateShares(command, participants)
+        expenseShareValidator.validate(command, participants, retainedPayerTripMemberId = null, retainedShareTripMemberIds = emptySet())
         val calculation = expenseCalculator.calculate(command)
 
         val expenseId =
@@ -75,42 +74,6 @@ class CreateExpenseUseCase(
                     ?: throw BusinessException(ExpenseErrorCode.IDEMPOTENCY_KEY_REUSED, exception)
             }
         return expenseDetailReader.read(expenseId)
-    }
-
-    private fun validateShares(
-        command: CreateExpenseCommand,
-        participants: List<TripParticipantResult>,
-    ) {
-        val shareGroups =
-            when (command.splitType) {
-                SplitType.EQUAL -> {
-                    if (command.tripMemberIds == null || command.items != null) {
-                        throw BusinessException(CommonErrorCode.INVALID_REQUEST)
-                    }
-                    listOf(command.tripMemberIds)
-                }
-
-                SplitType.ITEM -> {
-                    if (command.items.isNullOrEmpty() || command.tripMemberIds != null) {
-                        throw BusinessException(CommonErrorCode.INVALID_REQUEST)
-                    }
-                    command.items.map { it.tripMemberIds }
-                }
-            }
-
-        val statuses = participants.associate { it.tripMemberId to it.status }
-        // 명세에 결제자 전용 오류 코드가 없고 결제자도 지출에 지정하는 참여자이므로, 부담자와 같은 코드로 거절합니다.
-        val isPayerValid = statuses[command.payerTripMemberId] == TripMemberStatus.MEMBER
-        // 부담자는 참여 중인 로그인 참여자(MEMBER)와 비로그인 참여자(GUEST)만 될 수 있습니다.
-        val areSharesValid =
-            shareGroups.all { tripMemberIds ->
-                tripMemberIds.isNotEmpty() &&
-                    tripMemberIds.toSet().size == tripMemberIds.size &&
-                    tripMemberIds.all { statuses[it] in TripMemberStatus.REGISTERED }
-            }
-        if (!isPayerValid || !areSharesValid) {
-            throw BusinessException(ExpenseErrorCode.INVALID_SHARES)
-        }
     }
 
     /** 고유키로 만든 지출이 없으면 `null`을 반환합니다. 이 여행에서 요청한 회원이 기록한 삭제되지 않은 지출이 아니면 기존 지출 정보를 주지 않고 409로 거절합니다. */
