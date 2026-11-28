@@ -8,7 +8,7 @@ import com.ject.module.trip.domain.TripMemberStatus
 import com.ject.module.trip.domain.TripRepository
 import org.springframework.stereotype.Component
 
-/** 요청한 회원이 지출을 수정할 수 있는 참여자인지 확인합니다. 수정 잠금의 획득, 연장, 해제와 지출 수정이 같은 기준을 씁니다. */
+/** 요청한 회원이 지출을 수정하거나 삭제할 수 있는 참여자인지 확인합니다. 수정 잠금의 획득, 연장, 해제와 지출 수정, 삭제가 같은 기준을 씁니다. */
 @Component
 class ExpenseEditValidator(
     private val tripRepository: TripRepository,

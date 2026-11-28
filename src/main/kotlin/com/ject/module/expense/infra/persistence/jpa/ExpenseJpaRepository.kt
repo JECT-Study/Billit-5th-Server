@@ -115,4 +115,20 @@ interface ExpenseJpaRepository : JpaRepository<Expense, Long> {
         @Param("krwAmount") krwAmount: Long,
         @Param("now") now: Instant,
     ): Int
+
+    /** 행을 지우지 않고 삭제 시각을 기록합니다. 벌크 UPDATE는 Auditing을 거치지 않으므로 수정 시각도 이 쿼리에서 바꿉니다. */
+    @Modifying(clearAutomatically = true)
+    @Query(
+        """
+        UPDATE Expense e
+        SET e.deletedAt = :now, e.updatedAt = :now
+        WHERE e.id = :expenseId AND e.tripId = :tripId AND e.deletedAt IS NULL AND e.settlementId IS NULL
+          AND (e.editLockExpiresAt IS NULL OR e.editLockExpiresAt <= :now)
+        """,
+    )
+    fun deleteIfUnlocked(
+        @Param("expenseId") expenseId: Long,
+        @Param("tripId") tripId: Long,
+        @Param("now") now: Instant,
+    ): Int
 }

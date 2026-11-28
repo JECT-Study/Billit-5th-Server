@@ -15,6 +15,7 @@ import com.ject.module.expense.presentation.response.ExpenseEditLockResponse
 import com.ject.module.expense.presentation.response.ExpenseSummaryResponse
 import com.ject.module.expense.usecase.AcquireExpenseEditLockUseCase
 import com.ject.module.expense.usecase.CreateExpenseUseCase
+import com.ject.module.expense.usecase.DeleteExpenseUseCase
 import com.ject.module.expense.usecase.ExtendExpenseEditLockUseCase
 import com.ject.module.expense.usecase.GetExpenseDetailUseCase
 import com.ject.module.expense.usecase.ListExpensesUseCase
@@ -48,6 +49,7 @@ class ExpenseController(
     private val listExpensesUseCase: ListExpensesUseCase,
     private val getExpenseDetailUseCase: GetExpenseDetailUseCase,
     private val updateExpenseUseCase: UpdateExpenseUseCase,
+    private val deleteExpenseUseCase: DeleteExpenseUseCase,
     private val acquireExpenseEditLockUseCase: AcquireExpenseEditLockUseCase,
     private val extendExpenseEditLockUseCase: ExtendExpenseEditLockUseCase,
     private val releaseExpenseEditLockUseCase: ReleaseExpenseEditLockUseCase,
@@ -118,6 +120,18 @@ class ExpenseController(
         val expense = updateExpenseUseCase.update(memberId(accessToken), tripId, expenseId, UUID.fromString(lockToken), request.toCommand())
 
         return ResponseEntity.ok(ApiResponse(expense.toResponse()))
+    }
+
+    /** 이미 삭제한 지출을 다시 삭제하면 404로 응답합니다. */
+    @DeleteMapping("/{expenseId}")
+    fun deleteExpense(
+        @AuthenticationPrincipal accessToken: Jwt,
+        @PathVariable tripId: Long,
+        @PathVariable expenseId: Long,
+    ): ResponseEntity<Void> {
+        deleteExpenseUseCase.delete(memberId(accessToken), tripId, expenseId)
+
+        return ResponseEntity.noContent().build<Void>()
     }
 
     /** 잠금은 따로 조회하는 API가 없어 `Location` 없이 201로 응답합니다. */

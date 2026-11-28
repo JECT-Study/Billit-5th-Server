@@ -81,7 +81,7 @@ Flyway 이력이 없는 기존 DB에 적용할 때는 스키마, 보존 데이�
 
 논리 삭제를 사용하는 Entity는 `isDeleted()`로 삭제 여부를 확인합니다. 해당 Entity의 `deletedAt`이 `null`이 아니면 `true`를 반환합니다.
 
-논리 삭제는 개별 Entity의 `delete(deletedAt: Instant)`처럼 의도를 드러내는 업무 메서드에서 `deletedAt`을 설정합니다. 유스케이스는 주입받은 `Clock`에서 시각을 구해 전달합니다. 삭제 가능 조건, 중복 삭제와 복구 정책은 해당 업무에서 정의하며 BaseEntity에 공통 삭제 동작을 넣지 않습니다.
+논리 삭제는 개별 Entity의 `delete(deletedAt: Instant)`처럼 의도를 드러내는 업무 메서드에서 `deletedAt`을 설정합니다. 수정 잠금이나 정산 점유처럼 다른 요청과 경합하는 조건을 지켜야 하는 논리 삭제는 [ExpenseRepository](../../src/main/kotlin/com/ject/module/expense/domain/ExpenseRepository.kt)의 `deleteExpenseIfUnlocked`처럼 조건부 UPDATE 한 번으로 `deleted_at`과 `updated_at`을 함께 기록하고, 변경된 행 수로 실패를 판별합니다. 유스케이스는 주입받은 `Clock`에서 시각을 구해 전달합니다. 삭제 가능 조건, 중복 삭제와 복구 정책은 해당 업무에서 정의하며 BaseEntity에 공통 삭제 동작을 넣지 않습니다.
 
 `@SQLDelete`, `@SQLRestriction`, `@Where`, `@SoftDelete`나 전역 필터로 삭제 동작과 조회 조건을 암묵적으로 적용하지 않습니다. 논리 삭제를 `Repository.delete()`나 `deleteById()`로 표현하지 않습니다. 물리 삭제는 해당 업무에서 명시적으로 허용한 경우에만 실행합니다.
 

@@ -35,6 +35,9 @@ class UpdateExpenseUseCaseTest : IntegrationTestSupport() {
     @Autowired
     private lateinit var updateExpenseUseCase: UpdateExpenseUseCase
 
+    @Autowired
+    private lateinit var deleteExpenseUseCase: DeleteExpenseUseCase
+
     @MockitoSpyBean
     private lateinit var expenseRepository: ExpenseRepository
 
@@ -471,6 +474,49 @@ class UpdateExpenseUseCaseTest : IntegrationTestSupport() {
                 BigDecimal.valueOf(findExpense(expenseId)["amount"] as Long) shouldBe successes.single().amount
                 findShareAmounts(expenseId).map { it[0] to BigDecimal.valueOf(it[1]) } shouldBe
                     successes.single().shares.map { it.tripMemberId to it.amount }
+            }
+        }
+
+        test("검증을 마친 뒤 지출을 갱신하기 전에 지출이 삭제되면 잠금이 만료됐어도 404로 거절하고 지출과 부담액을 바꾸지 않는다") {
+            // given
+            val trip = createTrip()
+            val token = UUID.randomUUID()
+            // 유효한 수정 잠금이 있으면 삭제할 수 없으므로 만료된 잠금의 토큰으로 수정을 요청합니다.
+            // 삭제가 끼어들지 않으면 이 요청은 409 EXPENSE_EDIT_LOCK_INVALID입니다.
+            val expenseId = insertEqualExpense(trip, lock = Lock(trip.recorderId, token, Instant.now().minusSeconds(1)))
+            val expenseBefore = findExpense(expenseId)
+            val shareAmountsBefore = snapshot(expenseId)["shareAmounts"]
+            // 수정의 검증이 기존 부담자를 처음 읽은 직후에만 다른 트랜잭션에서 삭제를 커밋합니다.
+            val lookups = AtomicInteger()
+            val executor = Executors.newSingleThreadExecutor()
+            doAnswer { invocation ->
+                val result = invocation.callRealMethod()
+                if (lookups.incrementAndGet() == 1) {
+                    executor
+                        .submit<Unit> { deleteExpenseUseCase.delete(trip.adminMemberId, trip.tripId, expenseId) }
+                        .get(10, TimeUnit.SECONDS)
+                }
+                result
+            }.`when`(expenseRepository).findShareAmounts(expenseId)
+            val command = equal(trip.recorderId, "30000.00", listOf(trip.recorderId))
+
+            // when
+            val failure =
+                try {
+                    shouldThrow<BusinessException> {
+                        updateExpenseUseCase.update(trip.recorderMemberId, trip.tripId, expenseId, token, command)
+                    }
+                } finally {
+                    executor.shutdownNow()
+                }
+
+            // then
+            val after = snapshot(expenseId)
+            assertSoftly {
+                failure.errorCode shouldBe CommonErrorCode.NOT_FOUND
+                (after["expense"] as Map<*, *>).let { it["deleted_at"] != null } shouldBe true
+                findExpense(expenseId) shouldBe expenseBefore
+                after["shareAmounts"] shouldBe shareAmountsBefore
             }
         }
     }
