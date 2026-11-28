@@ -1,4 +1,4 @@
-package com.ject.module.expense.domain
+package com.ject.module.exchangerate.domain
 
 import com.ject.global.persistence.BaseEntity
 import jakarta.persistence.Column

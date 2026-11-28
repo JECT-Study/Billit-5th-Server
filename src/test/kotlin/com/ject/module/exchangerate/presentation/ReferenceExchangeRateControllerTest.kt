@@ -179,7 +179,7 @@ class ReferenceExchangeRateControllerTest : IntegrationTestSupport() {
                 assertSoftly {
                     response.statusCode() shouldBe 400
                     body(response)["code"] shouldBe "COMMON_INVALID_REQUEST"
-                    body(response)["errors"] shouldBe listOf(mapOf("field" to "currency", "reason" to "JPY, USD, EUR, CNY 중 하나여야 합니다."))
+                    body(response)["errors"] shouldBe listOf(mapOf("field" to "currency", "reason" to "허용되지 않는 값입니다."))
                     fetchCount() shouldBe 0
                 }
             }
