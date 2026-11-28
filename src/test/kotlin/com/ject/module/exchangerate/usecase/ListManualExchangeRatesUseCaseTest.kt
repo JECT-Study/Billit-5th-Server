@@ -2,6 +2,7 @@ package com.ject.module.exchangerate.usecase
 
 import com.ject.global.error.BusinessException
 import com.ject.global.error.CommonErrorCode
+import com.ject.module.exchangerate.domain.ExchangeCurrency
 import com.ject.module.exchangerate.domain.ExchangeMethod
 import com.ject.support.IntegrationTestSupport
 import io.kotest.assertions.assertSoftly
@@ -38,7 +39,7 @@ class ListManualExchangeRatesUseCaseTest : IntegrationTestSupport() {
             insertRate(otherTrip, otherTrip.memberId, "USD", "1358.73", "2026-11-05", "CASH", "2026-11-05T03:00:00Z")
 
             // when
-            val result = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, page = 0, size = 20)
+            val result = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, null, page = 0, size = 20)
 
             // then
             assertSoftly {
@@ -58,7 +59,7 @@ class ListManualExchangeRatesUseCaseTest : IntegrationTestSupport() {
             jdbc.update("UPDATE manual_exchange_rate SET updated_at = '2026-11-06T00:00:00Z' WHERE id = ?", older)
 
             // when
-            val result = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, page = 0, size = 20)
+            val result = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, null, page = 0, size = 20)
 
             // then
             result.items.map { it.exchangeRateId } shouldBe listOf(newer, older)
@@ -72,9 +73,9 @@ class ListManualExchangeRatesUseCaseTest : IntegrationTestSupport() {
             val third = insertRate(trip, trip.memberId, "JPY", "9.12", "2026-11-05", "CASH", "2026-11-05T10:00:00Z")
 
             // when
-            val firstPage = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, page = 0, size = 2)
-            val secondPage = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, page = 1, size = 2)
-            val beyondLastPage = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, page = 2, size = 2)
+            val firstPage = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, null, page = 0, size = 2)
+            val secondPage = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, null, page = 1, size = 2)
+            val beyondLastPage = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, null, page = 2, size = 2)
 
             // then
             assertSoftly {
@@ -94,7 +95,7 @@ class ListManualExchangeRatesUseCaseTest : IntegrationTestSupport() {
             insertRate(trip, trip.memberId, "JPY", "9.12", "2026-11-05", "CASH", "2026-11-05T10:00:00Z")
 
             // when
-            val result = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, page = Int.MAX_VALUE, size = 100)
+            val result = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, null, page = Int.MAX_VALUE, size = 100)
 
             // then
             assertSoftly {
@@ -104,13 +105,76 @@ class ListManualExchangeRatesUseCaseTest : IntegrationTestSupport() {
             }
         }
 
+        test("currency를 지정하면 요청자가 그 통화로 등록한 기록만 최신 등록순으로 반환하고 전체 건수도 그 기록만 센다") {
+            // given
+            val trip = createTrip()
+            insertRate(trip, trip.memberId, "USD", "1358.73", "2026-11-05", "CASH", "2026-11-05T10:00:00Z")
+            insertRate(trip, trip.memberId, "JPY", "9.12", "2026-11-05", "CASH", "2026-11-05T12:00:00Z")
+            val usdNew = insertRate(trip, trip.memberId, "USD", "1360.00", "2026-11-05", "TRAVEL_CARD", "2026-11-05T11:00:00Z")
+            insertRate(trip, trip.adminId, "USD", "1400.00", "2026-11-05", "CASH", "2026-11-05T13:00:00Z")
+
+            // when
+            val result = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, ExchangeCurrency.USD, page = 0, size = 1)
+
+            // then
+            assertSoftly {
+                result.items.map { it.exchangeRateId } shouldBe listOf(usdNew)
+                result.totalElements shouldBe 2
+                result.hasNext shouldBe true
+            }
+        }
+
+        test("지정한 통화의 기록이 없거나 다른 참여자의 기록만 있으면 빈 목록을 반환한다") {
+            // given
+            val trip = createTrip()
+            insertRate(trip, trip.memberId, "JPY", "9.12", "2026-11-05", "CASH", "2026-11-05T10:00:00Z")
+            insertRate(trip, trip.adminId, "USD", "1358.73", "2026-11-05", "CASH", "2026-11-05T11:00:00Z")
+
+            // when
+            val result = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, ExchangeCurrency.USD, page = 0, size = 20)
+
+            // then
+            assertSoftly {
+                result.items shouldBe emptyList()
+                result.totalElements shouldBe 0
+                result.hasNext shouldBe false
+            }
+        }
+
+        test("최근 기록을 삭제하면 남은 기록 중 등록 시각이 가장 늦은 기록이 첫 항목이 된다") {
+            // given
+            val trip = createTrip()
+            val older = insertRate(trip, trip.memberId, "USD", "1358.73", "2026-11-05", "CASH", "2026-11-05T10:00:00Z")
+            val newest = insertRate(trip, trip.memberId, "USD", "1360.00", "2026-11-05", "CASH", "2026-11-05T11:00:00Z")
+            jdbc.update("DELETE FROM manual_exchange_rate WHERE id = ?", newest)
+
+            // when
+            val result = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, ExchangeCurrency.USD, page = 0, size = 20)
+
+            // then
+            result.items.map { it.exchangeRateId } shouldBe listOf(older)
+        }
+
+        test("등록 시각이 같은 같은 통화 기록은 ID의 역순으로 반환한다") {
+            // given
+            val trip = createTrip()
+            val first = insertRate(trip, trip.memberId, "EUR", "1500.10", "2026-11-05", "CASH", "2026-11-05T10:00:00Z")
+            val second = insertRate(trip, trip.memberId, "EUR", "1500.20", "2026-11-05", "CASH", "2026-11-05T10:00:00Z")
+
+            // when
+            val result = listManualExchangeRatesUseCase.list(trip.memberMemberId, trip.tripId, ExchangeCurrency.EUR, page = 0, size = 20)
+
+            // then
+            result.items.map { it.exchangeRateId } shouldBe listOf(second, first)
+        }
+
         test("여행이 없으면 404로 거절한다") {
             // given
             val trip = createTrip()
 
             // when
             val exception =
-                shouldThrow<BusinessException> { listManualExchangeRatesUseCase.list(trip.memberMemberId, Long.MAX_VALUE, 0, 20) }
+                shouldThrow<BusinessException> { listManualExchangeRatesUseCase.list(trip.memberMemberId, Long.MAX_VALUE, null, 0, 20) }
 
             // then
             exception.errorCode shouldBe CommonErrorCode.NOT_FOUND
@@ -122,8 +186,9 @@ class ListManualExchangeRatesUseCaseTest : IntegrationTestSupport() {
             val outsiderMemberId = createMember()
 
             // when
-            val outsider = shouldThrow<BusinessException> { listManualExchangeRatesUseCase.list(outsiderMemberId, trip.tripId, 0, 20) }
-            val left = shouldThrow<BusinessException> { listManualExchangeRatesUseCase.list(trip.leftMemberId, trip.tripId, 0, 20) }
+            val outsider =
+                shouldThrow<BusinessException> { listManualExchangeRatesUseCase.list(outsiderMemberId, trip.tripId, null, 0, 20) }
+            val left = shouldThrow<BusinessException> { listManualExchangeRatesUseCase.list(trip.leftMemberId, trip.tripId, null, 0, 20) }
 
             // then
             assertSoftly {

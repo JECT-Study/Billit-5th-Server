@@ -64,7 +64,7 @@ class ManualExchangeRateController(
         @PathVariable tripId: Long,
         @Valid request: ListManualExchangeRatesRequest,
     ): ResponseEntity<PageResponse<ManualExchangeRateResponse>> {
-        val result = listManualExchangeRatesUseCase.list(memberId(accessToken), tripId, request.page, request.size)
+        val result = listManualExchangeRatesUseCase.list(memberId(accessToken), tripId, request.currency, request.page, request.size)
 
         return ResponseEntity.ok(
             PageResponse.from(

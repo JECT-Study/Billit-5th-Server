@@ -181,6 +181,25 @@ class ManualExchangeRateControllerTest : IntegrationTestSupport() {
                 }
             }
 
+            test("currency를 지정하면 그 통화의 본인 기록만 반환하고 없는 통화는 빈 목록을 반환한다") {
+                // given
+                val trip = createTrip()
+                post(trip.tripId, trip.token, VALID_BODY)
+                post(trip.tripId, trip.token, VALID_BODY.replace("JPY", "USD").replace("9.12", "1358.73"))
+
+                // when
+                val jpy = get(trip.tripId, trip.token, "currency=JPY")
+                val eur = get(trip.tripId, trip.token, "currency=EUR")
+
+                // then
+                assertSoftly {
+                    jpy.statusCode() shouldBe 200
+                    (body(jpy)["data"] as List<*>).map { (it as Map<*, *>)["currency"] } shouldBe listOf("JPY")
+                    eur.statusCode() shouldBe 200
+                    body(eur)["data"] shouldBe emptyList<Any>()
+                }
+            }
+
             test("기록이 없으면 빈 목록을 반환한다") {
                 // given
                 val trip = createTrip()
@@ -195,7 +214,7 @@ class ManualExchangeRateControllerTest : IntegrationTestSupport() {
                 }
             }
 
-            listOf("page=-1", "size=0", "size=101", "page=a").forEach { query ->
+            listOf("page=-1", "size=0", "size=101", "page=a", "currency=KRW", "currency=GBP", "currency=usd").forEach { query ->
                 test("$query 요청은 400 COMMON_INVALID_REQUEST를 반환한다") {
                     // given
                     val trip = createTrip()
