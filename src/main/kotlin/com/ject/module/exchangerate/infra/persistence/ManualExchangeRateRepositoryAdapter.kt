@@ -42,6 +42,12 @@ class ManualExchangeRateRepositoryAdapter(
         createdByTripMemberId: Long,
     ): Long = manualExchangeRateJpaRepository.countByTripIdAndCreatedByTripMemberId(tripId, createdByTripMemberId)
 
+    override fun deleteRecord(
+        id: Long,
+        tripId: Long,
+        createdByTripMemberId: Long,
+    ): Boolean = manualExchangeRateJpaRepository.deleteRecord(id, tripId, createdByTripMemberId) > 0
+
     companion object {
         private const val RECORD_UNIQUE_CONSTRAINT = "uq_manual_exchange_rate_record"
     }

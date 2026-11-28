@@ -27,4 +27,17 @@ interface ManualExchangeRateRepository {
         tripId: Long,
         createdByTripMemberId: Long,
     ): Long
+
+    /**
+     * 기록 ID, 여행과 등록자가 모두 같은 기록을 지우고 지웠는지 반환합니다.
+     *
+     * - 조건에 맞는 기록이 없으면 `false`입니다. 기록이 없는 경우와 다른 등록자의 기록인 경우를 구분하지 않습니다.
+     * - 트랜잭션: 삭제 한 문장을 단독 트랜잭션으로 실행하므로 호출하는 쪽이 트랜잭션을 열지 않아도 됩니다.
+     *   같은 기록을 동시에 삭제하면 한 요청만 `true`를 받습니다.
+     */
+    fun deleteRecord(
+        id: Long,
+        tripId: Long,
+        createdByTripMemberId: Long,
+    ): Boolean
 }
