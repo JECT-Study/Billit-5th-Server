@@ -135,16 +135,29 @@ paths:
       operationId: listExchangeRates
       summary: 내 환율 목록 조회
       description: |
-        이 여행에 본인이 등록한 개인 환율을 페이지 단위로 조회합니다.
+        이 여행에 본인이 등록한 개인 환율을 페이지 단위로 조회합니다. `currency`로 통화를 걸러, 앱이 결제 통화의 최근 기록을 바로 얻을 수 있습니다.
 
         ### 요청 권한
         이 여행에 참여 중인 로그인 참여자만 요청할 수 있습니다. 요청한 회원이 이 여행에 등록한 기록만 조회하며, 다른 참여자의 기록은 조회할 수 없습니다.
 
         ### 처리 조건
+        `currency`를 지정하면 그 통화로 등록한 기록만, 생략하면 모든 통화의 기록을 반환합니다. 조건에 맞는 기록이 없으면 빈 목록입니다.
         최초 등록 시각(createdAt)이 늦은 기록부터 정렬하며, 같으면 기록 ID가 큰 기록을 먼저 둡니다. 환전 날짜(exchangeDate)와 수정 시각은 순서에 영향을 주지 않습니다.
       security:
       - bearerAuth: []
       parameters:
+      - name: currency
+        in: query
+        required: false
+        description: 조회할 기록의 통화입니다. 생략하면 모든 통화의 기록을 조회합니다. 원화(`KRW`)와 지원하지 않는 통화는 거절합니다.
+        schema:
+          type: string
+          enum:
+          - JPY
+          - USD
+          - EUR
+          - CNY
+        example: USD
       - "$ref": "../common/components.yml#/parameters/Page"
       - "$ref": "../common/components.yml#/parameters/Size"
       responses:
@@ -199,7 +212,7 @@ paths:
                       hasNext: false
         '400':
           description: |
-            page가 0보다 작거나 정수가 아니거나, size가 1~100을 벗어나거나 정수가 아닙니다.
+            currency가 `JPY`, `USD`, `EUR`, `CNY`가 아니거나(`KRW` 포함), page가 0보다 작거나 정수가 아니거나, size가 1~100을 벗어나거나 정수가 아닙니다.
 
             **오류 코드:** `COMMON_INVALID_REQUEST`
           content:

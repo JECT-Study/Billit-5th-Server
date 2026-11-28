@@ -11,8 +11,21 @@ interface ManualExchangeRateJpaRepository : JpaRepository<ManualExchangeRate, Lo
         pageable: Pageable,
     ): List<ManualExchangeRate>
 
+    fun findByTripIdAndCreatedByTripMemberIdAndCurrency(
+        tripId: Long,
+        createdByTripMemberId: Long,
+        currency: String,
+        pageable: Pageable,
+    ): List<ManualExchangeRate>
+
     fun countByTripIdAndCreatedByTripMemberId(
         tripId: Long,
         createdByTripMemberId: Long,
+    ): Long
+
+    fun countByTripIdAndCreatedByTripMemberIdAndCurrency(
+        tripId: Long,
+        createdByTripMemberId: Long,
+        currency: String,
     ): Long
 }

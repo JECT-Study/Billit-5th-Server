@@ -46,7 +46,7 @@ class ManualExchangeRateRepositoryAdapterTest : IntegrationTestSupport() {
                 jdbc.queryForObject("SELECT rate::text FROM manual_exchange_rate WHERE id = ?", String::class.java, saved.id) shouldBe
                     "9.120000000000"
                 manualExchangeRateRepository
-                    .findRecords(tripId, tripMemberId, 0, 20)
+                    .findRecords(tripId, tripMemberId, null, 0, 20)
                     .single()
                     .rate
                     .compareTo(BigDecimal("9.12")) shouldBe 0

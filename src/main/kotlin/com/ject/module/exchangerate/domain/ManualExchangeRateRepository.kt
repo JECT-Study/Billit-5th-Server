@@ -11,20 +11,22 @@ interface ManualExchangeRateRepository {
     fun save(manualExchangeRate: ManualExchangeRate): ManualExchangeRate
 
     /**
-     * 등록자가 여행에 등록한 기록을 최초 등록 시각의 역순, 같으면 ID의 역순으로 [page]번째 페이지(0부터)에서 [size]개 조회합니다.
+     * 등록자가 여행에 등록한 기록을 [currency]로 걸러(null이면 모든 통화) 최초 등록 시각의 역순, 같으면 ID의 역순으로 [page]번째 페이지(0부터)에서 [size]개 조회합니다.
      *
      * 시작 위치(`page * size`)가 Int 범위를 넘으면 조회할 수 없으므로 [countRecords]로 확인한 뒤 호출합니다.
      */
     fun findRecords(
         tripId: Long,
         createdByTripMemberId: Long,
+        currency: ExchangeCurrency?,
         page: Int,
         size: Int,
     ): List<ManualExchangeRate>
 
-    /** 등록자가 여행에 등록한 기록의 전체 수입니다. */
+    /** 등록자가 여행에 등록한 기록 중 [currency](null이면 모든 통화)에 해당하는 기록의 전체 수입니다. */
     fun countRecords(
         tripId: Long,
         createdByTripMemberId: Long,
+        currency: ExchangeCurrency?,
     ): Long
 }

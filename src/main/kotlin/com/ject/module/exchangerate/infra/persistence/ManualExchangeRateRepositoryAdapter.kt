@@ -2,6 +2,7 @@ package com.ject.module.exchangerate.infra.persistence
 
 import com.ject.global.error.BusinessException
 import com.ject.global.persistence.violatedUniqueConstraint
+import com.ject.module.exchangerate.domain.ExchangeCurrency
 import com.ject.module.exchangerate.domain.ExchangeRateErrorCode
 import com.ject.module.exchangerate.domain.ManualExchangeRate
 import com.ject.module.exchangerate.domain.ManualExchangeRateRepository
@@ -28,19 +29,33 @@ class ManualExchangeRateRepositoryAdapter(
     override fun findRecords(
         tripId: Long,
         createdByTripMemberId: Long,
+        currency: ExchangeCurrency?,
         page: Int,
         size: Int,
-    ): List<ManualExchangeRate> =
-        manualExchangeRateJpaRepository.findByTripIdAndCreatedByTripMemberId(
-            tripId,
-            createdByTripMemberId,
-            PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))),
-        )
+    ): List<ManualExchangeRate> {
+        val pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")))
+        return if (currency == null) {
+            manualExchangeRateJpaRepository.findByTripIdAndCreatedByTripMemberId(tripId, createdByTripMemberId, pageable)
+        } else {
+            manualExchangeRateJpaRepository.findByTripIdAndCreatedByTripMemberIdAndCurrency(
+                tripId,
+                createdByTripMemberId,
+                currency.name,
+                pageable,
+            )
+        }
+    }
 
     override fun countRecords(
         tripId: Long,
         createdByTripMemberId: Long,
-    ): Long = manualExchangeRateJpaRepository.countByTripIdAndCreatedByTripMemberId(tripId, createdByTripMemberId)
+        currency: ExchangeCurrency?,
+    ): Long =
+        if (currency == null) {
+            manualExchangeRateJpaRepository.countByTripIdAndCreatedByTripMemberId(tripId, createdByTripMemberId)
+        } else {
+            manualExchangeRateJpaRepository.countByTripIdAndCreatedByTripMemberIdAndCurrency(tripId, createdByTripMemberId, currency.name)
+        }
 
     companion object {
         private const val RECORD_UNIQUE_CONSTRAINT = "uq_manual_exchange_rate_record"
