@@ -8,6 +8,7 @@ enum class ExchangeRateErrorCode(
 ) : ErrorCode {
     NOT_PUBLISHED(404, "선택한 날짜 전후에 고시된 환율이 없습니다. 환율을 직접 입력해 주세요."),
     PROVIDER_UNAVAILABLE(503, "환율을 일시적으로 조회할 수 없습니다. 환율을 직접 입력하거나 잠시 후 다시 시도해 주세요."),
+    DUPLICATED(409, "같은 통화, 환전 날짜, 환전 수단과 환율의 기록을 이미 등록했습니다."),
     ;
 
     override val code: String = "EXCHANGE_RATE_$name"

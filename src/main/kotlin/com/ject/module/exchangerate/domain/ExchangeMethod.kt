@@ -1,4 +1,4 @@
-package com.ject.module.expense.domain
+package com.ject.module.exchangerate.domain
 
 enum class ExchangeMethod {
     CASH,
