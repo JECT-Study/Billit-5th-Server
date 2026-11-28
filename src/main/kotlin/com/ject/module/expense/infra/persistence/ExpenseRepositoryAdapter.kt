@@ -143,6 +143,12 @@ class ExpenseRepositoryAdapter(
         expenseShareAmountJpaRepository.deleteAllByExpenseId(expenseId)
     }
 
+    override fun deleteExpenseIfUnlocked(
+        expenseId: Long,
+        tripId: Long,
+        now: Instant,
+    ): Boolean = expenseJpaRepository.deleteIfUnlocked(expenseId, tripId, now) == 1
+
     companion object {
         private const val IDEMPOTENCY_KEY_UNIQUE_CONSTRAINT = "uq_expense_idempotency_key"
     }

@@ -120,4 +120,18 @@ interface ExpenseRepository {
      * 삭제 시각을 남기지 않고 행을 지우며 바로 실행합니다. 지출 행은 지우지 않습니다. 트랜잭션은 호출하는 쪽이 엽니다.
      */
     fun deleteItemsAndShareAmounts(expenseId: Long)
+
+    /**
+     * 정산이 점유하지 않았고 [now]보다 늦게 만료되는 수정 잠금이 없는 지출의 삭제 시각과 수정 시각을 [now]로 기록하면 `true`입니다.
+     *
+     * - 유효한 수정 잠금이 있거나(소유자와 관계없이), 정산이 점유했거나 이미 삭제된 지출이면 아무것도 바꾸지 않고 `false`입니다. 만료 시각이 [now]와 같은 잠금은 만료된 것으로 봅니다.
+     * - 행을 지우지 않습니다. 지출 생성 고유키, 잠금 칼럼, 품목, 품목별 부담자와 참여자별 부담액은 그대로 둡니다.
+     * - 호출하는 쪽의 트랜잭션에서 조건부 UPDATE 한 번으로 실행해 수정 잠금 획득이나 다른 삭제와 경쟁해도 하나만 성공합니다.
+     *   실행 뒤 영속성 컨텍스트를 비우므로 이후 조회는 DB 값을 읽습니다.
+     */
+    fun deleteExpenseIfUnlocked(
+        expenseId: Long,
+        tripId: Long,
+        now: Instant,
+    ): Boolean
 }
