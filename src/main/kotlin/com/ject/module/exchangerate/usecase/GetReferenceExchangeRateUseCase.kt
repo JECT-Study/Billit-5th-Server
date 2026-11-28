@@ -12,6 +12,7 @@ import java.math.RoundingMode
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 
 /**
  * 결제일의 기준 환율을 조회합니다. 저장한 환율이 있으면 외부를 호출하지 않습니다.
@@ -27,7 +28,7 @@ class GetReferenceExchangeRateUseCase(
     /**
      * [currency]는 `KRW`가 아닌 외화 코드입니다. 입력 형식은 호출하는 쪽에서 확인합니다.
      *
-     * 1. [paidDate]가 서버 날짜(`Asia/Seoul`)보다 미래이면 400 `COMMON_INVALID_REQUEST`입니다.
+     * 1. [paidDate]가 UTC+14의 현재 날짜보다 뒤이면 400 `COMMON_INVALID_REQUEST`입니다.
      * 2. 저장한 행이 있으면 그 값을 반환합니다.
      * 3. 고시 기관의 값이 없거나 기준일이 [paidDate]보다 7일 넘게 이전이면 404 `EXCHANGE_RATE_NOT_PUBLISHED`이며 저장하지 않습니다.
      * 4. 기준일이 [paidDate]와 같거나 [paidDate]가 서버 날짜보다 2일 이상 이전이면 저장하고, 아니면 응답에만 씁니다.
@@ -41,8 +42,7 @@ class GetReferenceExchangeRateUseCase(
         paidDate: LocalDate,
     ): ReferenceExchangeRateResult {
         val now = clock.instant()
-        val today = now.atZone(SEOUL).toLocalDate()
-        if (paidDate.isAfter(today)) {
+        if (paidDate.isAfter(now.atOffset(LATEST_OFFSET).toLocalDate())) {
             throw BusinessException(CommonErrorCode.INVALID_REQUEST)
         }
 
@@ -57,6 +57,7 @@ class GetReferenceExchangeRateUseCase(
             throw BusinessException(ExchangeRateErrorCode.NOT_PUBLISHED)
         }
 
+        val today = now.atZone(SEOUL).toLocalDate()
         if (published.baseDate == paidDate || !paidDate.isAfter(today.minusDays(MIN_DAYS_BEFORE_STORING_FALLBACK))) {
             referenceExchangeRateRepository.saveIfAbsent(provider, currency, paidDate, published.baseDate, published.rate, now)
         }
@@ -72,6 +73,7 @@ class GetReferenceExchangeRateUseCase(
 
     companion object {
         private val SEOUL = ZoneId.of("Asia/Seoul")
+        private val LATEST_OFFSET = ZoneOffset.ofHours(14)
         private const val MAX_FALLBACK_DAYS = 7L
         private const val MIN_DAYS_BEFORE_STORING_FALLBACK = 2L
     }

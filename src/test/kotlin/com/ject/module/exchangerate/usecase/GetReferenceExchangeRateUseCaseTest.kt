@@ -22,7 +22,6 @@ class GetReferenceExchangeRateUseCaseTest :
         // 서버 날짜(Asia/Seoul)는 2026-11-09(월)입니다. UTC 2026-11-08T15:30은 서울 2026-11-09 00:30입니다.
         val now = Instant.parse("2026-11-08T15:30:00Z")
         val today = LocalDate.parse("2026-11-09")
-        val clock = Clock.fixed(now, ZoneOffset.UTC)
 
         class FakeRepository : ReferenceExchangeRateRepository {
             val rows = mutableListOf<ReferenceExchangeRate>()
@@ -69,6 +68,7 @@ class GetReferenceExchangeRateUseCaseTest :
         fun useCase(
             repository: FakeRepository,
             port: FakePort,
+            clock: Clock = Clock.fixed(now, ZoneOffset.UTC),
         ) = GetReferenceExchangeRateUseCase(repository, port, clock)
 
         fun published(
@@ -258,5 +258,39 @@ class GetReferenceExchangeRateUseCaseTest :
 
             // then
             result.baseDate shouldBe LocalDate.parse("2026-11-06")
+        }
+
+        // UTC 2026-11-08T10:30은 서울 2026-11-08 19:30이고 UTC+14 2026-11-09 00:30입니다.
+        val beforeSeoulMidnight = Clock.fixed(Instant.parse("2026-11-08T10:30:00Z"), ZoneOffset.UTC)
+
+        test("서울 날짜로는 다음 날이어도 UTC+14의 현재 날짜와 같은 결제일은 환율을 조회한다") {
+            // given
+            val port = FakePort(published("2026-11-06"))
+
+            // when
+            val result = useCase(FakeRepository(), port, beforeSeoulMidnight).get("JPY", LocalDate.parse("2026-11-09"))
+
+            // then
+            assertSoftly {
+                result.baseDate shouldBe LocalDate.parse("2026-11-06")
+                port.calls shouldBe 1
+            }
+        }
+
+        test("UTC+14의 현재 날짜 다음 날인 결제일은 고시 기관을 호출하지 않고 400으로 거절한다") {
+            // given
+            val port = FakePort(published("2026-11-06"))
+
+            // when
+            val exception =
+                shouldThrow<BusinessException> {
+                    useCase(FakeRepository(), port, beforeSeoulMidnight).get("JPY", LocalDate.parse("2026-11-10"))
+                }
+
+            // then
+            assertSoftly {
+                exception.errorCode shouldBe CommonErrorCode.INVALID_REQUEST
+                port.calls shouldBe 0
+            }
         }
     })
